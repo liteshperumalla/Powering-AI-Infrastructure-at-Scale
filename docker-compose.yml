@@ -1,0 +1,125 @@
+# Docker Compose configuration for Infra Mind development
+# Learning Note: Docker Compose orchestrates multiple services for local development
+
+version: '3.8'
+
+services:
+  # MongoDB database
+  mongodb:
+    image: mongo:7.0
+    container_name: infra_mind_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+      MONGO_INITDB_DATABASE: infra_mind
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    networks:
+      - infra_mind_network
+
+  # Redis cache
+  redis:
+    image: redis:7.2-alpine
+    container_name: infra_mind_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    networks:
+      - infra_mind_network
+
+  # FastAPI application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: infra_mind_api
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      # Database configuration
+      INFRA_MIND_MONGODB_URL: mongodb://admin:password@mongodb:27017/infra_mind?authSource=admin
+      INFRA_MIND_REDIS_URL: redis://redis:6379
+      
+      # Application configuration
+      INFRA_MIND_ENVIRONMENT: development
+      INFRA_MIND_DEBUG: "true"
+      INFRA_MIND_SECRET_KEY: dev-secret-key-change-in-production
+      
+      # LLM configuration (set your API key)
+      INFRA_MIND_OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      
+      # Cloud provider configuration (optional for development)
+      INFRA_MIND_AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      INFRA_MIND_AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      INFRA_MIND_AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      INFRA_MIND_AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+      INFRA_MIND_AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+    depends_on:
+      - mongodb
+      - redis
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - infra_mind_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # MongoDB Express (optional - for database management)
+  mongo-express:
+    image: mongo-express:1.0.0
+    container_name: infra_mind_mongo_express
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
+      ME_CONFIG_MONGODB_ADMINPASSWORD: password
+      ME_CONFIG_MONGODB_URL: mongodb://admin:password@mongodb:27017/
+      ME_CONFIG_BASICAUTH: false
+    depends_on:
+      - mongodb
+    networks:
+      - infra_mind_network
+    profiles:
+      - tools  # Only start with: docker-compose --profile tools up
+
+  # Redis Commander (optional - for Redis management)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: infra_mind_redis_commander
+    restart: unless-stopped
+    ports:
+      - "8082:8081"
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    depends_on:
+      - redis
+    networks:
+      - infra_mind_network
+    profiles:
+      - tools  # Only start with: docker-compose --profile tools up
+
+# Named volumes for data persistence
+volumes:
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# Custom network for service communication
+networks:
+  infra_mind_network:
+    driver: bridge
