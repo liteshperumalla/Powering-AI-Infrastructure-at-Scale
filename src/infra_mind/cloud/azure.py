@@ -44,10 +44,18 @@ class AzureClient(BaseCloudClient):
         self.pricing_client = AzurePricingClient(region)
         self.compute_client = AzureComputeClient(region, subscription_id, client_id, client_secret)
         self.sql_client = AzureSQLClient(region, subscription_id, client_id, client_secret)
+        self.ai_client = AzureAIClient(region, subscription_id, client_id, client_secret)
     
     async def get_compute_services(self, region: Optional[str] = None) -> CloudServiceResponse:
         """Get Azure compute services (Virtual Machines)."""
-        return await self.compute_client.get_vm_sizes(region or self.region)
+        target_region = region or self.region
+        
+        return await self._get_cached_or_fetch(
+            service="compute",
+            region=target_region,
+            fetch_func=lambda: self.compute_client.get_vm_sizes(target_region),
+            cache_ttl=3600  # 1 hour cache for compute services
+        )
     
     async def get_storage_services(self, region: Optional[str] = None) -> CloudServiceResponse:
         """
@@ -62,19 +70,30 @@ class AzureClient(BaseCloudClient):
         Raises:
             CloudServiceError: If unable to fetch real pricing data
         """
+        target_region = region or self.region
+        
+        return await self._get_cached_or_fetch(
+            service="storage",
+            region=target_region,
+            fetch_func=lambda: self._fetch_storage_services(target_region),
+            cache_ttl=3600  # 1 hour cache for storage services
+        )
+    
+    async def _fetch_storage_services(self, region: str) -> CloudServiceResponse:
+        """Fetch storage services from Azure APIs."""
         try:
             # Get real pricing data for Storage services
-            pricing_data = await self.pricing_client.get_service_pricing("Storage", region or self.region)
+            pricing_data = await self.pricing_client.get_service_pricing("Storage", region)
             
             if not pricing_data.get("real_data") or not pricing_data.get("processed_pricing"):
                 raise CloudServiceError(
-                    f"Failed to get real pricing data for Storage in {region or self.region}",
+                    f"Failed to get real pricing data for Storage in {region}",
                     CloudProvider.AZURE,
                     "NO_REAL_PRICING"
                 )
             
             return await self._get_storage_services_with_real_pricing(
-                region or self.region, 
+                region, 
                 pricing_data["processed_pricing"]
             )
             
@@ -148,11 +167,37 @@ class AzureClient(BaseCloudClient):
     
     async def get_database_services(self, region: Optional[str] = None) -> CloudServiceResponse:
         """Get Azure database services (SQL Database)."""
-        return await self.sql_client.get_database_services(region or self.region)
+        target_region = region or self.region
+        
+        return await self._get_cached_or_fetch(
+            service="sql",
+            region=target_region,
+            fetch_func=lambda: self.sql_client.get_database_services(target_region),
+            cache_ttl=3600  # 1 hour cache for database services
+        )
+    
+    async def get_ai_services(self, region: Optional[str] = None) -> CloudServiceResponse:
+        """Get Azure AI/ML services."""
+        target_region = region or self.region
+        
+        return await self._get_cached_or_fetch(
+            service="ai",
+            region=target_region,
+            fetch_func=lambda: self.ai_client.get_ai_services(target_region),
+            cache_ttl=3600  # 1 hour cache for AI services
+        )
     
     async def get_service_pricing(self, service_name: str, region: Optional[str] = None) -> Dict[str, Any]:
         """Get pricing for a specific Azure service."""
-        return await self.pricing_client.get_service_pricing(service_name, region or self.region)
+        target_region = region or self.region
+        
+        return await self._get_cached_or_fetch(
+            service="pricing",
+            region=target_region,
+            fetch_func=lambda: self.pricing_client.get_service_pricing(service_name, target_region),
+            params={"service_name": service_name},
+            cache_ttl=3600  # 1 hour cache for pricing data
+        )
 
 
 class AzurePricingClient:
@@ -680,3 +725,358 @@ class AzureSQLClient:
                 "description": "Premium P4 tier"
             }
         }
+
+
+class AzureAIClient:
+    """
+    Azure AI/ML services client.
+    
+    Provides access to Azure AI and machine learning services including
+    Azure OpenAI, Cognitive Services, Machine Learning, and others.
+    """
+    
+    def __init__(self, region: str = "eastus", subscription_id: Optional[str] = None,
+                 client_id: Optional[str] = None, client_secret: Optional[str] = None):
+        """Initialize Azure AI client."""
+        self.region = region
+        self.subscription_id = subscription_id
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.use_mock_data = True  # Azure AI APIs require complex authentication
+    
+    async def get_ai_services(self, region: str) -> CloudServiceResponse:
+        """
+        Get Azure AI/ML services with pricing information.
+        
+        Args:
+            region: Azure region
+            
+        Returns:
+            CloudServiceResponse with AI/ML services
+        """
+        services = []
+        
+        # Azure OpenAI services
+        openai_services = self._get_azure_openai_services(region)
+        services.extend(openai_services)
+        
+        # Azure Machine Learning services
+        ml_services = self._get_azure_ml_services(region)
+        services.extend(ml_services)
+        
+        # Cognitive Services
+        cognitive_services = self._get_cognitive_services(region)
+        services.extend(cognitive_services)
+        
+        return CloudServiceResponse(
+            provider=CloudProvider.AZURE,
+            service_category=ServiceCategory.MACHINE_LEARNING,
+            region=region,
+            services=services,
+            metadata={"ai_services_count": len(services)}
+        )
+    
+    def _get_azure_openai_services(self, region: str) -> List[CloudService]:
+        """Get Azure OpenAI services with pricing."""
+        services = []
+        
+        # Azure OpenAI models
+        openai_models = [
+            {
+                "model_name": "GPT-4",
+                "model_version": "0613",
+                "input_price_per_1k": 0.03,
+                "output_price_per_1k": 0.06,
+                "context_length": 8192,
+                "description": "Most capable GPT-4 model"
+            },
+            {
+                "model_name": "GPT-4-32k",
+                "model_version": "0613",
+                "input_price_per_1k": 0.06,
+                "output_price_per_1k": 0.12,
+                "context_length": 32768,
+                "description": "GPT-4 with extended context window"
+            },
+            {
+                "model_name": "GPT-3.5-Turbo",
+                "model_version": "0613",
+                "input_price_per_1k": 0.0015,
+                "output_price_per_1k": 0.002,
+                "context_length": 4096,
+                "description": "Fast and efficient language model"
+            },
+            {
+                "model_name": "GPT-3.5-Turbo-16k",
+                "model_version": "0613",
+                "input_price_per_1k": 0.003,
+                "output_price_per_1k": 0.004,
+                "context_length": 16384,
+                "description": "GPT-3.5 with extended context window"
+            },
+            {
+                "model_name": "text-embedding-ada-002",
+                "model_version": "2",
+                "input_price_per_1k": 0.0001,
+                "output_price_per_1k": 0.0,
+                "context_length": 8191,
+                "description": "Text embedding model"
+            },
+            {
+                "model_name": "DALL-E-3",
+                "model_version": "3.0",
+                "price_per_image_standard": 0.04,
+                "price_per_image_hd": 0.08,
+                "description": "Advanced image generation model"
+            }
+        ]
+        
+        for model in openai_models:
+            if "price_per_image_standard" in model:
+                # Image generation model
+                service = CloudService(
+                    provider=CloudProvider.AZURE,
+                    service_name=f"Azure OpenAI - {model['model_name']}",
+                    service_id=f"azure_openai_{model['model_name'].lower().replace('-', '_').replace('.', '_')}",
+                    category=ServiceCategory.MACHINE_LEARNING,
+                    region=region,
+                    description=model['description'],
+                    pricing_model="pay_per_image",
+                    hourly_price=model['price_per_image_standard'],
+                    pricing_unit="image",
+                    specifications={
+                        "model_name": model['model_name'],
+                        "model_version": model['model_version'],
+                        "model_type": "image_generation",
+                        "standard_price": model['price_per_image_standard'],
+                        "hd_price": model['price_per_image_hd'],
+                        "max_resolution": "1024x1024"
+                    },
+                    features=["managed_service", "enterprise_security", "content_filtering", "multiple_styles"]
+                )
+            else:
+                # Text/embedding model
+                service = CloudService(
+                    provider=CloudProvider.AZURE,
+                    service_name=f"Azure OpenAI - {model['model_name']}",
+                    service_id=f"azure_openai_{model['model_name'].lower().replace('-', '_').replace('.', '_')}",
+                    category=ServiceCategory.MACHINE_LEARNING,
+                    region=region,
+                    description=model['description'],
+                    pricing_model="pay_per_token",
+                    hourly_price=model['input_price_per_1k'],
+                    pricing_unit="1K tokens",
+                    specifications={
+                        "model_name": model['model_name'],
+                        "model_version": model['model_version'],
+                        "model_type": "text_generation" if "embedding" not in model['model_name'].lower() else "embedding",
+                        "context_length": model['context_length'],
+                        "input_price_per_1k_tokens": model['input_price_per_1k'],
+                        "output_price_per_1k_tokens": model['output_price_per_1k']
+                    },
+                    features=["managed_service", "enterprise_security", "content_filtering", "fine_tuning"]
+                )
+            services.append(service)
+        
+        return services
+    
+    def _get_azure_ml_services(self, region: str) -> List[CloudService]:
+        """Get Azure Machine Learning services with pricing."""
+        services = []
+        
+        # Azure ML compute instances
+        ml_compute_instances = [
+            {
+                "instance_type": "Standard_DS3_v2",
+                "vcpus": 4,
+                "memory_gb": 14,
+                "hourly_price": 0.192,
+                "description": "General purpose compute instance"
+            },
+            {
+                "instance_type": "Standard_DS4_v2",
+                "vcpus": 8,
+                "memory_gb": 28,
+                "hourly_price": 0.384,
+                "description": "General purpose compute instance"
+            },
+            {
+                "instance_type": "Standard_NC6",
+                "vcpus": 6,
+                "memory_gb": 56,
+                "hourly_price": 0.90,
+                "gpu_count": 1,
+                "gpu_type": "K80",
+                "description": "GPU compute instance for training"
+            },
+            {
+                "instance_type": "Standard_NC12",
+                "vcpus": 12,
+                "memory_gb": 112,
+                "hourly_price": 1.80,
+                "gpu_count": 2,
+                "gpu_type": "K80",
+                "description": "GPU compute instance for training"
+            },
+            {
+                "instance_type": "Standard_ND40rs_v2",
+                "vcpus": 40,
+                "memory_gb": 672,
+                "hourly_price": 22.032,
+                "gpu_count": 8,
+                "gpu_type": "V100",
+                "description": "High-performance GPU instance for deep learning"
+            }
+        ]
+        
+        for instance in ml_compute_instances:
+            service = CloudService(
+                provider=CloudProvider.AZURE,
+                service_name=f"Azure ML Compute - {instance['instance_type']}",
+                service_id=f"azure_ml_{instance['instance_type'].lower().replace('_', '_')}",
+                category=ServiceCategory.MACHINE_LEARNING,
+                region=region,
+                description=instance['description'],
+                pricing_model="pay_as_you_go",
+                hourly_price=instance['hourly_price'],
+                pricing_unit="hour",
+                specifications={
+                    "instance_type": instance['instance_type'],
+                    "vcpus": instance['vcpus'],
+                    "memory_gb": instance['memory_gb'],
+                    "gpu_count": instance.get('gpu_count', 0),
+                    "gpu_type": instance.get('gpu_type', 'None'),
+                    "use_case": "ml_training_inference"
+                },
+                features=["managed_notebooks", "auto_scaling", "distributed_training", "model_deployment"]
+            )
+            services.append(service)
+        
+        # Azure ML managed endpoints
+        endpoint_service = CloudService(
+            provider=CloudProvider.AZURE,
+            service_name="Azure ML Managed Online Endpoints",
+            service_id="azure_ml_managed_endpoints",
+            category=ServiceCategory.MACHINE_LEARNING,
+            region=region,
+            description="Managed inference endpoints for ML models",
+            pricing_model="pay_as_you_go",
+            hourly_price=0.50,  # Base price per endpoint per hour
+            pricing_unit="endpoint-hour",
+            specifications={
+                "endpoint_type": "managed_online",
+                "auto_scaling": True,
+                "load_balancing": True,
+                "monitoring": True
+            },
+            features=["auto_scaling", "load_balancing", "monitoring", "a_b_testing"]
+        )
+        services.append(endpoint_service)
+        
+        return services
+    
+    def _get_cognitive_services(self, region: str) -> List[CloudService]:
+        """Get Azure Cognitive Services with pricing."""
+        services = []
+        
+        # Computer Vision
+        computer_vision_service = CloudService(
+            provider=CloudProvider.AZURE,
+            service_name="Azure Computer Vision",
+            service_id="azure_computer_vision",
+            category=ServiceCategory.MACHINE_LEARNING,
+            region=region,
+            description="Image analysis and optical character recognition",
+            pricing_model="pay_per_transaction",
+            hourly_price=0.001,  # Per transaction
+            pricing_unit="transaction",
+            specifications={
+                "service_type": "computer_vision",
+                "max_image_size": "4MB",
+                "supported_formats": ["JPEG", "PNG", "GIF", "BMP"]
+            },
+            features=["object_detection", "ocr", "face_detection", "image_analysis"]
+        )
+        services.append(computer_vision_service)
+        
+        # Text Analytics
+        text_analytics_service = CloudService(
+            provider=CloudProvider.AZURE,
+            service_name="Azure Text Analytics",
+            service_id="azure_text_analytics",
+            category=ServiceCategory.MACHINE_LEARNING,
+            region=region,
+            description="Natural language processing and text analysis",
+            pricing_model="pay_per_transaction",
+            hourly_price=0.001,  # Per 1000 characters
+            pricing_unit="1000 characters",
+            specifications={
+                "service_type": "nlp",
+                "languages_supported": 120,
+                "max_document_size": "5120 characters"
+            },
+            features=["sentiment_analysis", "key_phrase_extraction", "language_detection", "entity_recognition"]
+        )
+        services.append(text_analytics_service)
+        
+        # Speech Services
+        speech_service = CloudService(
+            provider=CloudProvider.AZURE,
+            service_name="Azure Speech Services",
+            service_id="azure_speech_services",
+            category=ServiceCategory.MACHINE_LEARNING,
+            region=region,
+            description="Speech-to-text and text-to-speech services",
+            pricing_model="pay_per_hour",
+            hourly_price=1.0,  # Per hour of audio
+            pricing_unit="audio-hour",
+            specifications={
+                "service_type": "speech",
+                "languages_supported": 85,
+                "audio_formats": ["WAV", "MP3", "OGG"]
+            },
+            features=["speech_to_text", "text_to_speech", "speaker_recognition", "custom_models"]
+        )
+        services.append(speech_service)
+        
+        # Translator
+        translator_service = CloudService(
+            provider=CloudProvider.AZURE,
+            service_name="Azure Translator",
+            service_id="azure_translator",
+            category=ServiceCategory.MACHINE_LEARNING,
+            region=region,
+            description="Real-time text translation service",
+            pricing_model="pay_per_character",
+            hourly_price=0.00001,  # Per character
+            pricing_unit="character",
+            specifications={
+                "service_type": "translation",
+                "languages_supported": 90,
+                "max_text_size": "50000 characters"
+            },
+            features=["real_time_translation", "document_translation", "custom_models", "transliteration"]
+        )
+        services.append(translator_service)
+        
+        # Form Recognizer
+        form_recognizer_service = CloudService(
+            provider=CloudProvider.AZURE,
+            service_name="Azure Form Recognizer",
+            service_id="azure_form_recognizer",
+            category=ServiceCategory.MACHINE_LEARNING,
+            region=region,
+            description="AI-powered document processing service",
+            pricing_model="pay_per_page",
+            hourly_price=0.05,  # Per page
+            pricing_unit="page",
+            specifications={
+                "service_type": "document_processing",
+                "max_file_size": "50MB",
+                "supported_formats": ["PDF", "JPEG", "PNG", "TIFF"]
+            },
+            features=["form_extraction", "table_extraction", "custom_models", "receipt_processing"]
+        )
+        services.append(form_recognizer_service)
+        
+        return services

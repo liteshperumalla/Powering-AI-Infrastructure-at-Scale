@@ -84,6 +84,7 @@ class Settings(BaseSettings):
     
     gcp_service_account_path: Optional[str] = None
     gcp_project_id: Optional[str] = None
+    gcp_region: str = "us-central1"
     google_application_credentials: Optional[str] = None
     
     # Terraform Cloud
@@ -93,6 +94,26 @@ class Settings(BaseSettings):
     rate_limit_requests: int = Field(
         default=100,
         description="Requests per minute per user"
+    )
+    
+    # Cloud API Rate Limits (per minute)
+    aws_rate_limit: int = Field(
+        default=100,
+        description="AWS API requests per minute"
+    )
+    azure_rate_limit: int = Field(
+        default=1000,
+        description="Azure API requests per minute (higher for public pricing API)"
+    )
+    gcp_rate_limit: int = Field(
+        default=100,
+        description="GCP API requests per minute"
+    )
+    
+    # Cache Configuration
+    cache_enabled: bool = Field(
+        default=True,
+        description="Enable Redis caching for API responses"
     )
     
     # CORS Settings
@@ -147,3 +168,21 @@ def get_settings() -> Settings:
 
 # Global settings instance
 settings = get_settings()
+
+
+def get_cache_config() -> dict:
+    """Get cache configuration."""
+    return {
+        "redis_url": settings.redis_url,
+        "cache_ttl": settings.redis_cache_ttl,
+        "enabled": settings.cache_enabled
+    }
+
+
+def get_rate_limit_config() -> dict:
+    """Get rate limiting configuration."""
+    return {
+        "aws_limit": settings.aws_rate_limit,
+        "azure_limit": settings.azure_rate_limit,
+        "gcp_limit": settings.gcp_rate_limit
+    }

@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 
 from .aws import AWSClient
 from .azure import AzureClient
+from .gcp import GCPClient
 from .base import (
     BaseCloudClient, CloudProvider, CloudService, CloudServiceResponse,
     ServiceCategory, CloudServiceError, AuthenticationError
@@ -26,26 +27,31 @@ class UnifiedCloudClient:
     allowing seamless access to services across different clouds.
     """
     
-    def __init__(self, aws_region: str = "us-east-1", azure_region: str = "eastus",
+    def __init__(self, aws_region: str = "us-east-1", azure_region: str = "eastus", gcp_region: str = "us-central1",
                  aws_access_key_id: Optional[str] = None, aws_secret_access_key: Optional[str] = None,
                  azure_subscription_id: Optional[str] = None, azure_client_id: Optional[str] = None,
-                 azure_client_secret: Optional[str] = None):
+                 azure_client_secret: Optional[str] = None,
+                 gcp_project_id: Optional[str] = None, gcp_service_account_path: Optional[str] = None):
         """
         Initialize the unified cloud client.
         
         Args:
             aws_region: Default AWS region
             azure_region: Default Azure region
+            gcp_region: Default GCP region
             aws_access_key_id: AWS access key ID (optional)
             aws_secret_access_key: AWS secret access key (optional)
             azure_subscription_id: Azure subscription ID (optional)
             azure_client_id: Azure client ID (optional)
             azure_client_secret: Azure client secret (optional)
+            gcp_project_id: GCP project ID (optional)
+            gcp_service_account_path: Path to GCP service account JSON (optional)
         """
         self.clients: Dict[CloudProvider, BaseCloudClient] = {}
         self.provider_regions = {
             CloudProvider.AWS: aws_region,
-            CloudProvider.AZURE: azure_region
+            CloudProvider.AZURE: azure_region,
+            CloudProvider.GCP: gcp_region
         }
         
         # Initialize cloud clients
@@ -71,6 +77,19 @@ class UnifiedCloudClient:
             logger.info("Azure client initialized successfully")
         except Exception as e:
             logger.error(f"Unexpected error initializing Azure client: {e}")
+        
+        try:
+            if gcp_project_id:
+                self.clients[CloudProvider.GCP] = GCPClient(
+                    project_id=gcp_project_id,
+                    region=gcp_region,
+                    service_account_path=gcp_service_account_path
+                )
+                logger.info("GCP client initialized successfully")
+            else:
+                logger.info("GCP project ID not provided, skipping GCP client initialization")
+        except Exception as e:
+            logger.error(f"Unexpected error initializing GCP client: {e}")
     
     def get_available_providers(self) -> List[CloudProvider]:
         """Get list of available cloud providers."""
@@ -118,6 +137,20 @@ class UnifiedCloudClient:
         """
         return await self._get_services_by_category(ServiceCategory.DATABASE, provider, region)
     
+    async def get_ai_services(self, provider: Optional[CloudProvider] = None,
+                            region: Optional[str] = None) -> Dict[CloudProvider, CloudServiceResponse]:
+        """
+        Get AI/ML services from specified provider(s).
+        
+        Args:
+            provider: Specific cloud provider (optional, if None, query all available)
+            region: Region to query (optional, if None, use default for provider)
+            
+        Returns:
+            Dictionary mapping providers to their AI/ML service responses
+        """
+        return await self._get_services_by_category(ServiceCategory.MACHINE_LEARNING, provider, region)
+    
     async def _get_services_by_category(self, category: ServiceCategory,
                                       provider: Optional[CloudProvider] = None,
                                       region: Optional[str] = None) -> Dict[CloudProvider, CloudServiceResponse]:
@@ -150,6 +183,8 @@ class UnifiedCloudClient:
                     result = await client.get_storage_services(provider_region)
                 elif category == ServiceCategory.DATABASE:
                     result = await client.get_database_services(provider_region)
+                elif category == ServiceCategory.MACHINE_LEARNING:
+                    result = await client.get_ai_services(provider_region)
                 else:
                     logger.warning(f"Unsupported service category: {category}")
                     continue

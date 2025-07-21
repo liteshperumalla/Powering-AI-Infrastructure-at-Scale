@@ -1,0 +1,860 @@
+"""
+Report Generator Agent for creating professional infrastructure assessment reports.
+
+This agent specializes in generating comprehensive reports from assessment data
+and agent recommendations, producing executive summaries and technical documentation.
+"""
+
+import logging
+import json
+from datetime import datetime, timezone
+from typing import Dict, Any, List, Optional, Union
+from dataclasses import dataclass, field
+from pathlib import Path
+import uuid
+
+from .base import BaseAgent, AgentConfig, AgentRole, AgentStatus, AgentResult
+from ..models.assessment import Assessment
+from ..models.recommendation import Recommendation
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ReportSection:
+    """Represents a section in a report."""
+    title: str
+    content: str
+    order: int = 0
+    subsections: List["ReportSection"] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert section to dictionary."""
+        return {
+            "title": self.title,
+            "content": self.content,
+            "order": self.order,
+            "subsections": [sub.to_dict() for sub in self.subsections],
+            "metadata": self.metadata
+        }
+
+
+@dataclass
+class Report:
+    """Represents a complete infrastructure assessment report."""
+    id: str
+    title: str
+    assessment_id: str
+    report_type: str  # "executive", "technical", "full"
+    sections: List[ReportSection] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    
+    def add_section(self, section: ReportSection) -> None:
+        """Add a section to the report."""
+        self.sections.append(section)
+        self.sections.sort(key=lambda s: s.order)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert report to dictionary."""
+        return {
+            "id": self.id,
+            "title": self.title,
+            "assessment_id": self.assessment_id,
+            "report_type": self.report_type,
+            "sections": [section.to_dict() for section in self.sections],
+            "metadata": self.metadata,
+            "created_at": self.created_at.isoformat()
+        }
+    
+    def to_markdown(self) -> str:
+        """Convert report to markdown format."""
+        lines = [
+            f"# {self.title}",
+            "",
+            f"**Report ID:** {self.id}",
+            f"**Assessment ID:** {self.assessment_id}",
+            f"**Report Type:** {self.report_type.title()}",
+            f"**Generated:** {self.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')}",
+            "",
+            "---",
+            ""
+        ]
+        
+        for section in self.sections:
+            lines.extend(self._section_to_markdown(section, level=2))
+            lines.append("")
+        
+        return "\n".join(lines)
+    
+    def _section_to_markdown(self, section: ReportSection, level: int = 2) -> List[str]:
+        """Convert a section to markdown lines."""
+        lines = [
+            f"{'#' * level} {section.title}",
+            "",
+            section.content,
+            ""
+        ]
+        
+        for subsection in section.subsections:
+            lines.extend(self._section_to_markdown(subsection, level + 1))
+        
+        return lines
+
+
+class ReportGeneratorAgent(BaseAgent):
+    """
+    Agent specialized in generating professional infrastructure assessment reports.
+    
+    This agent creates comprehensive reports from assessment data and recommendations,
+    producing both executive summaries and detailed technical documentation.
+    """
+    
+    def __init__(self, config: AgentConfig):
+        """Initialize the Report Generator Agent."""
+        super().__init__(config)
+        self.report_templates = self._load_report_templates()
+        
+        logger.info(f"Initialized Report Generator Agent: {self.name}")
+    
+    def _load_report_templates(self) -> Dict[str, Dict[str, Any]]:
+        """Load report templates for different report types."""
+        return {
+            "executive": {
+                "title_template": "Infrastructure Assessment Report - {company_name}",
+                "sections": [
+                    {"title": "Executive Summary", "order": 1},
+                    {"title": "Business Context", "order": 2},
+                    {"title": "Key Recommendations", "order": 3},
+                    {"title": "Investment Summary", "order": 4},
+                    {"title": "Implementation Roadmap", "order": 5},
+                    {"title": "Risk Assessment", "order": 6}
+                ]
+            },
+            "technical": {
+                "title_template": "Technical Infrastructure Report - {company_name}",
+                "sections": [
+                    {"title": "Current State Analysis", "order": 1},
+                    {"title": "Technical Requirements", "order": 2},
+                    {"title": "Architecture Recommendations", "order": 3},
+                    {"title": "Technology Stack", "order": 4},
+                    {"title": "Implementation Details", "order": 5},
+                    {"title": "Security & Compliance", "order": 6},
+                    {"title": "Monitoring & Operations", "order": 7}
+                ]
+            },
+            "full": {
+                "title_template": "Complete Infrastructure Assessment - {company_name}",
+                "sections": [
+                    {"title": "Executive Summary", "order": 1},
+                    {"title": "Business Context & Goals", "order": 2},
+                    {"title": "Current State Analysis", "order": 3},
+                    {"title": "Technical Requirements", "order": 4},
+                    {"title": "Recommendations Overview", "order": 5},
+                    {"title": "Detailed Technical Recommendations", "order": 6},
+                    {"title": "Cost Analysis", "order": 7},
+                    {"title": "Implementation Roadmap", "order": 8},
+                    {"title": "Risk Assessment & Mitigation", "order": 9},
+                    {"title": "Next Steps", "order": 10}
+                ]
+            }
+        }
+    
+    async def _execute_main_logic(self) -> AgentResult:
+        """Execute the main report generation logic."""
+        try:
+            # Extract assessment and recommendations from context
+            assessment_data = self.context.get("assessment", {})
+            recommendations_data = self.context.get("recommendations", [])
+            report_type = self.context.get("report_type", "full")
+            
+            if not assessment_data:
+                raise ValueError("No assessment data provided for report generation")
+            
+            # Create assessment object if it's a dict
+            if isinstance(assessment_data, dict):
+                assessment = self._dict_to_assessment(assessment_data)
+            else:
+                assessment = assessment_data
+            
+            # Create recommendation objects if they're dicts
+            recommendations = []
+            for rec_data in recommendations_data:
+                if isinstance(rec_data, dict):
+                    recommendations.append(self._dict_to_recommendation(rec_data))
+                else:
+                    recommendations.append(rec_data)
+            
+            # Generate the report
+            report = await self._generate_report(assessment, recommendations, report_type)
+            
+            # Create result
+            result = AgentResult(
+                agent_name=self.name,
+                status=AgentStatus.COMPLETED,
+                data={
+                    "report": report.to_dict(),
+                    "report_markdown": report.to_markdown(),
+                    "report_id": report.id,
+                    "report_type": report_type,
+                    "metadata": {
+                        "report_sections": len(report.sections),
+                        "report_length": len(report.to_markdown()),
+                        "generation_time": datetime.now(timezone.utc).isoformat()
+                    }
+                },
+                recommendations=[]
+            )
+            
+            logger.info(f"Generated {report_type} report {report.id} with {len(report.sections)} sections")
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in report generation: {str(e)}", exc_info=True)
+            return AgentResult(
+                agent_name=self.name,
+                status=AgentStatus.FAILED,
+                data={},
+                recommendations=[],
+                error=str(e)
+            )
+    
+    def _dict_to_assessment(self, data: Dict[str, Any]) -> Assessment:
+        """Convert dictionary to Assessment object."""
+        # Create a mock Assessment object with the data
+        assessment = type('Assessment', (), {})()
+        assessment.id = data.get("id", str(uuid.uuid4()))
+        assessment.title = data.get("title", "Infrastructure Assessment")
+        assessment.business_requirements = data.get("business_requirements", {})
+        assessment.technical_requirements = data.get("technical_requirements", {})
+        assessment.created_at = datetime.now(timezone.utc)
+        return assessment
+    
+    def _dict_to_recommendation(self, data: Dict[str, Any]) -> Recommendation:
+        """Convert dictionary to Recommendation object."""
+        # Create a mock Recommendation object with the data
+        rec = type('Recommendation', (), {})()
+        rec.id = data.get("id", str(uuid.uuid4()))
+        rec.title = data.get("title", "Recommendation")
+        rec.description = data.get("description", "")
+        rec.category = data.get("category", "general")
+        rec.priority = data.get("priority", "medium")
+        rec.estimated_cost = data.get("estimated_cost", 0)
+        rec.implementation_time = data.get("implementation_time", "unknown")
+        rec.benefits = data.get("benefits", [])
+        rec.risks = data.get("risks", [])
+        return rec
+    
+    async def _generate_report(self, assessment: Any, recommendations: List[Any], report_type: str) -> Report:
+        """Generate a complete report based on assessment and recommendations."""
+        # Get template for report type
+        template = self.report_templates.get(report_type, self.report_templates["full"])
+        
+        # Extract company name for title
+        company_name = "Unknown Company"
+        if hasattr(assessment, 'business_requirements') and assessment.business_requirements:
+            company_name = assessment.business_requirements.get("company_name", company_name)
+        
+        # Create report
+        report = Report(
+            id=str(uuid.uuid4()),
+            title=template["title_template"].format(company_name=company_name),
+            assessment_id=assessment.id,
+            report_type=report_type,
+            metadata={
+                "company_name": company_name,
+                "recommendation_count": len(recommendations),
+                "template_used": report_type
+            }
+        )
+        
+        # Generate sections based on template
+        for section_config in template["sections"]:
+            section = await self._generate_section(
+                section_config["title"],
+                section_config["order"],
+                assessment,
+                recommendations
+            )
+            report.add_section(section)
+        
+        return report
+    
+    async def _generate_section(self, title: str, order: int, assessment: Any, recommendations: List[Any]) -> ReportSection:
+        """Generate a specific section of the report."""
+        content = ""
+        
+        if title == "Executive Summary":
+            content = self._generate_executive_summary(assessment, recommendations)
+        elif title == "Business Context" or title == "Business Context & Goals":
+            content = self._generate_business_context(assessment)
+        elif title == "Current State Analysis":
+            content = self._generate_current_state_analysis(assessment)
+        elif title == "Technical Requirements":
+            content = self._generate_technical_requirements(assessment)
+        elif title == "Key Recommendations" or title == "Recommendations Overview":
+            content = self._generate_recommendations_overview(recommendations)
+        elif title == "Detailed Technical Recommendations":
+            content = self._generate_detailed_recommendations(recommendations)
+        elif title == "Investment Summary" or title == "Cost Analysis":
+            content = self._generate_cost_analysis(recommendations)
+        elif title == "Implementation Roadmap":
+            content = self._generate_implementation_roadmap(recommendations)
+        elif title == "Risk Assessment" or title == "Risk Assessment & Mitigation":
+            content = self._generate_risk_assessment(recommendations)
+        elif title == "Architecture Recommendations":
+            content = self._generate_architecture_recommendations(recommendations)
+        elif title == "Technology Stack":
+            content = self._generate_technology_stack(recommendations)
+        elif title == "Implementation Details":
+            content = self._generate_implementation_details(recommendations)
+        elif title == "Security & Compliance":
+            content = self._generate_security_compliance(assessment, recommendations)
+        elif title == "Monitoring & Operations":
+            content = self._generate_monitoring_operations(recommendations)
+        elif title == "Next Steps":
+            content = self._generate_next_steps(recommendations)
+        else:
+            content = f"Content for {title} section would be generated here."
+        
+        return ReportSection(
+            title=title,
+            content=content,
+            order=order
+        )
+    
+    def _generate_executive_summary(self, assessment: Any, recommendations: List[Any]) -> str:
+        """Generate executive summary section."""
+        business_req = getattr(assessment, 'business_requirements', {})
+        company_name = business_req.get("company_name", "the organization")
+        industry = business_req.get("industry", "technology")
+        company_size = business_req.get("company_size", "medium")
+        
+        high_priority_recs = [r for r in recommendations if getattr(r, 'priority', 'medium') == 'high']
+        total_cost = sum(getattr(r, 'estimated_cost', 0) for r in recommendations)
+        
+        return f"""This report presents a comprehensive infrastructure assessment for {company_name}, a {company_size}-sized organization in the {industry} industry.
+
+**Key Findings:**
+- Current infrastructure assessment reveals opportunities for optimization and modernization
+- {len(recommendations)} strategic recommendations have been identified
+- {len(high_priority_recs)} high-priority initiatives require immediate attention
+- Estimated total investment: ${total_cost:,.2f}
+
+**Primary Benefits:**
+- Enhanced scalability and performance
+- Improved cost efficiency
+- Strengthened security posture
+- Increased operational reliability
+
+**Recommended Next Steps:**
+1. Review and prioritize recommendations based on business impact
+2. Develop detailed implementation timeline
+3. Allocate necessary resources and budget
+4. Begin with high-priority, low-risk initiatives
+
+This assessment provides a roadmap for modernizing your infrastructure to support current needs and future growth."""
+    
+    def _generate_business_context(self, assessment: Any) -> str:
+        """Generate business context section."""
+        business_req = getattr(assessment, 'business_requirements', {})
+        
+        company_name = business_req.get("company_name", "the organization")
+        industry = business_req.get("industry", "technology")
+        company_size = business_req.get("company_size", "medium")
+        primary_goals = business_req.get("primary_goals", [])
+        budget_range = business_req.get("budget_range", "not specified")
+        timeline = business_req.get("timeline", "flexible")
+        main_challenges = business_req.get("main_challenges", [])
+        
+        goals_text = ", ".join(primary_goals) if primary_goals else "not specified"
+        challenges_text = ", ".join(main_challenges) if main_challenges else "not specified"
+        
+        return f"""**Company Profile:**
+- Organization: {company_name}
+- Industry: {industry.title()}
+- Size: {company_size.title()}
+- Budget Range: {budget_range.replace('_', ' ').title()}
+- Timeline: {timeline.replace('_', ' ').title()}
+
+**Business Objectives:**
+{goals_text}
+
+**Current Challenges:**
+{challenges_text}
+
+**Strategic Context:**
+The organization is seeking to optimize its infrastructure to better align with business objectives and overcome current operational challenges. This assessment focuses on identifying opportunities that deliver maximum business value while addressing immediate pain points."""
+    
+    def _generate_current_state_analysis(self, assessment: Any) -> str:
+        """Generate current state analysis section."""
+        business_req = getattr(assessment, 'business_requirements', {})
+        technical_req = getattr(assessment, 'technical_requirements', {})
+        
+        infrastructure_maturity = business_req.get("infrastructure_maturity", "intermediate")
+        current_hosting = technical_req.get("current_hosting", [])
+        current_technologies = technical_req.get("current_technologies", [])
+        team_expertise = technical_req.get("team_expertise", "intermediate")
+        
+        hosting_text = ", ".join(current_hosting) if current_hosting else "not specified"
+        tech_text = ", ".join(current_technologies) if current_technologies else "not specified"
+        
+        return f"""**Infrastructure Maturity Level:** {infrastructure_maturity.title()}
+
+**Current Hosting Environment:**
+{hosting_text}
+
+**Technology Stack:**
+{tech_text}
+
+**Team Expertise Level:** {team_expertise.title()}
+
+**Assessment Summary:**
+The current infrastructure shows {infrastructure_maturity} maturity with opportunities for optimization. The existing technology stack provides a solid foundation for modernization efforts, and the team's {team_expertise} expertise level supports the recommended improvements."""
+    
+    def _generate_technical_requirements(self, assessment: Any) -> str:
+        """Generate technical requirements section."""
+        technical_req = getattr(assessment, 'technical_requirements', {})
+        
+        workload_types = technical_req.get("workload_types", [])
+        expected_users = technical_req.get("expected_users", "not specified")
+        data_volume = technical_req.get("data_volume", "not specified")
+        performance_requirements = technical_req.get("performance_requirements", [])
+        preferred_providers = technical_req.get("preferred_cloud_providers", [])
+        compliance_requirements = technical_req.get("compliance_requirements", [])
+        
+        workloads_text = ", ".join(workload_types) if workload_types else "not specified"
+        performance_text = ", ".join(performance_requirements) if performance_requirements else "not specified"
+        providers_text = ", ".join(preferred_providers) if preferred_providers else "not specified"
+        compliance_text = ", ".join(compliance_requirements) if compliance_requirements else "none specified"
+        
+        return f"""**Workload Types:**
+{workloads_text}
+
+**Scale Requirements:**
+- Expected Users: {expected_users}
+- Data Volume: {data_volume.replace('_', ' ').title()}
+
+**Performance Requirements:**
+{performance_text}
+
+**Cloud Provider Preferences:**
+{providers_text}
+
+**Compliance Requirements:**
+{compliance_text}
+
+**Technical Constraints:**
+The requirements analysis indicates a need for scalable, performant infrastructure that can handle the specified workloads while meeting compliance and security standards."""
+    
+    def _generate_recommendations_overview(self, recommendations: List[Any]) -> str:
+        """Generate recommendations overview section."""
+        if not recommendations:
+            return "No specific recommendations were generated for this assessment."
+        
+        high_priority = [r for r in recommendations if getattr(r, 'priority', 'medium') == 'high']
+        medium_priority = [r for r in recommendations if getattr(r, 'priority', 'medium') == 'medium']
+        low_priority = [r for r in recommendations if getattr(r, 'priority', 'medium') == 'low']
+        
+        total_cost = sum(getattr(r, 'estimated_cost', 0) for r in recommendations)
+        
+        content = f"""**Recommendation Summary:**
+- Total Recommendations: {len(recommendations)}
+- High Priority: {len(high_priority)}
+- Medium Priority: {len(medium_priority)}
+- Low Priority: {len(low_priority)}
+- Estimated Total Cost: ${total_cost:,.2f}
+
+**High Priority Recommendations:**
+"""
+        
+        for i, rec in enumerate(high_priority[:5], 1):  # Show top 5 high priority
+            title = getattr(rec, 'title', f'Recommendation {i}')
+            cost = getattr(rec, 'estimated_cost', 0)
+            content += f"{i}. {title} (${cost:,.2f})\n"
+        
+        if len(high_priority) > 5:
+            content += f"... and {len(high_priority) - 5} more high priority recommendations\n"
+        
+        content += "\n**Key Benefits:**\n"
+        all_benefits = []
+        for rec in recommendations:
+            benefits = getattr(rec, 'benefits', [])
+            all_benefits.extend(benefits)
+        
+        unique_benefits = list(set(all_benefits))[:5]  # Top 5 unique benefits
+        for benefit in unique_benefits:
+            content += f"- {benefit}\n"
+        
+        return content
+    
+    def _generate_detailed_recommendations(self, recommendations: List[Any]) -> str:
+        """Generate detailed recommendations section."""
+        if not recommendations:
+            return "No detailed recommendations available."
+        
+        content = "**Detailed Recommendation Analysis:**\n\n"
+        
+        for i, rec in enumerate(recommendations, 1):
+            title = getattr(rec, 'title', f'Recommendation {i}')
+            description = getattr(rec, 'description', 'No description available')
+            category = getattr(rec, 'category', 'general')
+            priority = getattr(rec, 'priority', 'medium')
+            cost = getattr(rec, 'estimated_cost', 0)
+            implementation_time = getattr(rec, 'implementation_time', 'unknown')
+            benefits = getattr(rec, 'benefits', [])
+            risks = getattr(rec, 'risks', [])
+            
+            content += f"### {i}. {title}\n\n"
+            content += f"**Category:** {category.title()}\n"
+            content += f"**Priority:** {priority.title()}\n"
+            content += f"**Estimated Cost:** ${cost:,.2f}\n"
+            content += f"**Implementation Time:** {implementation_time}\n\n"
+            content += f"**Description:**\n{description}\n\n"
+            
+            if benefits:
+                content += "**Benefits:**\n"
+                for benefit in benefits:
+                    content += f"- {benefit}\n"
+                content += "\n"
+            
+            if risks:
+                content += "**Risks:**\n"
+                for risk in risks:
+                    content += f"- {risk}\n"
+                content += "\n"
+            
+            content += "---\n\n"
+        
+        return content
+    
+    def _generate_cost_analysis(self, recommendations: List[Any]) -> str:
+        """Generate cost analysis section."""
+        if not recommendations:
+            return "No cost analysis available."
+        
+        total_cost = sum(getattr(r, 'estimated_cost', 0) for r in recommendations)
+        high_cost_recs = [r for r in recommendations if getattr(r, 'estimated_cost', 0) > total_cost * 0.2]
+        
+        content = f"""**Investment Overview:**
+- Total Estimated Cost: ${total_cost:,.2f}
+- Number of Initiatives: {len(recommendations)}
+- Average Cost per Initiative: ${total_cost / len(recommendations):,.2f}
+
+**Cost Breakdown by Priority:**
+"""
+        
+        priorities = ['high', 'medium', 'low']
+        for priority in priorities:
+            priority_recs = [r for r in recommendations if getattr(r, 'priority', 'medium') == priority]
+            priority_cost = sum(getattr(r, 'estimated_cost', 0) for r in priority_recs)
+            if priority_recs:
+                content += f"- {priority.title()} Priority: ${priority_cost:,.2f} ({len(priority_recs)} items)\n"
+        
+        content += "\n**Major Cost Items:**\n"
+        for rec in sorted(high_cost_recs, key=lambda r: getattr(r, 'estimated_cost', 0), reverse=True)[:5]:
+            title = getattr(rec, 'title', 'Unknown')
+            cost = getattr(rec, 'estimated_cost', 0)
+            content += f"- {title}: ${cost:,.2f}\n"
+        
+        content += f"""
+**Budget Considerations:**
+- Consider phased implementation to spread costs over time
+- High-priority items should be budgeted for immediate implementation
+- ROI analysis suggests payback period of 12-24 months for most initiatives
+"""
+        
+        return content
+    
+    def _generate_implementation_roadmap(self, recommendations: List[Any]) -> str:
+        """Generate implementation roadmap section."""
+        if not recommendations:
+            return "No implementation roadmap available."
+        
+        # Group recommendations by implementation time
+        immediate = [r for r in recommendations if 'immediate' in getattr(r, 'implementation_time', '').lower()]
+        short_term = [r for r in recommendations if 'month' in getattr(r, 'implementation_time', '').lower()]
+        long_term = [r for r in recommendations if 'quarter' in getattr(r, 'implementation_time', '').lower() or 'year' in getattr(r, 'implementation_time', '').lower()]
+        
+        content = """**Implementation Timeline:**
+
+**Phase 1: Immediate (0-30 days)**
+"""
+        
+        if immediate:
+            for rec in immediate:
+                title = getattr(rec, 'title', 'Unknown')
+                content += f"- {title}\n"
+        else:
+            content += "- No immediate actions identified\n"
+        
+        content += "\n**Phase 2: Short-term (1-3 months)**\n"
+        
+        if short_term:
+            for rec in short_term:
+                title = getattr(rec, 'title', 'Unknown')
+                content += f"- {title}\n"
+        else:
+            content += "- No short-term actions identified\n"
+        
+        content += "\n**Phase 3: Long-term (3+ months)**\n"
+        
+        if long_term:
+            for rec in long_term:
+                title = getattr(rec, 'title', 'Unknown')
+                content += f"- {title}\n"
+        else:
+            content += "- No long-term actions identified\n"
+        
+        content += """
+**Implementation Success Factors:**
+1. Secure executive sponsorship and budget approval
+2. Establish clear project governance and accountability
+3. Ensure adequate technical resources and expertise
+4. Plan for change management and user training
+5. Implement monitoring and success metrics
+6. Maintain regular progress reviews and adjustments
+"""
+        
+        return content
+    
+    def _generate_risk_assessment(self, recommendations: List[Any]) -> str:
+        """Generate risk assessment section."""
+        content = """**Risk Analysis:**
+
+**Implementation Risks:**
+- Resource availability and competing priorities
+- Technical complexity and integration challenges
+- Budget constraints and cost overruns
+- Timeline delays due to unforeseen complications
+- Change management and user adoption issues
+
+**Mitigation Strategies:**
+- Phased implementation approach to reduce complexity
+- Thorough testing and validation at each stage
+- Regular stakeholder communication and updates
+- Contingency planning for critical dependencies
+- Investment in training and change management
+
+**Business Continuity:**
+- Maintain current systems during transition periods
+- Implement rollback procedures for critical changes
+- Ensure adequate backup and recovery capabilities
+- Plan for minimal business disruption during implementations
+"""
+        
+        # Add specific risks from recommendations
+        all_risks = []
+        for rec in recommendations:
+            risks = getattr(rec, 'risks', [])
+            all_risks.extend(risks)
+        
+        if all_risks:
+            unique_risks = list(set(all_risks))
+            content += "\n**Specific Technical Risks:**\n"
+            for risk in unique_risks[:5]:  # Top 5 unique risks
+                content += f"- {risk}\n"
+        
+        return content
+    
+    def _generate_architecture_recommendations(self, recommendations: List[Any]) -> str:
+        """Generate architecture recommendations section."""
+        arch_recs = [r for r in recommendations if 'architecture' in getattr(r, 'category', '').lower() or 'infrastructure' in getattr(r, 'category', '').lower()]
+        
+        if not arch_recs:
+            return "No specific architecture recommendations were identified."
+        
+        content = "**Architecture Recommendations:**\n\n"
+        
+        for rec in arch_recs:
+            title = getattr(rec, 'title', 'Architecture Recommendation')
+            description = getattr(rec, 'description', 'No description available')
+            content += f"**{title}:**\n{description}\n\n"
+        
+        content += """**General Architecture Principles:**
+- Design for scalability and future growth
+- Implement microservices architecture where appropriate
+- Use cloud-native services to reduce operational overhead
+- Ensure high availability and disaster recovery capabilities
+- Implement proper security controls at all layers
+- Design for observability and monitoring
+"""
+        
+        return content
+    
+    def _generate_technology_stack(self, recommendations: List[Any]) -> str:
+        """Generate technology stack section."""
+        return """**Recommended Technology Stack:**
+
+**Compute:**
+- Container orchestration (Kubernetes)
+- Serverless functions for event-driven workloads
+- Auto-scaling compute instances
+
+**Storage:**
+- Object storage for unstructured data
+- Managed database services
+- Distributed caching layer
+
+**Networking:**
+- Content delivery network (CDN)
+- Load balancers and API gateways
+- Virtual private cloud (VPC) architecture
+
+**Security:**
+- Identity and access management (IAM)
+- Encryption at rest and in transit
+- Security monitoring and compliance tools
+
+**Operations:**
+- Infrastructure as code (IaC)
+- CI/CD pipelines
+- Monitoring and logging platforms
+- Backup and disaster recovery solutions
+
+**Development:**
+- Version control and collaboration tools
+- Testing and quality assurance frameworks
+- Documentation and knowledge management systems
+"""
+    
+    def _generate_implementation_details(self, recommendations: List[Any]) -> str:
+        """Generate implementation details section."""
+        return """**Implementation Approach:**
+
+**Project Management:**
+- Establish dedicated project team with clear roles
+- Use agile methodology with regular sprint reviews
+- Implement risk management and issue tracking
+- Maintain detailed project documentation
+
+**Technical Implementation:**
+- Follow infrastructure as code principles
+- Implement comprehensive testing strategies
+- Use blue-green deployment for zero-downtime updates
+- Establish proper version control and change management
+
+**Quality Assurance:**
+- Conduct thorough testing at each implementation phase
+- Perform security and compliance validation
+- Execute performance and load testing
+- Implement monitoring and alerting from day one
+
+**Change Management:**
+- Develop comprehensive training programs
+- Create detailed operational procedures
+- Establish support and troubleshooting guides
+- Plan for user adoption and feedback collection
+"""
+    
+    def _generate_security_compliance(self, assessment: Any, recommendations: List[Any]) -> str:
+        """Generate security and compliance section."""
+        technical_req = getattr(assessment, 'technical_requirements', {})
+        compliance_requirements = technical_req.get("compliance_requirements", [])
+        security_requirements = technical_req.get("security_requirements", [])
+        
+        compliance_text = ", ".join(compliance_requirements) if compliance_requirements else "none specified"
+        security_text = ", ".join(security_requirements) if security_requirements else "standard security measures"
+        
+        return f"""**Compliance Requirements:**
+{compliance_text}
+
+**Security Requirements:**
+{security_text}
+
+**Security Framework:**
+- Implement defense-in-depth security strategy
+- Regular security assessments and penetration testing
+- Continuous compliance monitoring and reporting
+- Incident response and recovery procedures
+
+**Compliance Measures:**
+- Data governance and privacy protection
+- Audit logging and monitoring
+- Access controls and identity management
+- Regular compliance assessments and certifications
+
+**Recommended Security Controls:**
+- Multi-factor authentication (MFA)
+- Network segmentation and firewalls
+- Encryption for data at rest and in transit
+- Regular security updates and patch management
+- Security awareness training for all users
+"""
+    
+    def _generate_monitoring_operations(self, recommendations: List[Any]) -> str:
+        """Generate monitoring and operations section."""
+        return """**Monitoring Strategy:**
+
+**Infrastructure Monitoring:**
+- System performance and resource utilization
+- Network connectivity and latency
+- Storage capacity and performance
+- Security events and anomalies
+
+**Application Monitoring:**
+- Application performance metrics (APM)
+- User experience and transaction monitoring
+- Error tracking and debugging
+- Business metrics and KPIs
+
+**Operational Procedures:**
+- Incident response and escalation procedures
+- Change management and deployment processes
+- Backup and recovery operations
+- Capacity planning and scaling procedures
+
+**Alerting and Notifications:**
+- Proactive alerting for critical issues
+- Escalation procedures for different severity levels
+- Integration with communication platforms
+- Regular reporting and dashboard reviews
+
+**Continuous Improvement:**
+- Regular performance reviews and optimization
+- Capacity planning based on growth trends
+- Technology refresh and upgrade planning
+- Process improvement and automation opportunities
+"""
+    
+    def _generate_next_steps(self, recommendations: List[Any]) -> str:
+        """Generate next steps section."""
+        high_priority = [r for r in recommendations if getattr(r, 'priority', 'medium') == 'high']
+        
+        content = """**Immediate Actions (Next 30 Days):**
+1. Review and approve this assessment report
+2. Secure budget and resource allocation
+3. Establish project governance and team structure
+4. Begin detailed planning for high-priority initiatives
+5. Initiate vendor selection and procurement processes
+
+**Short-term Goals (Next 90 Days):**
+1. Complete detailed technical designs
+2. Begin implementation of quick wins and foundational elements
+3. Establish monitoring and measurement frameworks
+4. Conduct team training and skill development
+5. Execute pilot projects and proof-of-concepts
+
+**Long-term Objectives (6-12 Months):**
+1. Complete major infrastructure transformations
+2. Achieve target performance and scalability metrics
+3. Realize projected cost savings and efficiency gains
+4. Establish mature operational processes
+5. Plan for next phase of optimization and growth
+
+**Success Metrics:**
+- Infrastructure performance improvements
+- Cost reduction achievements
+- Security and compliance posture
+- Team productivity and satisfaction
+- Business value delivery
+"""
+        
+        if high_priority:
+            content += f"\n**Priority Focus Areas:**\n"
+            for i, rec in enumerate(high_priority[:3], 1):
+                title = getattr(rec, 'title', f'Priority Item {i}')
+                content += f"{i}. {title}\n"
+        
+        return content

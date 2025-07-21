@@ -39,13 +39,13 @@ class AgentRole(str, Enum):
     CTO = "cto"
     CLOUD_ENGINEER = "cloud_engineer"
     RESEARCH = "research"
+    REPORT_GENERATOR = "report_generator"
     MLOPS = "mlops"
     INFRASTRUCTURE = "infrastructure"
     COMPLIANCE = "compliance"
     AI_CONSULTANT = "ai_consultant"
     WEB_RESEARCH = "web_research"
     SIMULATION = "simulation"
-    REPORT_GENERATOR = "report_generator"
 
 
 @dataclass
