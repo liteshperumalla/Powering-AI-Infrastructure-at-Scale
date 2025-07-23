@@ -55,7 +55,7 @@ export default function LoginPage() {
             } else {
                 setError('Please fill in all fields');
             }
-        } catch (err) {
+        } catch {
             setError('Login failed. Please try again.');
         } finally {
             setLoading(false);
@@ -107,12 +107,14 @@ export default function LoginPage() {
                             autoFocus
                             value={formData.email}
                             onChange={handleChange}
-                            InputProps={{
-                                startAdornment: (
-                                    <InputAdornment position="start">
-                                        <Email />
-                                    </InputAdornment>
-                                ),
+                            slotProps={{
+                                input: {
+                                    startAdornment: (
+                                        <InputAdornment position="start">
+                                            <Email />
+                                        </InputAdornment>
+                                    ),
+                                },
                             }}
                         />
                         <TextField
@@ -126,23 +128,25 @@ export default function LoginPage() {
                             autoComplete="current-password"
                             value={formData.password}
                             onChange={handleChange}
-                            InputProps={{
-                                startAdornment: (
-                                    <InputAdornment position="start">
-                                        <Lock />
-                                    </InputAdornment>
-                                ),
-                                endAdornment: (
-                                    <InputAdornment position="end">
-                                        <IconButton
-                                            aria-label="toggle password visibility"
-                                            onClick={() => setShowPassword(!showPassword)}
-                                            edge="end"
-                                        >
-                                            {showPassword ? <VisibilityOff /> : <Visibility />}
-                                        </IconButton>
-                                    </InputAdornment>
-                                ),
+                            slotProps={{
+                                input: {
+                                    startAdornment: (
+                                        <InputAdornment position="start">
+                                            <Lock />
+                                        </InputAdornment>
+                                    ),
+                                    endAdornment: (
+                                        <InputAdornment position="end">
+                                            <IconButton
+                                                aria-label="toggle password visibility"
+                                                onClick={() => setShowPassword(!showPassword)}
+                                                edge="end"
+                                            >
+                                                {showPassword ? <VisibilityOff /> : <Visibility />}
+                                            </IconButton>
+                                        </InputAdornment>
+                                    ),
+                                },
                             }}
                         />
                         <Button
@@ -161,7 +165,7 @@ export default function LoginPage() {
                                 onClick={() => router.push('/auth/register')}
                                 type="button"
                             >
-                                Don't have an account? Sign Up
+                                Don&apos;t have an account? Sign Up
                             </Link>
                         </Box>
                     </Box>

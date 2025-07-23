@@ -20,10 +20,11 @@ import {
   Analytics,
   Speed,
 } from '@mui/icons-material';
-
+import { useRouter } from 'next/navigation';
 export default function Home() {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const router = useRouter();
 
   return (
     <>
@@ -33,8 +34,15 @@ export default function Home() {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Infra Mind
           </Typography>
-          <Button color="inherit">Login</Button>
-          <Button color="inherit" variant="outlined" sx={{ ml: 1 }}>
+          <Button color="inherit" onClick={() => router.push('/auth/login')}>
+            Login
+          </Button>
+          <Button
+            color="inherit"
+            variant="outlined"
+            sx={{ ml: 1 }}
+            onClick={() => router.push('/auth/register')}
+          >
             Get Started
           </Button>
         </Toolbar>
@@ -82,6 +90,7 @@ export default function Home() {
                     color: 'primary.main',
                     '&:hover': { bgcolor: 'grey.100' },
                   }}
+                  onClick={() => router.push('/assessment')}
                 >
                   Start Assessment
                 </Button>
@@ -93,6 +102,7 @@ export default function Home() {
                     color: 'white',
                     '&:hover': { borderColor: 'grey.300', bgcolor: 'rgba(255,255,255,0.1)' },
                   }}
+                  onClick={() => router.push('/auth/login')}
                 >
                   Learn More
                 </Button>
@@ -199,6 +209,7 @@ export default function Home() {
           <Button
             variant="contained"
             size="large"
+            onClick={() => router.push('/auth/register')}
             sx={{ px: 4, py: 1.5 }}
           >
             Start Your Assessment
