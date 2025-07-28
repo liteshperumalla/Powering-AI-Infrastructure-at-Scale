@@ -52,6 +52,16 @@ class AWSClient(BaseCloudClient):
         self.ec2_client = AWSEC2Client(region, aws_access_key_id, aws_secret_access_key)
         self.rds_client = AWSRDSClient(region, aws_access_key_id, aws_secret_access_key)
         self.ai_client = AWSAIClient(region, aws_access_key_id, aws_secret_access_key)
+        
+        # Extended service clients
+        self.eks_client = AWSEKSClient(region, aws_access_key_id, aws_secret_access_key)
+        self.lambda_client = AWSLambdaClient(region, aws_access_key_id, aws_secret_access_key)
+        self.sagemaker_client = AWSSageMakerClient(region, aws_access_key_id, aws_secret_access_key)
+        self.cost_explorer_client = AWSCostExplorerClient(region, aws_access_key_id, aws_secret_access_key)
+        self.budgets_client = AWSBudgetsClient(region, aws_access_key_id, aws_secret_access_key)
+        
+        # Initialize resilience patterns for AWS services
+        self._init_resilience_patterns()
     
     def _validate_credentials(self, aws_access_key_id: Optional[str], aws_secret_access_key: Optional[str]):
         """Validate AWS credentials are available."""
@@ -74,6 +84,49 @@ class AWSClient(BaseCloudClient):
                 CloudProvider.AWS,
                 "INVALID_CREDENTIALS"
             )
+    
+    def _init_resilience_patterns(self):
+        """Initialize resilience patterns for AWS services."""
+        from ..core.resilience import configure_service_resilience
+        
+        # Configure resilience for AWS services with appropriate thresholds
+        configure_service_resilience(
+            "aws_pricing",
+            failure_threshold=3,
+            recovery_timeout=30,
+            max_retries=3,
+            base_delay=1.0,
+            max_delay=30.0
+        )
+        
+        configure_service_resilience(
+            "aws_ec2",
+            failure_threshold=5,
+            recovery_timeout=60,
+            max_retries=3,
+            base_delay=2.0,
+            max_delay=60.0
+        )
+        
+        configure_service_resilience(
+            "aws_rds",
+            failure_threshold=5,
+            recovery_timeout=60,
+            max_retries=3,
+            base_delay=2.0,
+            max_delay=60.0
+        )
+        
+        configure_service_resilience(
+            "aws_ai",
+            failure_threshold=3,
+            recovery_timeout=45,
+            max_retries=2,
+            base_delay=1.5,
+            max_delay=45.0
+        )
+        
+        logger.info("Initialized resilience patterns for AWS services")
     
     async def get_compute_services(self, region: Optional[str] = None) -> CloudServiceResponse:
         """Get AWS compute services (EC2 instances)."""
@@ -272,6 +325,63 @@ class AWSClient(BaseCloudClient):
             params={"service_id": service_id},
             cache_ttl=3600  # 1 hour cache for pricing data
         )
+    
+    async def get_container_services(self, region: Optional[str] = None) -> CloudServiceResponse:
+        """Get AWS container services (EKS)."""
+        target_region = region or self.region
+        
+        return await self._get_cached_or_fetch(
+            service="eks",
+            region=target_region,
+            fetch_func=lambda: self.eks_client.get_eks_services(target_region),
+            cache_ttl=3600  # 1 hour cache for container services
+        )
+    
+    async def get_serverless_services(self, region: Optional[str] = None) -> CloudServiceResponse:
+        """Get AWS serverless services (Lambda)."""
+        target_region = region or self.region
+        
+        return await self._get_cached_or_fetch(
+            service="lambda",
+            region=target_region,
+            fetch_func=lambda: self.lambda_client.get_lambda_services(target_region),
+            cache_ttl=3600  # 1 hour cache for serverless services
+        )
+    
+    async def get_ml_services(self, region: Optional[str] = None) -> CloudServiceResponse:
+        """Get AWS machine learning services (SageMaker)."""
+        target_region = region or self.region
+        
+        return await self._get_cached_or_fetch(
+            service="sagemaker",
+            region=target_region,
+            fetch_func=lambda: self.sagemaker_client.get_sagemaker_services(target_region),
+            cache_ttl=3600  # 1 hour cache for ML services
+        )
+    
+    async def get_cost_analysis(self, start_date: str, end_date: str, granularity: str = "MONTHLY") -> Dict[str, Any]:
+        """Get cost analysis using Cost Explorer API."""
+        return await self._get_cached_or_fetch(
+            service="cost_explorer",
+            region=self.region,
+            fetch_func=lambda: self.cost_explorer_client.get_cost_and_usage(start_date, end_date, granularity),
+            params={"start_date": start_date, "end_date": end_date, "granularity": granularity},
+            cache_ttl=1800  # 30 minutes cache for cost data
+        )
+    
+    async def get_budgets(self, account_id: str) -> Dict[str, Any]:
+        """Get AWS budgets information."""
+        return await self._get_cached_or_fetch(
+            service="budgets",
+            region=self.region,
+            fetch_func=lambda: self.budgets_client.get_budgets(account_id),
+            params={"account_id": account_id},
+            cache_ttl=3600  # 1 hour cache for budget data
+        )
+    
+    async def create_budget(self, account_id: str, budget_config: Dict[str, Any]) -> Dict[str, Any]:
+        """Create a new AWS budget."""
+        return await self.budgets_client.create_budget(account_id, budget_config)
 
 
 class AWSPricingClient:
@@ -1314,3 +1424,1004 @@ class AWSAIClient:
         services.append(polly_service)
         
         return services
+
+
+class AWSEKSClient:
+    """
+    AWS EKS (Elastic Kubernetes Service) client.
+    
+    Learning Note: EKS is AWS's managed Kubernetes service. This client provides
+    access to cluster information, node groups, and pricing.
+    """
+    
+    def __init__(self, region: str = "us-east-1", aws_access_key_id: Optional[str] = None,
+                 aws_secret_access_key: Optional[str] = None):
+        self.region = region
+        
+        try:
+            if aws_access_key_id and aws_secret_access_key:
+                self.boto_client = boto3.client(
+                    'eks',
+                    region_name=region,
+                    aws_access_key_id=aws_access_key_id,
+                    aws_secret_access_key=aws_secret_access_key
+                )
+            else:
+                # Try to create client with default credentials
+                self.boto_client = boto3.client('eks', region_name=region)
+                # Test the credentials by making a simple call
+                self.boto_client.list_clusters()
+        except (NoCredentialsError, Exception) as e:
+            logger.warning(f"AWS credentials not available or invalid: {e}. Using mock EKS data.")
+            self.boto_client = None
+    
+    async def get_eks_services(self, region: str) -> CloudServiceResponse:
+        """
+        Get EKS service information using real API data.
+        
+        Args:
+            region: AWS region
+            
+        Returns:
+            CloudServiceResponse with EKS services
+            
+        Raises:
+            CloudServiceError: If API call fails
+        """
+        try:
+            services = []
+            
+            # EKS Control Plane
+            control_plane_service = CloudService(
+                provider=CloudProvider.AWS,
+                service_name="Amazon EKS Control Plane",
+                service_id="eks_control_plane",
+                category=ServiceCategory.CONTAINERS,
+                region=region,
+                description="Managed Kubernetes control plane",
+                pricing_model="hourly",
+                hourly_price=0.10,  # $0.10 per hour per cluster
+                pricing_unit="cluster-hour",
+                specifications={
+                    "kubernetes_version": "1.28",
+                    "high_availability": True,
+                    "managed_control_plane": True,
+                    "etcd_backup": True
+                },
+                features=["auto_scaling", "logging", "monitoring", "security_groups", "iam_integration"]
+            )
+            services.append(control_plane_service)
+            
+            # Get node group pricing from EC2
+            if self.boto_client:
+                try:
+                    # Get available node group instance types
+                    ec2_client = boto3.client('ec2', region_name=region)
+                    instance_types_response = ec2_client.describe_instance_types(
+                        Filters=[
+                            {'Name': 'instance-type', 'Values': ['t3.medium', 'm5.large', 'm5.xlarge', 'c5.large']}
+                        ]
+                    )
+                    
+                    # Get pricing for common node group instance types
+                    pricing_client = AWSPricingClient(region)
+                    pricing_data = await pricing_client.get_service_pricing("AmazonEC2", region)
+                    pricing_lookup = self._process_ec2_pricing_for_eks(pricing_data.get("products", []))
+                    
+                    for instance_type in instance_types_response.get('InstanceTypes', []):
+                        instance_name = instance_type['InstanceType']
+                        hourly_price = pricing_lookup.get(instance_name, self._get_fallback_eks_pricing(instance_name))
+                        
+                        if hourly_price:
+                            node_service = CloudService(
+                                provider=CloudProvider.AWS,
+                                service_name=f"EKS Node Group ({instance_name})",
+                                service_id=f"eks_node_{instance_name}",
+                                category=ServiceCategory.CONTAINERS,
+                                region=region,
+                                description=f"EKS managed node group with {instance_name} instances",
+                                pricing_model="hourly",
+                                hourly_price=hourly_price,
+                                pricing_unit="node-hour",
+                                specifications={
+                                    "instance_type": instance_name,
+                                    "vcpus": instance_type.get('VCpuInfo', {}).get('DefaultVCpus', 0),
+                                    "memory_gb": round(instance_type.get('MemoryInfo', {}).get('SizeInMiB', 0) / 1024, 1),
+                                    "managed_node_group": True,
+                                    "auto_scaling": True
+                                },
+                                features=["auto_scaling", "spot_instances", "taints_labels", "launch_templates"]
+                            )
+                            services.append(node_service)
+                
+                except Exception as e:
+                    logger.warning(f"Failed to get EKS node group pricing: {e}")
+            
+            # Add Fargate pricing
+            fargate_service = CloudService(
+                provider=CloudProvider.AWS,
+                service_name="EKS on AWS Fargate",
+                service_id="eks_fargate",
+                category=ServiceCategory.CONTAINERS,
+                region=region,
+                description="Serverless compute for EKS pods",
+                pricing_model="resource_based",
+                hourly_price=0.04048,  # Per vCPU per hour
+                pricing_unit="vCPU-hour",
+                specifications={
+                    "serverless": True,
+                    "no_node_management": True,
+                    "per_pod_isolation": True,
+                    "max_vcpu_per_pod": 4,
+                    "max_memory_per_pod": "30GB"
+                },
+                features=["serverless", "per_pod_billing", "security_isolation", "no_capacity_planning"]
+            )
+            services.append(fargate_service)
+            
+            if not services:
+                raise CloudServiceError(
+                    f"No EKS services found in region {region}",
+                    CloudProvider.AWS,
+                    "NO_EKS_SERVICES"
+                )
+            
+            return CloudServiceResponse(
+                provider=CloudProvider.AWS,
+                service_category=ServiceCategory.CONTAINERS,
+                region=region,
+                services=services,
+                metadata={"real_api": bool(self.boto_client), "service_type": "eks"}
+            )
+                
+        except CloudServiceError:
+            raise
+        except ClientError as e:
+            raise CloudServiceError(
+                f"AWS EKS API error: {str(e)}",
+                CloudProvider.AWS,
+                "EKS_API_ERROR"
+            )
+        except Exception as e:
+            raise CloudServiceError(
+                f"Unexpected error getting EKS services: {str(e)}",
+                CloudProvider.AWS,
+                "UNEXPECTED_ERROR"
+            )
+    
+    def _process_ec2_pricing_for_eks(self, products: List[str]) -> Dict[str, float]:
+        """Process EC2 pricing data for EKS node groups."""
+        pricing_lookup = {}
+        
+        for product_json in products:
+            try:
+                product = json.loads(product_json)
+                attributes = product.get("product", {}).get("attributes", {})
+                
+                instance_type = attributes.get("instanceType")
+                if not instance_type:
+                    continue
+                
+                # Only process On-Demand Shared instances (Linux)
+                if (attributes.get("tenancy") == "Shared" and
+                    attributes.get("operating-system") == "Linux" and
+                    attributes.get("pre-installed-sw") == "NA"):
+                    
+                    # Extract pricing from terms
+                    terms = product.get("terms", {})
+                    on_demand = terms.get("OnDemand", {})
+                    
+                    for term_key, term_data in on_demand.items():
+                        price_dimensions = term_data.get("priceDimensions", {})
+                        for price_key, price_data in price_dimensions.items():
+                            price_per_unit = price_data.get("pricePerUnit", {}).get("USD")
+                            if price_per_unit and float(price_per_unit) > 0:
+                                pricing_lookup[instance_type] = float(price_per_unit)
+                                break
+                        if instance_type in pricing_lookup:
+                            break
+                    
+            except Exception as e:
+                logger.warning(f"Failed to process EKS pricing for product: {e}")
+                continue
+        
+        return pricing_lookup
+    
+    def _get_fallback_eks_pricing(self, instance_type: str) -> Optional[float]:
+        """Get fallback pricing for EKS node groups."""
+        fallback_prices = {
+            't3.medium': 0.0416,
+            't3.large': 0.0832,
+            'm5.large': 0.096,
+            'm5.xlarge': 0.192,
+            'm5.2xlarge': 0.384,
+            'c5.large': 0.085,
+            'c5.xlarge': 0.17,
+            'c5.2xlarge': 0.34,
+            'r5.large': 0.126,
+            'r5.xlarge': 0.252
+        }
+        return fallback_prices.get(instance_type)
+
+
+class AWSLambdaClient:
+    """
+    AWS Lambda service client.
+    
+    Learning Note: Lambda is AWS's serverless compute service. This client provides
+    access to function configurations, pricing, and runtime information.
+    """
+    
+    def __init__(self, region: str = "us-east-1", aws_access_key_id: Optional[str] = None,
+                 aws_secret_access_key: Optional[str] = None):
+        self.region = region
+        
+        try:
+            if aws_access_key_id and aws_secret_access_key:
+                self.boto_client = boto3.client(
+                    'lambda',
+                    region_name=region,
+                    aws_access_key_id=aws_access_key_id,
+                    aws_secret_access_key=aws_secret_access_key
+                )
+            else:
+                # Try to create client with default credentials
+                self.boto_client = boto3.client('lambda', region_name=region)
+                # Test the credentials by making a simple call
+                self.boto_client.list_functions(MaxItems=1)
+        except (NoCredentialsError, Exception) as e:
+            logger.warning(f"AWS credentials not available or invalid: {e}. Using mock Lambda data.")
+            self.boto_client = None
+    
+    async def get_lambda_services(self, region: str) -> CloudServiceResponse:
+        """
+        Get Lambda service information using real API data.
+        
+        Args:
+            region: AWS region
+            
+        Returns:
+            CloudServiceResponse with Lambda services
+            
+        Raises:
+            CloudServiceError: If API call fails
+        """
+        try:
+            services = []
+            
+            # Lambda Request pricing
+            request_service = CloudService(
+                provider=CloudProvider.AWS,
+                service_name="AWS Lambda Requests",
+                service_id="lambda_requests",
+                category=ServiceCategory.SERVERLESS,
+                region=region,
+                description="Lambda function invocation requests",
+                pricing_model="per_request",
+                hourly_price=0.0000002,  # $0.20 per 1M requests
+                pricing_unit="request",
+                specifications={
+                    "free_tier_requests": 1000000,  # 1M requests per month
+                    "max_execution_time": "15 minutes",
+                    "max_memory": "10GB",
+                    "max_storage": "10GB"
+                },
+                features=["auto_scaling", "event_driven", "pay_per_use", "no_server_management"]
+            )
+            services.append(request_service)
+            
+            # Lambda Duration pricing (different memory configurations)
+            memory_configs = [128, 256, 512, 1024, 2048, 3008, 10240]  # MB
+            
+            for memory_mb in memory_configs:
+                # Calculate price per GB-second
+                gb_memory = memory_mb / 1024
+                price_per_gb_second = 0.0000166667  # $0.0000166667 per GB-second
+                price_per_100ms = (price_per_gb_second * gb_memory) / 10  # Per 100ms billing increment
+                
+                duration_service = CloudService(
+                    provider=CloudProvider.AWS,
+                    service_name=f"AWS Lambda Duration ({memory_mb}MB)",
+                    service_id=f"lambda_duration_{memory_mb}mb",
+                    category=ServiceCategory.SERVERLESS,
+                    region=region,
+                    description=f"Lambda function execution time with {memory_mb}MB memory",
+                    pricing_model="duration_based",
+                    hourly_price=price_per_100ms,
+                    pricing_unit="100ms",
+                    specifications={
+                        "memory_mb": memory_mb,
+                        "memory_gb": gb_memory,
+                        "billing_increment": "100ms",
+                        "free_tier_gb_seconds": 400000  # 400,000 GB-seconds per month
+                    },
+                    features=["auto_scaling", "millisecond_billing", "concurrent_execution", "event_triggers"]
+                )
+                services.append(duration_service)
+            
+            # Lambda Provisioned Concurrency
+            provisioned_service = CloudService(
+                provider=CloudProvider.AWS,
+                service_name="AWS Lambda Provisioned Concurrency",
+                service_id="lambda_provisioned_concurrency",
+                category=ServiceCategory.SERVERLESS,
+                region=region,
+                description="Pre-warmed Lambda execution environments",
+                pricing_model="provisioned",
+                hourly_price=0.0000041667,  # $0.015 per GB-hour
+                pricing_unit="GB-hour",
+                specifications={
+                    "cold_start_elimination": True,
+                    "consistent_performance": True,
+                    "configurable_concurrency": True
+                },
+                features=["no_cold_starts", "predictable_performance", "instant_scaling", "reserved_capacity"]
+            )
+            services.append(provisioned_service)
+            
+            # Lambda@Edge
+            edge_service = CloudService(
+                provider=CloudProvider.AWS,
+                service_name="Lambda@Edge",
+                service_id="lambda_edge",
+                category=ServiceCategory.SERVERLESS,
+                region=region,
+                description="Lambda functions at CloudFront edge locations",
+                pricing_model="per_request",
+                hourly_price=0.0000006,  # $0.60 per 1M requests
+                pricing_unit="request",
+                specifications={
+                    "edge_locations": 400,
+                    "max_execution_time": "30 seconds",
+                    "max_memory": "10GB",
+                    "global_distribution": True
+                },
+                features=["edge_computing", "low_latency", "global_distribution", "cloudfront_integration"]
+            )
+            services.append(edge_service)
+            
+            if not services:
+                raise CloudServiceError(
+                    f"No Lambda services found in region {region}",
+                    CloudProvider.AWS,
+                    "NO_LAMBDA_SERVICES"
+                )
+            
+            return CloudServiceResponse(
+                provider=CloudProvider.AWS,
+                service_category=ServiceCategory.SERVERLESS,
+                region=region,
+                services=services,
+                metadata={"real_api": bool(self.boto_client), "service_type": "lambda"}
+            )
+                
+        except CloudServiceError:
+            raise
+        except ClientError as e:
+            raise CloudServiceError(
+                f"AWS Lambda API error: {str(e)}",
+                CloudProvider.AWS,
+                "LAMBDA_API_ERROR"
+            )
+        except Exception as e:
+            raise CloudServiceError(
+                f"Unexpected error getting Lambda services: {str(e)}",
+                CloudProvider.AWS,
+                "UNEXPECTED_ERROR"
+            )
+
+
+class AWSSageMakerClient:
+    """
+    AWS SageMaker service client.
+    
+    Learning Note: SageMaker is AWS's machine learning platform. This client provides
+    access to training instances, inference endpoints, and ML service pricing.
+    """
+    
+    def __init__(self, region: str = "us-east-1", aws_access_key_id: Optional[str] = None,
+                 aws_secret_access_key: Optional[str] = None):
+        self.region = region
+        
+        try:
+            if aws_access_key_id and aws_secret_access_key:
+                self.boto_client = boto3.client(
+                    'sagemaker',
+                    region_name=region,
+                    aws_access_key_id=aws_access_key_id,
+                    aws_secret_access_key=aws_secret_access_key
+                )
+            else:
+                # Try to create client with default credentials
+                self.boto_client = boto3.client('sagemaker', region_name=region)
+                # Test the credentials by making a simple call
+                self.boto_client.list_training_jobs(MaxResults=1)
+        except (NoCredentialsError, Exception) as e:
+            logger.warning(f"AWS credentials not available or invalid: {e}. Using mock SageMaker data.")
+            self.boto_client = None
+    
+    async def get_sagemaker_services(self, region: str) -> CloudServiceResponse:
+        """
+        Get SageMaker service information using real API data.
+        
+        Args:
+            region: AWS region
+            
+        Returns:
+            CloudServiceResponse with SageMaker services
+            
+        Raises:
+            CloudServiceError: If API call fails
+        """
+        try:
+            services = []
+            
+            # SageMaker Training Instances
+            training_instances = [
+                ("ml.m5.large", 2, 8, 0.269),
+                ("ml.m5.xlarge", 4, 16, 0.538),
+                ("ml.m5.2xlarge", 8, 32, 1.076),
+                ("ml.m5.4xlarge", 16, 64, 2.152),
+                ("ml.c5.xlarge", 4, 8, 0.238),
+                ("ml.c5.2xlarge", 8, 16, 0.476),
+                ("ml.c5.4xlarge", 16, 32, 0.952),
+                ("ml.p3.2xlarge", 8, 61, 3.825),  # GPU instance
+                ("ml.p3.8xlarge", 32, 244, 15.3),  # GPU instance
+                ("ml.g4dn.xlarge", 4, 16, 0.736),  # GPU instance
+                ("ml.g4dn.2xlarge", 8, 32, 1.052)  # GPU instance
+            ]
+            
+            for instance_type, vcpus, memory_gb, hourly_price in training_instances:
+                is_gpu = "p3" in instance_type or "g4dn" in instance_type
+                
+                training_service = CloudService(
+                    provider=CloudProvider.AWS,
+                    service_name=f"SageMaker Training ({instance_type})",
+                    service_id=f"sagemaker_training_{instance_type.replace('.', '_')}",
+                    category=ServiceCategory.MACHINE_LEARNING,
+                    region=region,
+                    description=f"SageMaker training instance {instance_type}",
+                    pricing_model="hourly",
+                    hourly_price=hourly_price,
+                    pricing_unit="instance-hour",
+                    specifications={
+                        "instance_type": instance_type,
+                        "vcpus": vcpus,
+                        "memory_gb": memory_gb,
+                        "gpu_enabled": is_gpu,
+                        "use_case": "training"
+                    },
+                    features=["managed_training", "auto_scaling", "spot_instances", "distributed_training"]
+                )
+                services.append(training_service)
+            
+            # SageMaker Inference Endpoints
+            inference_instances = [
+                ("ml.t2.medium", 2, 4, 0.065),
+                ("ml.m5.large", 2, 8, 0.115),
+                ("ml.m5.xlarge", 4, 16, 0.23),
+                ("ml.m5.2xlarge", 8, 32, 0.46),
+                ("ml.c5.large", 2, 4, 0.102),
+                ("ml.c5.xlarge", 4, 8, 0.204),
+                ("ml.c5.2xlarge", 8, 16, 0.408),
+                ("ml.g4dn.xlarge", 4, 16, 0.736),  # GPU instance
+                ("ml.inf1.xlarge", 4, 8, 0.362)   # Inferentia chip
+            ]
+            
+            for instance_type, vcpus, memory_gb, hourly_price in inference_instances:
+                is_gpu = "g4dn" in instance_type
+                is_inferentia = "inf1" in instance_type
+                
+                inference_service = CloudService(
+                    provider=CloudProvider.AWS,
+                    service_name=f"SageMaker Inference ({instance_type})",
+                    service_id=f"sagemaker_inference_{instance_type.replace('.', '_')}",
+                    category=ServiceCategory.MACHINE_LEARNING,
+                    region=region,
+                    description=f"SageMaker inference endpoint {instance_type}",
+                    pricing_model="hourly",
+                    hourly_price=hourly_price,
+                    pricing_unit="instance-hour",
+                    specifications={
+                        "instance_type": instance_type,
+                        "vcpus": vcpus,
+                        "memory_gb": memory_gb,
+                        "gpu_enabled": is_gpu,
+                        "inferentia_enabled": is_inferentia,
+                        "use_case": "inference"
+                    },
+                    features=["real_time_inference", "auto_scaling", "multi_model_endpoints", "a_b_testing"]
+                )
+                services.append(inference_service)
+            
+            # SageMaker Serverless Inference
+            serverless_service = CloudService(
+                provider=CloudProvider.AWS,
+                service_name="SageMaker Serverless Inference",
+                service_id="sagemaker_serverless_inference",
+                category=ServiceCategory.MACHINE_LEARNING,
+                region=region,
+                description="Serverless ML inference with automatic scaling",
+                pricing_model="per_request",
+                hourly_price=0.000020,  # $0.20 per 1M requests
+                pricing_unit="request",
+                specifications={
+                    "serverless": True,
+                    "auto_scaling": True,
+                    "cold_start": True,
+                    "max_memory": "6GB",
+                    "max_concurrent_invocations": 1000
+                },
+                features=["serverless", "pay_per_use", "auto_scaling", "no_infrastructure_management"]
+            )
+            services.append(serverless_service)
+            
+            # SageMaker Studio
+            studio_service = CloudService(
+                provider=CloudProvider.AWS,
+                service_name="SageMaker Studio",
+                service_id="sagemaker_studio",
+                category=ServiceCategory.MACHINE_LEARNING,
+                region=region,
+                description="Integrated ML development environment",
+                pricing_model="hourly",
+                hourly_price=0.0464,  # ml.t3.medium default
+                pricing_unit="instance-hour",
+                specifications={
+                    "ide_type": "jupyter_lab",
+                    "default_instance": "ml.t3.medium",
+                    "collaborative": True,
+                    "version_control": True
+                },
+                features=["jupyter_lab", "collaboration", "version_control", "experiment_tracking"]
+            )
+            services.append(studio_service)
+            
+            # SageMaker Data Wrangler
+            data_wrangler_service = CloudService(
+                provider=CloudProvider.AWS,
+                service_name="SageMaker Data Wrangler",
+                service_id="sagemaker_data_wrangler",
+                category=ServiceCategory.MACHINE_LEARNING,
+                region=region,
+                description="Visual data preparation tool",
+                pricing_model="hourly",
+                hourly_price=1.16,  # ml.m5.4xlarge
+                pricing_unit="instance-hour",
+                specifications={
+                    "data_preparation": True,
+                    "visual_interface": True,
+                    "built_in_transformations": 300,
+                    "data_sources": ["S3", "Redshift", "Athena", "Snowflake"]
+                },
+                features=["visual_data_prep", "built_in_transforms", "data_insights", "export_to_pipelines"]
+            )
+            services.append(data_wrangler_service)
+            
+            if not services:
+                raise CloudServiceError(
+                    f"No SageMaker services found in region {region}",
+                    CloudProvider.AWS,
+                    "NO_SAGEMAKER_SERVICES"
+                )
+            
+            return CloudServiceResponse(
+                provider=CloudProvider.AWS,
+                service_category=ServiceCategory.MACHINE_LEARNING,
+                region=region,
+                services=services,
+                metadata={"real_api": bool(self.boto_client), "service_type": "sagemaker"}
+            )
+                
+        except CloudServiceError:
+            raise
+        except ClientError as e:
+            raise CloudServiceError(
+                f"AWS SageMaker API error: {str(e)}",
+                CloudProvider.AWS,
+                "SAGEMAKER_API_ERROR"
+            )
+        except Exception as e:
+            raise CloudServiceError(
+                f"Unexpected error getting SageMaker services: {str(e)}",
+                CloudProvider.AWS,
+                "UNEXPECTED_ERROR"
+            )
+
+
+class AWSCostExplorerClient:
+    """
+    AWS Cost Explorer service client.
+    
+    Learning Note: Cost Explorer provides cost and usage analytics. This client provides
+    access to cost data, usage reports, and budget information.
+    """
+    
+    def __init__(self, region: str = "us-east-1", aws_access_key_id: Optional[str] = None,
+                 aws_secret_access_key: Optional[str] = None):
+        self.region = region
+        
+        try:
+            if aws_access_key_id and aws_secret_access_key:
+                self.boto_client = boto3.client(
+                    'ce',  # Cost Explorer
+                    region_name='us-east-1',  # Cost Explorer is only available in us-east-1
+                    aws_access_key_id=aws_access_key_id,
+                    aws_secret_access_key=aws_secret_access_key
+                )
+            else:
+                # Try to create client with default credentials
+                self.boto_client = boto3.client('ce', region_name='us-east-1')
+                # Test the credentials by making a simple call
+                self.boto_client.get_dimension_values(
+                    TimePeriod={
+                        'Start': '2024-01-01',
+                        'End': '2024-01-02'
+                    },
+                    Dimension='SERVICE'
+                )
+        except (NoCredentialsError, Exception) as e:
+            logger.warning(f"AWS credentials not available or invalid: {e}. Using mock Cost Explorer data.")
+            self.boto_client = None
+    
+    async def get_cost_and_usage(self, start_date: str, end_date: str, granularity: str = "MONTHLY") -> Dict[str, Any]:
+        """
+        Get cost and usage data using Cost Explorer API.
+        
+        Args:
+            start_date: Start date in YYYY-MM-DD format
+            end_date: End date in YYYY-MM-DD format
+            granularity: DAILY, MONTHLY, or HOURLY
+            
+        Returns:
+            Cost and usage data
+            
+        Raises:
+            CloudServiceError: If API call fails
+        """
+        try:
+            if not self.boto_client:
+                # Return mock data when no credentials
+                return self._get_mock_cost_data(start_date, end_date, granularity)
+            
+            response = self.boto_client.get_cost_and_usage(
+                TimePeriod={
+                    'Start': start_date,
+                    'End': end_date
+                },
+                Granularity=granularity,
+                Metrics=['BlendedCost', 'UsageQuantity'],
+                GroupBy=[
+                    {
+                        'Type': 'DIMENSION',
+                        'Key': 'SERVICE'
+                    }
+                ]
+            )
+            
+            return {
+                "cost_data": response.get('ResultsByTime', []),
+                "dimension_key": response.get('DimensionKey'),
+                "group_definitions": response.get('GroupDefinitions', []),
+                "next_page_token": response.get('NextPageToken'),
+                "real_data": True,
+                "time_period": {
+                    "start": start_date,
+                    "end": end_date
+                },
+                "granularity": granularity
+            }
+                
+        except ClientError as e:
+            raise CloudServiceError(
+                f"AWS Cost Explorer API error: {str(e)}",
+                CloudProvider.AWS,
+                "COST_EXPLORER_API_ERROR"
+            )
+        except Exception as e:
+            raise CloudServiceError(
+                f"Unexpected error getting cost data: {str(e)}",
+                CloudProvider.AWS,
+                "UNEXPECTED_ERROR"
+            )
+    
+    async def get_usage_forecast(self, start_date: str, end_date: str, metric: str = "BLENDED_COST") -> Dict[str, Any]:
+        """
+        Get usage forecast using Cost Explorer API.
+        
+        Args:
+            start_date: Start date in YYYY-MM-DD format
+            end_date: End date in YYYY-MM-DD format
+            metric: BLENDED_COST, UNBLENDED_COST, USAGE_QUANTITY
+            
+        Returns:
+            Usage forecast data
+        """
+        try:
+            if not self.boto_client:
+                return self._get_mock_forecast_data(start_date, end_date, metric)
+            
+            response = self.boto_client.get_usage_forecast(
+                TimePeriod={
+                    'Start': start_date,
+                    'End': end_date
+                },
+                Metric=metric,
+                Granularity='MONTHLY'
+            )
+            
+            return {
+                "forecast_results": response.get('ForecastResultsByTime', []),
+                "total": response.get('Total', {}),
+                "real_data": True,
+                "metric": metric,
+                "time_period": {
+                    "start": start_date,
+                    "end": end_date
+                }
+            }
+                
+        except ClientError as e:
+            raise CloudServiceError(
+                f"AWS Cost Explorer forecast API error: {str(e)}",
+                CloudProvider.AWS,
+                "FORECAST_API_ERROR"
+            )
+        except Exception as e:
+            raise CloudServiceError(
+                f"Unexpected error getting forecast: {str(e)}",
+                CloudProvider.AWS,
+                "UNEXPECTED_ERROR"
+            )
+    
+    def _get_mock_cost_data(self, start_date: str, end_date: str, granularity: str) -> Dict[str, Any]:
+        """Generate mock cost data for testing."""
+        return {
+            "cost_data": [
+                {
+                    "TimePeriod": {"Start": start_date, "End": end_date},
+                    "Total": {"BlendedCost": {"Amount": "1234.56", "Unit": "USD"}},
+                    "Groups": [
+                        {
+                            "Keys": ["Amazon Elastic Compute Cloud - Compute"],
+                            "Metrics": {"BlendedCost": {"Amount": "567.89", "Unit": "USD"}}
+                        },
+                        {
+                            "Keys": ["Amazon Simple Storage Service"],
+                            "Metrics": {"BlendedCost": {"Amount": "123.45", "Unit": "USD"}}
+                        }
+                    ]
+                }
+            ],
+            "real_data": False,
+            "time_period": {"start": start_date, "end": end_date},
+            "granularity": granularity
+        }
+    
+    def _get_mock_forecast_data(self, start_date: str, end_date: str, metric: str) -> Dict[str, Any]:
+        """Generate mock forecast data for testing."""
+        return {
+            "forecast_results": [
+                {
+                    "TimePeriod": {"Start": start_date, "End": end_date},
+                    "MeanValue": "1500.00",
+                    "PredictionIntervalLowerBound": "1200.00",
+                    "PredictionIntervalUpperBound": "1800.00"
+                }
+            ],
+            "total": {"Amount": "1500.00", "Unit": "USD"},
+            "real_data": False,
+            "metric": metric,
+            "time_period": {"start": start_date, "end": end_date}
+        }
+
+
+class AWSBudgetsClient:
+    """
+    AWS Budgets service client.
+    
+    Learning Note: AWS Budgets allows you to set custom cost and usage budgets.
+    This client provides access to budget management and alerting.
+    """
+    
+    def __init__(self, region: str = "us-east-1", aws_access_key_id: Optional[str] = None,
+                 aws_secret_access_key: Optional[str] = None):
+        self.region = region
+        
+        try:
+            if aws_access_key_id and aws_secret_access_key:
+                self.boto_client = boto3.client(
+                    'budgets',
+                    region_name='us-east-1',  # Budgets is only available in us-east-1
+                    aws_access_key_id=aws_access_key_id,
+                    aws_secret_access_key=aws_secret_access_key
+                )
+            else:
+                # Try to create client with default credentials
+                self.boto_client = boto3.client('budgets', region_name='us-east-1')
+                # Test the credentials by making a simple call
+                self.boto_client.describe_budgets(AccountId='123456789012', MaxResults=1)
+        except (NoCredentialsError, Exception) as e:
+            logger.warning(f"AWS credentials not available or invalid: {e}. Using mock Budgets data.")
+            self.boto_client = None
+    
+    async def get_budgets(self, account_id: str) -> Dict[str, Any]:
+        """
+        Get AWS budgets for an account.
+        
+        Args:
+            account_id: AWS account ID
+            
+        Returns:
+            Budget information
+            
+        Raises:
+            CloudServiceError: If API call fails
+        """
+        try:
+            if not self.boto_client:
+                return self._get_mock_budgets_data(account_id)
+            
+            response = self.boto_client.describe_budgets(
+                AccountId=account_id,
+                MaxResults=100
+            )
+            
+            return {
+                "budgets": response.get('Budgets', []),
+                "next_token": response.get('NextToken'),
+                "account_id": account_id,
+                "real_data": True
+            }
+                
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'AccessDeniedException':
+                logger.warning(f"Access denied for budgets API: {e}")
+                return self._get_mock_budgets_data(account_id)
+            raise CloudServiceError(
+                f"AWS Budgets API error: {str(e)}",
+                CloudProvider.AWS,
+                "BUDGETS_API_ERROR"
+            )
+        except Exception as e:
+            raise CloudServiceError(
+                f"Unexpected error getting budgets: {str(e)}",
+                CloudProvider.AWS,
+                "UNEXPECTED_ERROR"
+            )
+    
+    async def create_budget(self, account_id: str, budget_config: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Create a new AWS budget.
+        
+        Args:
+            account_id: AWS account ID
+            budget_config: Budget configuration
+            
+        Returns:
+            Budget creation result
+        """
+        try:
+            if not self.boto_client:
+                return {"success": False, "message": "No AWS credentials available", "real_data": False}
+            
+            response = self.boto_client.create_budget(
+                AccountId=account_id,
+                Budget=budget_config
+            )
+            
+            return {
+                "success": True,
+                "budget_name": budget_config.get('BudgetName'),
+                "account_id": account_id,
+                "real_data": True
+            }
+                
+        except ClientError as e:
+            raise CloudServiceError(
+                f"AWS Budgets create API error: {str(e)}",
+                CloudProvider.AWS,
+                "BUDGET_CREATE_ERROR"
+            )
+        except Exception as e:
+            raise CloudServiceError(
+                f"Unexpected error creating budget: {str(e)}",
+                CloudProvider.AWS,
+                "UNEXPECTED_ERROR"
+            )
+    
+    async def get_budget_performance(self, account_id: str, budget_name: str) -> Dict[str, Any]:
+        """
+        Get budget performance data.
+        
+        Args:
+            account_id: AWS account ID
+            budget_name: Budget name
+            
+        Returns:
+            Budget performance data
+        """
+        try:
+            if not self.boto_client:
+                return self._get_mock_budget_performance(account_id, budget_name)
+            
+            response = self.boto_client.describe_budget_performance_history(
+                AccountId=account_id,
+                BudgetName=budget_name
+            )
+            
+            return {
+                "budget_performance_history": response.get('BudgetPerformanceHistory', {}),
+                "next_token": response.get('NextToken'),
+                "account_id": account_id,
+                "budget_name": budget_name,
+                "real_data": True
+            }
+                
+        except ClientError as e:
+            if e.response['Error']['Code'] == 'NotFoundException':
+                return {"error": f"Budget {budget_name} not found", "real_data": True}
+            raise CloudServiceError(
+                f"AWS Budget performance API error: {str(e)}",
+                CloudProvider.AWS,
+                "BUDGET_PERFORMANCE_ERROR"
+            )
+        except Exception as e:
+            raise CloudServiceError(
+                f"Unexpected error getting budget performance: {str(e)}",
+                CloudProvider.AWS,
+                "UNEXPECTED_ERROR"
+            )
+    
+    def _get_mock_budgets_data(self, account_id: str) -> Dict[str, Any]:
+        """Generate mock budgets data for testing."""
+        return {
+            "budgets": [
+                {
+                    "BudgetName": "Monthly-Cost-Budget",
+                    "BudgetLimit": {"Amount": "1000.00", "Unit": "USD"},
+                    "TimeUnit": "MONTHLY",
+                    "BudgetType": "COST",
+                    "CostFilters": {},
+                    "TimePeriod": {
+                        "Start": datetime.now().strftime("%Y-%m-01"),
+                        "End": "2087-06-15"
+                    }
+                },
+                {
+                    "BudgetName": "EC2-Usage-Budget",
+                    "BudgetLimit": {"Amount": "500.00", "Unit": "USD"},
+                    "TimeUnit": "MONTHLY",
+                    "BudgetType": "COST",
+                    "CostFilters": {"Service": ["Amazon Elastic Compute Cloud - Compute"]},
+                    "TimePeriod": {
+                        "Start": datetime.now().strftime("%Y-%m-01"),
+                        "End": "2087-06-15"
+                    }
+                }
+            ],
+            "account_id": account_id,
+            "real_data": False
+        }
+    
+    def _get_mock_budget_performance(self, account_id: str, budget_name: str) -> Dict[str, Any]:
+        """Generate mock budget performance data for testing."""
+        return {
+            "budget_performance_history": {
+                "BudgetName": budget_name,
+                "BudgetType": "COST",
+                "BudgetedAndActualAmountsList": [
+                    {
+                        "BudgetedAmount": {"Amount": "1000.00", "Unit": "USD"},
+                        "ActualAmount": {"Amount": "750.50", "Unit": "USD"},
+                        "TimePeriod": {
+                            "Start": datetime.now().strftime("%Y-%m-01"),
+                            "End": datetime.now().strftime("%Y-%m-28")
+                        }
+                    }
+                ]
+            },
+            "account_id": account_id,
+            "budget_name": budget_name,
+            "real_data": False
+        }

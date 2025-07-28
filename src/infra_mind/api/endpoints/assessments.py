@@ -34,55 +34,42 @@ async def create_assessment(assessment_data: AssessmentCreate):
     The assessment will be in DRAFT status and ready for AI agent analysis.
     """
     try:
-        # Create assessment document
-        assessment = Assessment(
-            id=str(uuid.uuid4()),
-            user_id="current_user",  # TODO: Get from JWT token
-            title=assessment_data.title,
-            description=assessment_data.description,
-            business_requirements=assessment_data.business_requirements.model_dump(),
-            technical_requirements=assessment_data.technical_requirements.model_dump(),
-            priority=assessment_data.priority,
-            status=AssessmentStatus.DRAFT,
-            completion_percentage=0.0,
-            workflow_progress={"current_step": "created"},
-            tags=assessment_data.tags,
-            source=assessment_data.source,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
-        )
+        # Generate a mock ID for development mode
+        mock_id = str(uuid.uuid4())
+        current_time = datetime.utcnow()
         
-        # TODO: Save to database
-        # await assessment.save()
-        
-        logger.info(f"Created assessment: {assessment.id}")
+        # In development mode without database, create a mock assessment
+        # TODO: When database is available, create and save Assessment document
+        logger.info(f"Created assessment: {mock_id}")
         
         # Return response
         return AssessmentResponse(
-            id=assessment.id,
-            title=assessment.title,
-            description=assessment.description,
+            id=mock_id,
+            title=assessment_data.title,
+            description=assessment_data.description,
             business_requirements=assessment_data.business_requirements,
             technical_requirements=assessment_data.technical_requirements,
-            status=assessment.status,
-            priority=assessment.priority,
+            status=AssessmentStatus.DRAFT,
+            priority=assessment_data.priority,
             progress={"current_step": "created", "completed_steps": [], "total_steps": 5, "progress_percentage": 0.0},
-            workflow_id=assessment.workflow_id,
-            agent_states=assessment.agent_states,
-            recommendations_generated=assessment.recommendations_generated,
-            reports_generated=assessment.reports_generated,
-            metadata={"source": assessment.source, "version": "1.0", "tags": assessment.tags},
-            created_at=assessment.created_at,
-            updated_at=assessment.updated_at,
-            started_at=assessment.started_at,
-            completed_at=assessment.completed_at
+            workflow_id=None,
+            agent_states={},
+            recommendations_generated=False,
+            reports_generated=False,
+            metadata={"source": assessment_data.source, "version": "1.0", "tags": assessment_data.tags},
+            created_at=current_time,
+            updated_at=current_time,
+            started_at=None,
+            completed_at=None
         )
         
     except Exception as e:
         logger.error(f"Failed to create assessment: {e}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create assessment"
+            detail=f"Failed to create assessment: {str(e)}"
         )
 
 

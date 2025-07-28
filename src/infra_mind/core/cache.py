@@ -1,7 +1,8 @@
 """
 Redis-based caching system for cloud API responses.
 
-Provides caching functionality with TTL support and rate limiting compliance.
+Provides caching functionality with TTL support, rate limiting compliance,
+and integration with advanced resilience patterns.
 """
 
 import json
@@ -90,7 +91,8 @@ class CacheManager:
         return f"cloud_api:{':'.join(key_parts)}"
     
     async def get(self, provider: str, service: str, region: str,
-                  params: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+                  params: Optional[Dict[str, Any]] = None,
+                  allow_stale: bool = False) -> Optional[Dict[str, Any]]:
         """
         Get cached API response.
         
@@ -99,6 +101,7 @@ class CacheManager:
             service: Service name
             region: Cloud region
             params: Additional parameters
+            allow_stale: Whether to return stale data
             
         Returns:
             Cached data or None if not found/expired
@@ -121,8 +124,13 @@ class CacheManager:
                     age_hours = (datetime.utcnow() - cached_time).total_seconds() / 3600
                     data["cache_age_hours"] = round(age_hours, 2)
                     data["is_stale"] = age_hours > 1  # Mark as stale after 1 hour
+                    
+                    # Return stale data only if explicitly allowed
+                    if data["is_stale"] and not allow_stale:
+                        logger.debug(f"Stale cache data found for {cache_key}, not returning")
+                        return None
                 
-                logger.info(f"Cache hit for {cache_key}")
+                logger.info(f"Cache hit for {cache_key} (stale: {data.get('is_stale', False)})")
                 return data
             
             logger.debug(f"Cache miss for {cache_key}")
@@ -239,6 +247,38 @@ class CacheManager:
         except Exception as e:
             logger.error(f"Cache clear error: {e}")
             return 0
+    
+    async def get_stale_data(self, provider: str, service: str, region: str,
+                           params: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        """
+        Get stale cached data for fallback purposes.
+        
+        Args:
+            provider: Cloud provider
+            service: Service name
+            region: Cloud region
+            params: Additional parameters
+            
+        Returns:
+            Stale cached data or None if not found
+        """
+        return await self.get(provider, service, region, params, allow_stale=True)
+    
+    async def invalidate_cache(self, provider: str, service: str, region: str,
+                             params: Optional[Dict[str, Any]] = None) -> bool:
+        """
+        Invalidate specific cache entry.
+        
+        Args:
+            provider: Cloud provider
+            service: Service name
+            region: Cloud region
+            params: Additional parameters
+            
+        Returns:
+            True if cache entry was invalidated
+        """
+        return await self.delete(provider, service, region, params)
     
     async def get_cache_stats(self) -> Dict[str, Any]:
         """

@@ -16,6 +16,14 @@ from pydantic import BaseModel, ValidationError, validator
 
 logger = logging.getLogger(__name__)
 
+# Import intelligent features (will be available after implementation)
+try:
+    from .intelligent_features import IntelligentFormService, FormStateManager
+    INTELLIGENT_FEATURES_AVAILABLE = True
+except ImportError:
+    INTELLIGENT_FEATURES_AVAILABLE = False
+    logger.warning("Intelligent features not available")
+
 
 class FormFieldType(str, Enum):
     """Types of form fields."""
@@ -240,6 +248,14 @@ class BaseForm(ABC):
         self.updated_at = datetime.now(timezone.utc)
         self.metadata: Dict[str, Any] = {}
         
+        # Initialize intelligent features if available
+        if INTELLIGENT_FEATURES_AVAILABLE:
+            self.intelligent_service = IntelligentFormService()
+            self.state_manager = FormStateManager()
+        else:
+            self.intelligent_service = None
+            self.state_manager = None
+        
         # Initialize form structure
         self._initialize_form()
         
@@ -424,6 +440,206 @@ class BaseForm(ABC):
             "updated_at": self.updated_at.isoformat(),
             "metadata": self.metadata
         }
+    
+    def get_smart_defaults(self, field_name: str) -> List[Dict[str, Any]]:
+        """
+        Get smart default values for a field.
+        
+        Args:
+            field_name: Name of the field
+            
+        Returns:
+            List of smart default suggestions
+        """
+        if not self.intelligent_service:
+            return []
+        
+        try:
+            defaults = self.intelligent_service.get_smart_defaults(field_name, self.form_data)
+            return [
+                {
+                    "value": default.value,
+                    "confidence": default.confidence,
+                    "reason": default.reason,
+                    "source": default.source
+                }
+                for default in defaults
+            ]
+        except Exception as e:
+            logger.error(f"Error getting smart defaults for {field_name}: {str(e)}")
+            return []
+    
+    def get_field_suggestions(self, field_name: str, query: str = "") -> List[Dict[str, Any]]:
+        """
+        Get auto-completion suggestions for a field.
+        
+        Args:
+            field_name: Name of the field
+            query: Current user input
+            
+        Returns:
+            List of suggestions
+        """
+        if not self.intelligent_service:
+            return []
+        
+        try:
+            suggestions = self.intelligent_service.get_suggestions(field_name, query, self.form_data)
+            return [
+                {
+                    "value": suggestion.value,
+                    "label": suggestion.label,
+                    "description": suggestion.description,
+                    "confidence": suggestion.confidence,
+                    "category": suggestion.category
+                }
+                for suggestion in suggestions
+            ]
+        except Exception as e:
+            logger.error(f"Error getting suggestions for {field_name}: {str(e)}")
+            return []
+    
+    def get_contextual_help(self, field_name: str) -> Optional[Dict[str, Any]]:
+        """
+        Get contextual help for a field.
+        
+        Args:
+            field_name: Name of the field
+            
+        Returns:
+            Contextual help information
+        """
+        if not self.intelligent_service:
+            return None
+        
+        try:
+            help_info = self.intelligent_service.get_contextual_help(field_name, self.form_data)
+            if help_info:
+                return {
+                    "title": help_info.title,
+                    "content": help_info.content,
+                    "examples": help_info.examples,
+                    "tips": help_info.tips,
+                    "related_fields": help_info.related_fields,
+                    "help_type": help_info.help_type
+                }
+            return None
+        except Exception as e:
+            logger.error(f"Error getting contextual help for {field_name}: {str(e)}")
+            return None
+    
+    def should_show_field(self, field_name: str) -> bool:
+        """
+        Determine if a field should be shown based on progressive disclosure.
+        
+        Args:
+            field_name: Name of the field
+            
+        Returns:
+            True if field should be shown
+        """
+        if not self.intelligent_service:
+            return True  # Show all fields if intelligent features not available
+        
+        try:
+            return self.intelligent_service.should_show_field(field_name, self.form_data)
+        except Exception as e:
+            logger.error(f"Error checking field visibility for {field_name}: {str(e)}")
+            return True
+    
+    def save_form_state(self, user_id: str) -> bool:
+        """
+        Save current form state for later resumption.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            True if save was successful
+        """
+        if not self.state_manager:
+            logger.warning("State manager not available for saving form state")
+            return False
+        
+        try:
+            return self.state_manager.save_form_state(
+                self.form_id,
+                user_id,
+                self.form_data,
+                self.current_step_index,
+                {
+                    "step_completion": self.step_completion,
+                    "validation_errors": self.validation_errors,
+                    "metadata": self.metadata
+                }
+            )
+        except Exception as e:
+            logger.error(f"Error saving form state: {str(e)}")
+            return False
+    
+    def load_form_state(self, user_id: str) -> bool:
+        """
+        Load saved form state.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            True if load was successful
+        """
+        if not self.state_manager:
+            logger.warning("State manager not available for loading form state")
+            return False
+        
+        try:
+            state = self.state_manager.load_form_state(self.form_id, user_id)
+            if state:
+                self.form_data = state.get("form_data", {})
+                self.current_step_index = state.get("current_step", 0)
+                
+                metadata = state.get("metadata", {})
+                self.step_completion = metadata.get("step_completion", {})
+                self.validation_errors = metadata.get("validation_errors", {})
+                self.metadata.update(metadata.get("metadata", {}))
+                
+                self.updated_at = datetime.now(timezone.utc)
+                logger.info(f"Loaded form state for {self.form_id}")
+                return True
+            
+            return False
+        except Exception as e:
+            logger.error(f"Error loading form state: {str(e)}")
+            return False
+    
+    def get_progressive_fields(self, step_id: str) -> List[FormField]:
+        """
+        Get fields for a step with progressive disclosure applied.
+        
+        Args:
+            step_id: ID of the step
+            
+        Returns:
+            List of fields that should be shown
+        """
+        step = self.get_step(step_id)
+        if not step:
+            return []
+        
+        visible_fields = []
+        for field in step.fields:
+            if self.should_show_field(field.name):
+                visible_fields.append(field)
+        
+        # Sort fields by priority if intelligent service is available
+        if self.intelligent_service:
+            try:
+                visible_fields.sort(
+                    key=lambda f: self.intelligent_service.get_field_priority(f.name, self.form_data)
+                )
+            except Exception as e:
+                logger.error(f"Error sorting fields by priority: {str(e)}")
+        
+        return visible_fields
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "BaseForm":

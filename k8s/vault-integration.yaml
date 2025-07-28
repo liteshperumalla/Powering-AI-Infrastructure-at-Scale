@@ -1,0 +1,337 @@
+# HashiCorp Vault Integration for Advanced Secrets Management
+# This configuration sets up Vault integration with Kubernetes for secure secret management
+
+---
+# Vault ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vault
+  namespace: infra-mind
+  labels:
+    app: vault
+
+---
+# Vault ClusterRole
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vault-auth
+rules:
+- apiGroups: [""]
+  resources: ["serviceaccounts"]
+  verbs: ["get"]
+- apiGroups: [""]
+  resources: ["serviceaccounts/token"]
+  verbs: ["create"]
+
+---
+# Vault ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vault-auth
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vault-auth
+subjects:
+- kind: ServiceAccount
+  name: vault
+  namespace: infra-mind
+
+---
+# Vault Agent Injector Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-agent-config
+  namespace: infra-mind
+data:
+  vault-agent.hcl: |
+    pid_file = "/tmp/pidfile"
+    
+    auto_auth {
+      method "kubernetes" {
+        mount_path = "auth/kubernetes"
+        config = {
+          role = "infra-mind"
+        }
+      }
+      
+      sink "file" {
+        config = {
+          path = "/vault/secrets/token"
+        }
+      }
+    }
+    
+    vault {
+      address = "https://vault.example.com"
+      tls_skip_verify = false
+    }
+    
+    template {
+      source      = "/vault/templates/secrets.tpl"
+      destination = "/vault/secrets/app-secrets"
+      perms       = 0644
+    }
+    
+    template {
+      source      = "/vault/templates/database.tpl"
+      destination = "/vault/secrets/database-secrets"
+      perms       = 0644
+    }
+
+---
+# Vault Secret Templates
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-templates
+  namespace: infra-mind
+data:
+  secrets.tpl: |
+    {{- with secret "secret/data/infra-mind/app" -}}
+    SECRET_KEY="{{ .Data.data.secret_key }}"
+    OPENAI_API_KEY="{{ .Data.data.openai_api_key }}"
+    {{- end }}
+    
+    {{- with secret "secret/data/infra-mind/aws" -}}
+    AWS_ACCESS_KEY_ID="{{ .Data.data.access_key_id }}"
+    AWS_SECRET_ACCESS_KEY="{{ .Data.data.secret_access_key }}"
+    {{- end }}
+    
+    {{- with secret "secret/data/infra-mind/azure" -}}
+    AZURE_CLIENT_ID="{{ .Data.data.client_id }}"
+    AZURE_CLIENT_SECRET="{{ .Data.data.client_secret }}"
+    AZURE_TENANT_ID="{{ .Data.data.tenant_id }}"
+    {{- end }}
+    
+    {{- with secret "secret/data/infra-mind/gcp" -}}
+    GCP_PROJECT_ID="{{ .Data.data.project_id }}"
+    {{- end }}
+  
+  database.tpl: |
+    {{- with secret "secret/data/infra-mind/database" -}}
+    MONGO_ROOT_USERNAME="{{ .Data.data.mongo_username }}"
+    MONGO_ROOT_PASSWORD="{{ .Data.data.mongo_password }}"
+    REDIS_PASSWORD="{{ .Data.data.redis_password }}"
+    {{- end }}
+
+---
+# External Secrets Operator with Vault Backend
+apiVersion: external-secrets.io/v1beta1
+kind: SecretStore
+metadata:
+  name: vault-backend
+  namespace: infra-mind
+spec:
+  provider:
+    vault:
+      server: "https://vault.example.com"
+      path: "secret"
+      version: "v2"
+      auth:
+        kubernetes:
+          mountPath: "kubernetes"
+          role: "infra-mind"
+          serviceAccountRef:
+            name: "vault"
+
+---
+# External Secret for Application Secrets
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: infra-mind-app-secrets
+  namespace: infra-mind
+spec:
+  refreshInterval: 30s
+  secretStoreRef:
+    name: vault-backend
+    kind: SecretStore
+  target:
+    name: infra-mind-secrets
+    creationPolicy: Owner
+    template:
+      type: Opaque
+      data:
+        SECRET_KEY: "{{ .secret_key }}"
+        OPENAI_API_KEY: "{{ .openai_api_key }}"
+        AWS_ACCESS_KEY_ID: "{{ .aws_access_key_id }}"
+        AWS_SECRET_ACCESS_KEY: "{{ .aws_secret_access_key }}"
+        AZURE_CLIENT_ID: "{{ .azure_client_id }}"
+        AZURE_CLIENT_SECRET: "{{ .azure_client_secret }}"
+        AZURE_TENANT_ID: "{{ .azure_tenant_id }}"
+        GCP_PROJECT_ID: "{{ .gcp_project_id }}"
+  data:
+  - secretKey: secret_key
+    remoteRef:
+      key: infra-mind/app
+      property: secret_key
+  - secretKey: openai_api_key
+    remoteRef:
+      key: infra-mind/app
+      property: openai_api_key
+  - secretKey: aws_access_key_id
+    remoteRef:
+      key: infra-mind/aws
+      property: access_key_id
+  - secretKey: aws_secret_access_key
+    remoteRef:
+      key: infra-mind/aws
+      property: secret_access_key
+  - secretKey: azure_client_id
+    remoteRef:
+      key: infra-mind/azure
+      property: client_id
+  - secretKey: azure_client_secret
+    remoteRef:
+      key: infra-mind/azure
+      property: client_secret
+  - secretKey: azure_tenant_id
+    remoteRef:
+      key: infra-mind/azure
+      property: tenant_id
+  - secretKey: gcp_project_id
+    remoteRef:
+      key: infra-mind/gcp
+      property: project_id
+
+---
+# External Secret for Database Credentials
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: infra-mind-db-secrets
+  namespace: infra-mind
+spec:
+  refreshInterval: 30s
+  secretStoreRef:
+    name: vault-backend
+    kind: SecretStore
+  target:
+    name: infra-mind-db-secrets
+    creationPolicy: Owner
+    template:
+      type: Opaque
+      data:
+        MONGO_ROOT_USERNAME: "{{ .mongo_username }}"
+        MONGO_ROOT_PASSWORD: "{{ .mongo_password }}"
+        REDIS_PASSWORD: "{{ .redis_password }}"
+  data:
+  - secretKey: mongo_username
+    remoteRef:
+      key: infra-mind/database
+      property: mongo_username
+  - secretKey: mongo_password
+    remoteRef:
+      key: infra-mind/database
+      property: mongo_password
+  - secretKey: redis_password
+    remoteRef:
+      key: infra-mind/database
+      property: redis_password
+
+---
+# Vault Policy for Infra Mind
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-policy
+  namespace: infra-mind
+data:
+  infra-mind-policy.hcl: |
+    # Policy for Infra Mind application
+    path "secret/data/infra-mind/*" {
+      capabilities = ["read"]
+    }
+    
+    path "secret/metadata/infra-mind/*" {
+      capabilities = ["list", "read"]
+    }
+    
+    # Allow token renewal
+    path "auth/token/renew-self" {
+      capabilities = ["update"]
+    }
+    
+    # Allow token lookup
+    path "auth/token/lookup-self" {
+      capabilities = ["read"]
+    }
+
+---
+# Sealed Secrets Controller (Alternative to Vault)
+apiVersion: v1
+kind: Secret
+metadata:
+  name: infra-mind-sealed-secret
+  namespace: infra-mind
+  annotations:
+    sealedsecrets.bitnami.com/cluster-wide: "true"
+type: Opaque
+data:
+  # These would be sealed/encrypted values generated by kubeseal
+  # Example: echo -n "actual-secret-value" | kubeseal --raw --from-file=/dev/stdin --name=infra-mind-sealed-secret --namespace=infra-mind
+  SECRET_KEY: AgBy3i4OJSWK+PiTySYZZA9rO43cGDEQAM...  # Sealed value
+  OPENAI_API_KEY: AgAKAoiQm+/LrxHW0H2YcyA9rO43cGDEQAM...  # Sealed value
+
+---
+# AWS Secrets Manager Integration (for AWS EKS)
+apiVersion: external-secrets.io/v1beta1
+kind: SecretStore
+metadata:
+  name: aws-secrets-manager
+  namespace: infra-mind
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: us-east-1
+      auth:
+        secretRef:
+          accessKeyID:
+            name: aws-credentials
+            key: access-key-id
+          secretAccessKey:
+            name: aws-credentials
+            key: secret-access-key
+
+---
+# Azure Key Vault Integration (for AKS)
+apiVersion: external-secrets.io/v1beta1
+kind: SecretStore
+metadata:
+  name: azure-key-vault
+  namespace: infra-mind
+spec:
+  provider:
+    azurekv:
+      vaultUrl: "https://infra-mind-kv.vault.azure.net/"
+      authType: ServicePrincipal
+      clientId: "your-client-id"
+      clientSecret:
+        secretRef:
+          name: azure-credentials
+          key: client-secret
+      tenantId: "your-tenant-id"
+
+---
+# GCP Secret Manager Integration (for GKE)
+apiVersion: external-secrets.io/v1beta1
+kind: SecretStore
+metadata:
+  name: gcp-secret-manager
+  namespace: infra-mind
+spec:
+  provider:
+    gcpsm:
+      projectId: "your-gcp-project-id"
+      auth:
+        workloadIdentity:
+          clusterLocation: us-central1
+          clusterName: infra-mind-cluster
+          serviceAccountRef:
+            name: external-secrets-sa

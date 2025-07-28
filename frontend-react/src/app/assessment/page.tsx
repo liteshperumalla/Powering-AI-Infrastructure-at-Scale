@@ -30,6 +30,8 @@ import {
 } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
 import ProgressIndicator from '@/components/ProgressIndicator';
+import IntelligentFormField from '@/components/IntelligentFormField';
+import ProgressSaver from '@/components/ProgressSaver';
 
 const steps = [
     'Business Information',
@@ -39,7 +41,7 @@ const steps = [
     'Review & Submit',
 ];
 
-interface FormData {
+interface AssessmentFormData extends Record<string, unknown> {
     // Business Information
     companyName: string;
     industry: string;
@@ -65,7 +67,7 @@ interface FormData {
     auditRequirements: string;
 }
 
-const initialFormData: FormData = {
+const initialFormData: AssessmentFormData = {
     companyName: '',
     industry: '',
     companySize: '',
@@ -87,8 +89,9 @@ const initialFormData: FormData = {
 export default function AssessmentPage() {
     const router = useRouter();
     const [activeStep, setActiveStep] = useState(0);
-    const [formData, setFormData] = useState<FormData>(initialFormData);
+    const [formData, setFormData] = useState<AssessmentFormData>(initialFormData);
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const [formId] = useState(() => `assessment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
 
     const handleNext = () => {
         if (validateStep(activeStep)) {
@@ -100,7 +103,7 @@ export default function AssessmentPage() {
         setActiveStep((prevActiveStep) => prevActiveStep - 1);
     };
 
-    const handleInputChange = (field: keyof FormData, value: string | string[]) => {
+    const handleInputChange = (field: keyof AssessmentFormData, value: string | string[]) => {
         setFormData(prev => ({
             ...prev,
             [field]: value,
@@ -114,7 +117,7 @@ export default function AssessmentPage() {
         }
     };
 
-    const handleArrayChange = (field: keyof FormData, value: string, checked: boolean) => {
+    const handleArrayChange = (field: keyof AssessmentFormData, value: string, checked: boolean) => {
         const currentArray = formData[field] as string[];
         if (checked) {
             handleInputChange(field, [...currentArray, value]);
@@ -164,6 +167,144 @@ export default function AssessmentPage() {
         }
     };
 
+    // Intelligent form service functions
+    const getSmartDefaults = async (fieldName: string) => {
+        // Mock implementation - in real app, this would call the backend API
+        const mockDefaults = {
+            industry: [
+                { value: 'technology', confidence: 0.8, reason: 'Common choice for new assessments', source: 'usage_patterns' }
+            ],
+            companySize: [
+                { value: 'small', confidence: 0.7, reason: 'Most common company size', source: 'industry_patterns' }
+            ],
+            monthlyBudget: [
+                { value: '10k-50k', confidence: 0.6, reason: 'Typical for small companies', source: 'size_patterns' }
+            ]
+        };
+
+        return mockDefaults[fieldName as keyof typeof mockDefaults] || [];
+    };
+
+    const getSuggestions = async (fieldName: string, query: string) => {
+        // Mock implementation - in real app, this would call the backend API
+        const mockSuggestions = {
+            companyName: [
+                { value: 'TechCorp Inc', label: 'TechCorp Inc', description: 'Technology company', confidence: 0.8 },
+                { value: 'InnovateLabs', label: 'InnovateLabs', description: 'Innovation laboratory', confidence: 0.7 }
+            ]
+        };
+
+        const suggestions = mockSuggestions[fieldName as keyof typeof mockSuggestions] || [];
+        return suggestions.filter(s =>
+            s.value.toLowerCase().includes(query.toLowerCase()) ||
+            s.label.toLowerCase().includes(query.toLowerCase())
+        );
+    };
+
+    const getContextualHelp = async (fieldName: string) => {
+        // Mock implementation - in real app, this would call the backend API
+        const mockHelp = {
+            companySize: {
+                title: 'Company Size',
+                content: 'Select the size category that best matches your organization.',
+                examples: [
+                    'Startup: 1-50 employees, early stage',
+                    'Small: 51-200 employees, established',
+                    'Medium: 201-1000 employees, multiple departments'
+                ],
+                tips: [
+                    'Consider total employee count, not just technical team',
+                    'This affects budget recommendations and complexity levels'
+                ],
+                related_fields: ['monthlyBudget', 'technicalTeamSize'],
+                help_type: 'tooltip'
+            },
+            industry: {
+                title: 'Industry',
+                content: 'Select the industry that best describes your business.',
+                examples: [
+                    'Technology: Software, hardware, IT services',
+                    'Healthcare: Medical, pharmaceutical, health services',
+                    'Finance: Banking, insurance, fintech'
+                ],
+                tips: [
+                    'This affects compliance requirements and service recommendations',
+                    'Choose the primary industry if you operate in multiple sectors'
+                ],
+                related_fields: ['complianceRequirements'],
+                help_type: 'tooltip'
+            }
+        };
+
+        return mockHelp[fieldName as keyof typeof mockHelp] || null;
+    };
+
+    // Progress saving functions
+    const saveProgress = async (formId: string, formData: Record<string, unknown>, currentStep: number) => {
+        try {
+            // Mock implementation - in real app, this would call the backend API
+            localStorage.setItem(`form_${formId}`, JSON.stringify({
+                formData,
+                currentStep,
+                savedAt: new Date().toISOString()
+            }));
+            return true;
+        } catch (error) {
+            console.error('Failed to save progress:', error);
+            return false;
+        }
+    };
+
+    const loadProgress = async (formId: string) => {
+        try {
+            // Mock implementation - in real app, this would call the backend API
+            const saved = localStorage.getItem(`form_${formId}`);
+            if (saved) {
+                const data = JSON.parse(saved);
+                setFormData(data.formData);
+                setActiveStep(data.currentStep);
+                return data.formData;
+            }
+            return null;
+        } catch (error) {
+            console.error('Failed to load progress:', error);
+            return null;
+        }
+    };
+
+    const deleteProgress = async (formId: string) => {
+        try {
+            localStorage.removeItem(`form_${formId}`);
+            return true;
+        } catch (error) {
+            console.error('Failed to delete progress:', error);
+            return false;
+        }
+    };
+
+    const listSavedForms = async () => {
+        try {
+            const saved = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key?.startsWith('form_')) {
+                    const data = JSON.parse(localStorage.getItem(key) || '{}');
+                    saved.push({
+                        form_id: key.replace('form_', ''),
+                        current_step: data.currentStep || 0,
+                        saved_at: data.savedAt || new Date().toISOString(),
+                        completion_percentage: Math.round((data.currentStep || 0) / steps.length * 100),
+                        metadata: {}
+                    });
+                }
+            }
+            return saved;
+        } catch (error) {
+            console.error('Failed to list saved forms:', error);
+            return [];
+        }
+    };
+
     const getStepContent = (step: number) => {
         switch (step) {
             case 0:
@@ -173,30 +314,42 @@ export default function AssessmentPage() {
                             Tell us about your business
                         </Typography>
 
-                        <TextField
-                            fullWidth
+                        <IntelligentFormField
+                            name="companyName"
                             label="Company Name"
+                            type="autocomplete"
                             value={formData.companyName}
-                            onChange={(e) => handleInputChange('companyName', e.target.value)}
-                            error={!!errors.companyName}
-                            helperText={errors.companyName}
+                            onChange={(value) => handleInputChange('companyName', value as string)}
+                            required
+                            error={errors.companyName}
+                            placeholder="Enter your company name"
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
                         />
 
-                        <FormControl fullWidth error={!!errors.industry}>
-                            <InputLabel>Industry</InputLabel>
-                            <Select
-                                value={formData.industry}
-                                onChange={(e) => handleInputChange('industry', e.target.value)}
-                                label="Industry"
-                            >
-                                <MenuItem value="technology">Technology</MenuItem>
-                                <MenuItem value="healthcare">Healthcare</MenuItem>
-                                <MenuItem value="finance">Finance</MenuItem>
-                                <MenuItem value="retail">Retail</MenuItem>
-                                <MenuItem value="manufacturing">Manufacturing</MenuItem>
-                                <MenuItem value="other">Other</MenuItem>
-                            </Select>
-                        </FormControl>
+                        <IntelligentFormField
+                            name="industry"
+                            label="Industry"
+                            type="select"
+                            value={formData.industry}
+                            onChange={(value) => handleInputChange('industry', value as string)}
+                            required
+                            error={errors.industry}
+                            options={[
+                                { value: 'technology', label: 'Technology' },
+                                { value: 'healthcare', label: 'Healthcare' },
+                                { value: 'finance', label: 'Finance' },
+                                { value: 'retail', label: 'Retail' },
+                                { value: 'manufacturing', label: 'Manufacturing' },
+                                { value: 'other', label: 'Other' }
+                            ]}
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
+                        />
 
                         <FormControl error={!!errors.companySize}>
                             <FormLabel>Company Size</FormLabel>
@@ -513,6 +666,18 @@ export default function AssessmentPage() {
                         steps={steps}
                         activeStep={activeStep}
                         variant="stepper"
+                    />
+
+                    <ProgressSaver
+                        formId={formId}
+                        currentStep={activeStep}
+                        formData={formData}
+                        totalSteps={steps.length}
+                        onSave={saveProgress}
+                        onLoad={loadProgress}
+                        onDelete={deleteProgress}
+                        onListSaved={listSavedForms}
+                        autoSaveInterval={30000}
                     />
 
                     {getStepContent(activeStep)}

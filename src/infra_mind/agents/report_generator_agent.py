@@ -318,10 +318,24 @@ class ReportGeneratorAgent(BaseAgent):
         else:
             content = f"Content for {title} section would be generated here."
         
+        # Determine if section should be interactive
+        is_interactive = self._should_be_interactive(title, recommendations)
+        drill_down_data = {}
+        charts_config = []
+        
+        if is_interactive:
+            drill_down_data = self._generate_drill_down_data(title, recommendations)
+            charts_config = self._generate_charts_config(title, recommendations)
+        
         return ReportSection(
             title=title,
             content=content,
-            order=order
+            order=order,
+            is_interactive=is_interactive,
+            drill_down_data=drill_down_data,
+            charts_config=charts_config,
+            generated_by=self.name,
+            section_id=str(uuid.uuid4())
         )
     
     def _generate_executive_summary(self, assessment: Any, recommendations: List[Any]) -> str:
@@ -685,69 +699,479 @@ The requirements analysis indicates a need for scalable, performant infrastructu
     
     def _generate_technology_stack(self, recommendations: List[Any]) -> str:
         """Generate technology stack section."""
-        return """**Recommended Technology Stack:**
-
-**Compute:**
-- Container orchestration (Kubernetes)
-- Serverless functions for event-driven workloads
-- Auto-scaling compute instances
-
-**Storage:**
-- Object storage for unstructured data
-- Managed database services
-- Distributed caching layer
-
-**Networking:**
-- Content delivery network (CDN)
-- Load balancers and API gateways
-- Virtual private cloud (VPC) architecture
-
-**Security:**
-- Identity and access management (IAM)
-- Encryption at rest and in transit
-- Security monitoring and compliance tools
-
-**Operations:**
-- Infrastructure as code (IaC)
-- CI/CD pipelines
-- Monitoring and logging platforms
-- Backup and disaster recovery solutions
-
-**Development:**
-- Version control and collaboration tools
-- Testing and quality assurance frameworks
-- Documentation and knowledge management systems
+        tech_recs = [r for r in recommendations if 'technology' in getattr(r, 'category', '').lower() or 'stack' in getattr(r, 'category', '').lower()]
+        
+        if not tech_recs:
+            return "No specific technology stack recommendations were identified."
+        
+        content = "**Recommended Technology Stack:**\n\n"
+        
+        for rec in tech_recs:
+            title = getattr(rec, 'title', 'Technology Recommendation')
+            description = getattr(rec, 'description', 'No description available')
+            content += f"**{title}:**\n{description}\n\n"
+        
+        content += """**Technology Selection Principles:**
+- Choose mature, well-supported technologies
+- Prioritize cloud-native solutions where appropriate
+- Ensure compatibility with existing systems
+- Consider long-term maintenance and support
+- Evaluate total cost of ownership
+- Plan for scalability and future growth
 """
+        
+        return content
     
+    def _should_be_interactive(self, title: str, recommendations: List[Any]) -> bool:
+        """Determine if a section should have interactive features."""
+        interactive_sections = [
+            "cost analysis", "investment summary", "recommendations overview",
+            "detailed technical recommendations", "architecture recommendations",
+            "implementation roadmap", "risk assessment"
+        ]
+        
+        return any(keyword in title.lower() for keyword in interactive_sections)
+    
+    def _generate_drill_down_data(self, title: str, recommendations: List[Any]) -> Dict[str, Any]:
+        """Generate drill-down data for interactive sections."""
+        drill_down_data = {}
+        
+        if "cost" in title.lower():
+            # Cost breakdown drill-down
+            drill_down_data["cost_breakdown"] = {
+                "by_priority": self._group_costs_by_priority(recommendations),
+                "by_category": self._group_costs_by_category(recommendations),
+                "timeline": self._generate_cost_timeline(recommendations)
+            }
+        
+        if "recommendation" in title.lower():
+            # Recommendations drill-down
+            drill_down_data["recommendations_detail"] = {
+                "by_agent": self._group_recommendations_by_agent(recommendations),
+                "by_complexity": self._group_recommendations_by_complexity(recommendations),
+                "dependencies": self._analyze_recommendation_dependencies(recommendations)
+            }
+        
+        if "risk" in title.lower():
+            # Risk analysis drill-down
+            drill_down_data["risk_analysis"] = {
+                "risk_matrix": self._generate_risk_matrix(recommendations),
+                "mitigation_strategies": self._extract_mitigation_strategies(recommendations),
+                "impact_analysis": self._analyze_risk_impact(recommendations)
+            }
+        
+        if "implementation" in title.lower():
+            # Implementation drill-down
+            drill_down_data["implementation_detail"] = {
+                "timeline_gantt": self._generate_gantt_data(recommendations),
+                "resource_allocation": self._analyze_resource_requirements(recommendations),
+                "milestones": self._extract_milestones(recommendations)
+            }
+        
+        return drill_down_data
+    
+    def _generate_charts_config(self, title: str, recommendations: List[Any]) -> List[Dict[str, Any]]:
+        """Generate configuration for interactive charts."""
+        charts = []
+        
+        if "cost" in title.lower():
+            # Cost distribution pie chart
+            charts.append({
+                "type": "pie",
+                "title": "Cost Distribution by Priority",
+                "description": "Breakdown of estimated costs by recommendation priority",
+                "data": self._prepare_cost_pie_data(recommendations)
+            })
+            
+            # Cost timeline chart
+            charts.append({
+                "type": "line",
+                "title": "Cost Timeline",
+                "description": "Projected costs over implementation timeline",
+                "data": self._prepare_cost_timeline_data(recommendations)
+            })
+        
+        if "recommendation" in title.lower():
+            # Recommendations bar chart
+            charts.append({
+                "type": "bar",
+                "title": "Recommendations by Category",
+                "description": "Number of recommendations in each category",
+                "data": self._prepare_recommendations_bar_data(recommendations)
+            })
+        
+        if "implementation" in title.lower():
+            # Implementation timeline
+            charts.append({
+                "type": "area",
+                "title": "Implementation Timeline",
+                "description": "Resource allocation over time",
+                "data": self._prepare_implementation_timeline_data(recommendations)
+            })
+        
+        return charts
+    
+    def _group_costs_by_priority(self, recommendations: List[Any]) -> Dict[str, float]:
+        """Group costs by recommendation priority."""
+        costs_by_priority = {"high": 0, "medium": 0, "low": 0}
+        
+        for rec in recommendations:
+            priority = getattr(rec, 'priority', 'medium')
+            cost = getattr(rec, 'estimated_cost', 0)
+            costs_by_priority[priority] += cost
+        
+        return costs_by_priority
+    
+    def _group_costs_by_category(self, recommendations: List[Any]) -> Dict[str, float]:
+        """Group costs by recommendation category."""
+        costs_by_category = {}
+        
+        for rec in recommendations:
+            category = getattr(rec, 'category', 'general')
+            cost = getattr(rec, 'estimated_cost', 0)
+            
+            if category not in costs_by_category:
+                costs_by_category[category] = 0
+            costs_by_category[category] += cost
+        
+        return costs_by_category
+    
+    def _generate_cost_timeline(self, recommendations: List[Any]) -> List[Dict[str, Any]]:
+        """Generate cost timeline data."""
+        timeline = []
+        
+        # Group by implementation time
+        time_groups = {}
+        for rec in recommendations:
+            impl_time = getattr(rec, 'implementation_time', 'unknown')
+            cost = getattr(rec, 'estimated_cost', 0)
+            
+            if impl_time not in time_groups:
+                time_groups[impl_time] = 0
+            time_groups[impl_time] += cost
+        
+        # Convert to timeline format
+        for time_period, cost in time_groups.items():
+            timeline.append({
+                "period": time_period,
+                "cost": cost,
+                "cumulative_cost": sum(time_groups[t] for t in time_groups if t <= time_period)
+            })
+        
+        return timeline
+    
+    def _group_recommendations_by_agent(self, recommendations: List[Any]) -> Dict[str, List[Dict[str, Any]]]:
+        """Group recommendations by the agent that generated them."""
+        by_agent = {}
+        
+        for rec in recommendations:
+            # This would need to be enhanced based on actual recommendation structure
+            agent = "general"  # Default agent
+            
+            if agent not in by_agent:
+                by_agent[agent] = []
+            
+            by_agent[agent].append({
+                "title": getattr(rec, 'title', 'Unknown'),
+                "priority": getattr(rec, 'priority', 'medium'),
+                "cost": getattr(rec, 'estimated_cost', 0)
+            })
+        
+        return by_agent
+    
+    def _group_recommendations_by_complexity(self, recommendations: List[Any]) -> Dict[str, List[Dict[str, Any]]]:
+        """Group recommendations by implementation complexity."""
+        by_complexity = {"low": [], "medium": [], "high": []}
+        
+        for rec in recommendations:
+            # Determine complexity based on cost and implementation time
+            cost = getattr(rec, 'estimated_cost', 0)
+            impl_time = getattr(rec, 'implementation_time', 'unknown')
+            
+            complexity = "medium"  # Default
+            if cost > 50000 or "year" in impl_time.lower():
+                complexity = "high"
+            elif cost < 10000 and "week" in impl_time.lower():
+                complexity = "low"
+            
+            by_complexity[complexity].append({
+                "title": getattr(rec, 'title', 'Unknown'),
+                "cost": cost,
+                "implementation_time": impl_time
+            })
+        
+        return by_complexity
+    
+    def _analyze_recommendation_dependencies(self, recommendations: List[Any]) -> List[Dict[str, Any]]:
+        """Analyze dependencies between recommendations."""
+        # This is a simplified implementation
+        dependencies = []
+        
+        for i, rec in enumerate(recommendations):
+            title = getattr(rec, 'title', f'Recommendation {i+1}')
+            
+            # Simple heuristic for dependencies
+            depends_on = []
+            if "advanced" in title.lower() or "optimize" in title.lower():
+                # Advanced recommendations might depend on basic ones
+                for j, other_rec in enumerate(recommendations):
+                    if j != i and "basic" in getattr(other_rec, 'title', '').lower():
+                        depends_on.append(getattr(other_rec, 'title', f'Recommendation {j+1}'))
+            
+            if depends_on:
+                dependencies.append({
+                    "recommendation": title,
+                    "depends_on": depends_on
+                })
+        
+        return dependencies
+    
+    def _generate_risk_matrix(self, recommendations: List[Any]) -> List[Dict[str, Any]]:
+        """Generate risk matrix data."""
+        risk_matrix = []
+        
+        for rec in recommendations:
+            risks = getattr(rec, 'risks', [])
+            cost = getattr(rec, 'estimated_cost', 0)
+            
+            # Simple risk scoring
+            probability = "medium"
+            impact = "medium"
+            
+            if cost > 100000:
+                impact = "high"
+            elif cost < 10000:
+                impact = "low"
+            
+            if len(risks) > 3:
+                probability = "high"
+            elif len(risks) < 2:
+                probability = "low"
+            
+            risk_matrix.append({
+                "recommendation": getattr(rec, 'title', 'Unknown'),
+                "probability": probability,
+                "impact": impact,
+                "risk_score": self._calculate_risk_score(probability, impact)
+            })
+        
+        return risk_matrix
+    
+    def _calculate_risk_score(self, probability: str, impact: str) -> int:
+        """Calculate numerical risk score."""
+        prob_scores = {"low": 1, "medium": 2, "high": 3}
+        impact_scores = {"low": 1, "medium": 2, "high": 3}
+        
+        return prob_scores.get(probability, 2) * impact_scores.get(impact, 2)
+    
+    def _extract_mitigation_strategies(self, recommendations: List[Any]) -> List[Dict[str, Any]]:
+        """Extract mitigation strategies from recommendations."""
+        strategies = []
+        
+        for rec in recommendations:
+            risks = getattr(rec, 'risks', [])
+            title = getattr(rec, 'title', 'Unknown')
+            
+            for risk in risks:
+                # Generate simple mitigation strategy
+                strategy = f"Mitigate {risk} through careful planning and testing"
+                strategies.append({
+                    "risk": risk,
+                    "recommendation": title,
+                    "mitigation": strategy
+                })
+        
+        return strategies
+    
+    def _analyze_risk_impact(self, recommendations: List[Any]) -> Dict[str, Any]:
+        """Analyze overall risk impact."""
+        total_risks = 0
+        high_risk_count = 0
+        total_cost_at_risk = 0
+        
+        for rec in recommendations:
+            risks = getattr(rec, 'risks', [])
+            cost = getattr(rec, 'estimated_cost', 0)
+            
+            total_risks += len(risks)
+            if len(risks) > 2:
+                high_risk_count += 1
+                total_cost_at_risk += cost
+        
+        return {
+            "total_risks": total_risks,
+            "high_risk_recommendations": high_risk_count,
+            "cost_at_risk": total_cost_at_risk,
+            "risk_percentage": (high_risk_count / len(recommendations) * 100) if recommendations else 0
+        }
+    
+    def _generate_gantt_data(self, recommendations: List[Any]) -> List[Dict[str, Any]]:
+        """Generate Gantt chart data for implementation timeline."""
+        gantt_data = []
+        
+        for i, rec in enumerate(recommendations):
+            title = getattr(rec, 'title', f'Task {i+1}')
+            impl_time = getattr(rec, 'implementation_time', 'unknown')
+            
+            # Convert implementation time to duration
+            duration = 30  # Default 30 days
+            if "week" in impl_time.lower():
+                duration = 7
+            elif "month" in impl_time.lower():
+                duration = 30
+            elif "quarter" in impl_time.lower():
+                duration = 90
+            
+            gantt_data.append({
+                "task": title,
+                "start_date": f"2024-01-{(i * 10) % 28 + 1:02d}",  # Staggered start dates
+                "duration": duration,
+                "priority": getattr(rec, 'priority', 'medium')
+            })
+        
+        return gantt_data
+    
+    def _analyze_resource_requirements(self, recommendations: List[Any]) -> Dict[str, Any]:
+        """Analyze resource requirements for implementation."""
+        resources = {
+            "technical_staff": 0,
+            "budget": 0,
+            "external_consultants": 0,
+            "training_hours": 0
+        }
+        
+        for rec in recommendations:
+            cost = getattr(rec, 'estimated_cost', 0)
+            category = getattr(rec, 'category', 'general')
+            
+            resources["budget"] += cost
+            
+            # Estimate staff requirements based on cost and category
+            if cost > 50000:
+                resources["technical_staff"] += 2
+            else:
+                resources["technical_staff"] += 1
+            
+            if "training" in category.lower():
+                resources["training_hours"] += 40
+            
+            if cost > 100000:
+                resources["external_consultants"] += 1
+        
+        return resources
+    
+    def _extract_milestones(self, recommendations: List[Any]) -> List[Dict[str, Any]]:
+        """Extract key milestones from recommendations."""
+        milestones = []
+        
+        # Add standard milestones
+        milestones.append({
+            "name": "Project Kickoff",
+            "date": "2024-01-01",
+            "description": "Begin implementation of infrastructure recommendations"
+        })
+        
+        # Add milestones based on high-priority recommendations
+        high_priority_recs = [r for r in recommendations if getattr(r, 'priority', 'medium') == 'high']
+        
+        for i, rec in enumerate(high_priority_recs[:3]):  # Top 3 high priority
+            title = getattr(rec, 'title', f'Milestone {i+1}')
+            milestones.append({
+                "name": f"Complete {title}",
+                "date": f"2024-{(i+2):02d}-01",
+                "description": f"Finish implementation of {title}"
+            })
+        
+        milestones.append({
+            "name": "Project Completion",
+            "date": "2024-12-31",
+            "description": "Complete all infrastructure recommendations"
+        })
+        
+        return milestones
+    
+    def _prepare_cost_pie_data(self, recommendations: List[Any]) -> List[Dict[str, Any]]:
+        """Prepare data for cost distribution pie chart."""
+        costs_by_priority = self._group_costs_by_priority(recommendations)
+        
+        return [
+            {"label": priority.title(), "value": cost}
+            for priority, cost in costs_by_priority.items()
+            if cost > 0
+        ]
+    
+    def _prepare_cost_timeline_data(self, recommendations: List[Any]) -> List[Dict[str, Any]]:
+        """Prepare data for cost timeline chart."""
+        timeline = self._generate_cost_timeline(recommendations)
+        
+        return [
+            {"x": item["period"], "y": item["cost"]}
+            for item in timeline
+        ]
+    
+    def _prepare_recommendations_bar_data(self, recommendations: List[Any]) -> List[Dict[str, Any]]:
+        """Prepare data for recommendations bar chart."""
+        by_category = {}
+        
+        for rec in recommendations:
+            category = getattr(rec, 'category', 'general')
+            if category not in by_category:
+                by_category[category] = 0
+            by_category[category] += 1
+        
+        return [
+            {"category": category.title(), "count": count}
+            for category, count in by_category.items()
+        ]
+    
+    def _prepare_implementation_timeline_data(self, recommendations: List[Any]) -> List[Dict[str, Any]]:
+        """Prepare data for implementation timeline chart."""
+        gantt_data = self._generate_gantt_data(recommendations)
+        
+        # Convert to area chart data
+        timeline_data = []
+        
+        for item in gantt_data:
+            timeline_data.append({
+                "date": item["start_date"],
+                "active_tasks": 1,
+                "priority": item["priority"],
+                "task_name": item.get("task", "Unknown Task"),
+                "duration_days": item.get("duration", 30),
+                "completion_percentage": item.get("progress", 0)
+            })
+        
+        return timeline_data
+
     def _generate_implementation_details(self, recommendations: List[Any]) -> str:
         """Generate implementation details section."""
         return """**Implementation Approach:**
 
-**Project Management:**
-- Establish dedicated project team with clear roles
-- Use agile methodology with regular sprint reviews
-- Implement risk management and issue tracking
-- Maintain detailed project documentation
+    **Project Management:**
+    - Establish dedicated project team with clear roles
+    - Use agile methodology with regular sprint reviews
+    - Implement risk management and issue tracking
+    - Maintain detailed project documentation
 
-**Technical Implementation:**
-- Follow infrastructure as code principles
-- Implement comprehensive testing strategies
-- Use blue-green deployment for zero-downtime updates
-- Establish proper version control and change management
+    **Technical Implementation:**
+    - Follow infrastructure as code principles
+    - Implement comprehensive testing strategies
+    - Use blue-green deployment for zero-downtime updates
+    - Establish proper version control and change management
 
-**Quality Assurance:**
-- Conduct thorough testing at each implementation phase
-- Perform security and compliance validation
-- Execute performance and load testing
-- Implement monitoring and alerting from day one
+    **Quality Assurance:**
+    - Conduct thorough testing at each implementation phase
+    - Perform security and compliance validation
+    - Execute performance and load testing
+    - Implement monitoring and alerting from day one
 
-**Change Management:**
-- Develop comprehensive training programs
-- Create detailed operational procedures
-- Establish support and troubleshooting guides
-- Plan for user adoption and feedback collection
-"""
-    
+    **Change Management:**
+    - Develop comprehensive training programs
+    - Create detailed operational procedures
+    - Establish support and troubleshooting guides
+    - Plan for user adoption and feedback collection
+    """
+
     def _generate_security_compliance(self, assessment: Any, recommendations: List[Any]) -> str:
         """Generate security and compliance section."""
         technical_req = getattr(assessment, 'technical_requirements', {})
@@ -758,98 +1182,98 @@ The requirements analysis indicates a need for scalable, performant infrastructu
         security_text = ", ".join(security_requirements) if security_requirements else "standard security measures"
         
         return f"""**Compliance Requirements:**
-{compliance_text}
+    {compliance_text}
 
-**Security Requirements:**
-{security_text}
+    **Security Requirements:**
+    {security_text}
 
-**Security Framework:**
-- Implement defense-in-depth security strategy
-- Regular security assessments and penetration testing
-- Continuous compliance monitoring and reporting
-- Incident response and recovery procedures
+    **Security Framework:**
+    - Implement defense-in-depth security strategy
+    - Regular security assessments and penetration testing
+    - Continuous compliance monitoring and reporting
+    - Incident response and recovery procedures
 
-**Compliance Measures:**
-- Data governance and privacy protection
-- Audit logging and monitoring
-- Access controls and identity management
-- Regular compliance assessments and certifications
+    **Compliance Measures:**
+    - Data governance and privacy protection
+    - Audit logging and monitoring
+    - Access controls and identity management
+    - Regular compliance assessments and certifications
 
-**Recommended Security Controls:**
-- Multi-factor authentication (MFA)
-- Network segmentation and firewalls
-- Encryption for data at rest and in transit
-- Regular security updates and patch management
-- Security awareness training for all users
-"""
-    
+    **Recommended Security Controls:**
+    - Multi-factor authentication (MFA)
+    - Network segmentation and firewalls
+    - Encryption for data at rest and in transit
+    - Regular security updates and patch management
+    - Security awareness training for all users
+    """
+
     def _generate_monitoring_operations(self, recommendations: List[Any]) -> str:
         """Generate monitoring and operations section."""
         return """**Monitoring Strategy:**
 
-**Infrastructure Monitoring:**
-- System performance and resource utilization
-- Network connectivity and latency
-- Storage capacity and performance
-- Security events and anomalies
+    **Infrastructure Monitoring:**
+    - System performance and resource utilization
+    - Network connectivity and latency
+    - Storage capacity and performance
+    - Security events and anomalies
 
-**Application Monitoring:**
-- Application performance metrics (APM)
-- User experience and transaction monitoring
-- Error tracking and debugging
-- Business metrics and KPIs
+    **Application Monitoring:**
+    - Application performance metrics (APM)
+    - User experience and transaction monitoring
+    - Error tracking and debugging
+    - Business metrics and KPIs
 
-**Operational Procedures:**
-- Incident response and escalation procedures
-- Change management and deployment processes
-- Backup and recovery operations
-- Capacity planning and scaling procedures
+    **Operational Procedures:**
+    - Incident response and escalation procedures
+    - Change management and deployment processes
+    - Backup and recovery operations
+    - Capacity planning and scaling procedures
 
-**Alerting and Notifications:**
-- Proactive alerting for critical issues
-- Escalation procedures for different severity levels
-- Integration with communication platforms
-- Regular reporting and dashboard reviews
+    **Alerting and Notifications:**
+    - Proactive alerting for critical issues
+    - Escalation procedures for different severity levels
+    - Integration with communication platforms
+    - Regular reporting and dashboard reviews
 
-**Continuous Improvement:**
-- Regular performance reviews and optimization
-- Capacity planning based on growth trends
-- Technology refresh and upgrade planning
-- Process improvement and automation opportunities
-"""
-    
+    **Continuous Improvement:**
+    - Regular performance reviews and optimization
+    - Capacity planning based on growth trends
+    - Technology refresh and upgrade planning
+    - Process improvement and automation opportunities
+    """
+
     def _generate_next_steps(self, recommendations: List[Any]) -> str:
         """Generate next steps section."""
         high_priority = [r for r in recommendations if getattr(r, 'priority', 'medium') == 'high']
         
         content = """**Immediate Actions (Next 30 Days):**
-1. Review and approve this assessment report
-2. Secure budget and resource allocation
-3. Establish project governance and team structure
-4. Begin detailed planning for high-priority initiatives
-5. Initiate vendor selection and procurement processes
+    1. Review and approve this assessment report
+    2. Secure budget and resource allocation
+    3. Establish project governance and team structure
+    4. Begin detailed planning for high-priority initiatives
+    5. Initiate vendor selection and procurement processes
 
-**Short-term Goals (Next 90 Days):**
-1. Complete detailed technical designs
-2. Begin implementation of quick wins and foundational elements
-3. Establish monitoring and measurement frameworks
-4. Conduct team training and skill development
-5. Execute pilot projects and proof-of-concepts
+    **Short-term Goals (Next 90 Days):**
+    1. Complete detailed technical designs
+    2. Begin implementation of quick wins and foundational elements
+    3. Establish monitoring and measurement frameworks
+    4. Conduct team training and skill development
+    5. Execute pilot projects and proof-of-concepts
 
-**Long-term Objectives (6-12 Months):**
-1. Complete major infrastructure transformations
-2. Achieve target performance and scalability metrics
-3. Realize projected cost savings and efficiency gains
-4. Establish mature operational processes
-5. Plan for next phase of optimization and growth
+    **Long-term Objectives (6-12 Months):**
+    1. Complete major infrastructure transformations
+    2. Achieve target performance and scalability metrics
+    3. Realize projected cost savings and efficiency gains
+    4. Establish mature operational processes
+    5. Plan for next phase of optimization and growth
 
-**Success Metrics:**
-- Infrastructure performance improvements
-- Cost reduction achievements
-- Security and compliance posture
-- Team productivity and satisfaction
-- Business value delivery
-"""
+    **Success Metrics:**
+    - Infrastructure performance improvements
+    - Cost reduction achievements
+    - Security and compliance posture
+    - Team productivity and satisfaction
+    - Business value delivery
+    """
         
         if high_priority:
             content += f"\n**Priority Focus Areas:**\n"

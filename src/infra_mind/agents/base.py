@@ -17,6 +17,9 @@ from ..models.assessment import Assessment
 from ..models.recommendation import Recommendation
 from ..models.metrics import AgentMetrics
 from ..core.audit import log_data_access_event, AuditEventType
+from ..core.metrics_collector import get_metrics_collector
+from ..core.error_handling import error_handler, ErrorContext
+from ..core.advanced_logging import get_agent_logger, log_context
 from .memory import AgentMemory
 from .tools import AgentToolkit, ToolResult
 
@@ -99,6 +102,7 @@ class BaseAgent(ABC):
         self.memory = AgentMemory() if config.memory_enabled else None
         self.toolkit = AgentToolkit(config.tools_enabled)
         self.metrics: Optional[AgentMetrics] = None
+        self.metrics_collector = get_metrics_collector()
         self.start_time: Optional[datetime] = None
         self.end_time: Optional[datetime] = None
         
@@ -164,7 +168,7 @@ class BaseAgent(ABC):
     
     async def execute(self, assessment: Assessment, context: Optional[Dict[str, Any]] = None) -> AgentResult:
         """
-        Execute the agent's main logic.
+        Execute the agent's main logic with comprehensive error handling.
         
         Args:
             assessment: Assessment to process
@@ -173,65 +177,174 @@ class BaseAgent(ABC):
         Returns:
             AgentResult with execution results
         """
+        workflow_id = context.get("workflow_id") if context else None
+        
+        # Set up logging context
+        with log_context(
+            agent_name=self.name,
+            workflow_id=workflow_id,
+            assessment_id=str(assessment.id) if assessment else None
+        ):
+            # Use comprehensive error handling
+            async with error_handler.handle_errors(
+                operation="agent_execution",
+                component="agent",
+                agent_name=self.name,
+                workflow_id=workflow_id,
+                assessment_id=str(assessment.id) if assessment else None
+            ) as handle_error:
+                
+                try:
+                    # Initialize
+                    await self.initialize(assessment, context)
+                    
+                    # Start execution
+                    self.status = AgentStatus.RUNNING
+                    self.start_time = datetime.now(timezone.utc)
+                    
+                    logger.info(f"Starting execution of agent {self.name}")
+                    
+                    # Execute main logic with error handling
+                    result = await handle_error(self._execute_main_logic_with_recovery)
+                    
+                    # Mark as completed
+                    self.status = AgentStatus.COMPLETED
+                    self.end_time = datetime.now(timezone.utc)
+                    
+                    # Update metrics
+                    if self.metrics:
+                        self.metrics.update_performance(
+                            execution_time=self.execution_time or 0,
+                            api_calls=self.toolkit.api_call_count
+                        )
+                        await self.metrics.save()
+                    
+                    # Record performance in metrics collector
+                    await self.metrics_collector.record_agent_performance(
+                        agent_name=self.name,
+                        execution_time=self.execution_time or 0,
+                        success=True,
+                        confidence_score=getattr(self.metrics, 'confidence_score', None),
+                        recommendations_count=len(result.get("recommendations", [])),
+                        assessment_id=str(assessment.id)
+                    )
+                    
+                    # Save memory
+                    if self.memory:
+                        await self.memory.save_context(str(assessment.id))
+                    
+                    logger.info(f"Agent {self.name} completed successfully in {self.execution_time:.2f}s")
+                    
+                    return AgentResult(
+                        agent_name=self.name,
+                        status=self.status,
+                        recommendations=result.get("recommendations", []),
+                        data=result.get("data", {}),
+                        metrics=self.metrics.dict() if self.metrics else None,
+                        execution_time=self.execution_time
+                    )
+                    
+                except Exception as e:
+                    # Handle errors with comprehensive error handling
+                    self.status = AgentStatus.FAILED
+                    self.end_time = datetime.now(timezone.utc)
+                    
+                    # Try to recover from the error
+                    recovery_result = await error_handler.handle_agent_error(
+                        agent_name=self.name,
+                        operation="agent_execution",
+                        exception=e,
+                        workflow_id=workflow_id,
+                        fallback_data=self._get_fallback_data()
+                    )
+                    
+                    # Update metrics with error
+                    if self.metrics:
+                        self.metrics.record_error(error_count=1)
+                        await self.metrics.save()
+                    
+                    # Record failure in metrics collector
+                    await self.metrics_collector.record_agent_performance(
+                        agent_name=self.name,
+                        execution_time=self.execution_time or 0,
+                        success=False,
+                        assessment_id=str(assessment.id) if assessment else None
+                    )
+                    
+                    # If recovery was successful, return partial results
+                    if recovery_result.success:
+                        logger.warning(f"Agent {self.name} recovered from error using {recovery_result.strategy_used.value}")
+                        
+                        return AgentResult(
+                            agent_name=self.name,
+                            status=AgentStatus.COMPLETED,
+                            recommendations=recovery_result.data.get("recommendations", []) if recovery_result.data else [],
+                            data=recovery_result.data or {},
+                            execution_time=self.execution_time,
+                            error=f"Recovered from error: {str(e)}"
+                        )
+                    else:
+                        # Recovery failed, return error result
+                        error_msg = f"Agent {self.name} failed: {str(e)}"
+                        logger.error(error_msg, exc_info=True)
+                        
+                        return AgentResult(
+                            agent_name=self.name,
+                            status=self.status,
+                            error=error_msg,
+                            execution_time=self.execution_time
+                        )
+    
+    async def _execute_main_logic_with_recovery(self) -> Dict[str, Any]:
+        """
+        Execute main logic with built-in recovery mechanisms.
+        
+        Returns:
+            Dictionary with execution results
+        """
         try:
-            # Initialize
-            await self.initialize(assessment, context)
-            
-            # Start execution
-            self.status = AgentStatus.RUNNING
-            self.start_time = datetime.now(timezone.utc)
-            
-            logger.info(f"Starting execution of agent {self.name}")
-            
-            # Execute main logic
-            result = await self._execute_main_logic()
-            
-            # Mark as completed
-            self.status = AgentStatus.COMPLETED
-            self.end_time = datetime.now(timezone.utc)
-            
-            # Update metrics
-            if self.metrics:
-                self.metrics.update_performance(
-                    execution_time=self.execution_time or 0,
-                    api_calls=self.toolkit.api_call_count
-                )
-                await self.metrics.save()
-            
-            # Save memory
-            if self.memory:
-                await self.memory.save_context(str(assessment.id))
-            
-            logger.info(f"Agent {self.name} completed successfully in {self.execution_time:.2f}s")
-            
-            return AgentResult(
-                agent_name=self.name,
-                status=self.status,
-                recommendations=result.get("recommendations", []),
-                data=result.get("data", {}),
-                metrics=self.metrics.dict() if self.metrics else None,
-                execution_time=self.execution_time
-            )
-            
+            return await self._execute_main_logic()
         except Exception as e:
-            # Handle errors
-            self.status = AgentStatus.FAILED
-            self.end_time = datetime.now(timezone.utc)
+            # Log the error and attempt graceful degradation
+            logger.warning(f"Agent {self.name} main logic failed, attempting graceful degradation: {str(e)}")
             
-            error_msg = f"Agent {self.name} failed: {str(e)}"
-            logger.error(error_msg, exc_info=True)
+            # Try to provide partial results
+            partial_results = await self._get_partial_results()
+            if partial_results:
+                return {
+                    "recommendations": partial_results.get("recommendations", []),
+                    "data": partial_results.get("data", {}),
+                    "degraded_mode": True,
+                    "error": str(e)
+                }
             
-            # Update metrics with error
-            if self.metrics:
-                self.metrics.record_error(error_count=1)
-                await self.metrics.save()
-            
-            return AgentResult(
-                agent_name=self.name,
-                status=self.status,
-                error=error_msg,
-                execution_time=self.execution_time
-            )
+            # Re-raise if no partial results available
+            raise
+    
+    def _get_fallback_data(self) -> Optional[Dict[str, Any]]:
+        """
+        Get fallback data for error recovery.
+        
+        Returns:
+            Fallback data or None
+        """
+        return {
+            "recommendations": [],
+            "data": {},
+            "fallback_mode": True,
+            "message": f"Agent {self.name} is temporarily unavailable"
+        }
+    
+    async def _get_partial_results(self) -> Optional[Dict[str, Any]]:
+        """
+        Get partial results when main logic fails.
+        
+        Returns:
+            Partial results or None
+        """
+        # Default implementation returns None
+        # Subclasses can override to provide meaningful partial results
+        return None
     
     @abstractmethod
     async def _execute_main_logic(self) -> Dict[str, Any]:
@@ -282,6 +395,7 @@ class BaseAgent(ABC):
         capabilities = [
             f"Role: {self.role.value}",
             f"Model: {self.config.model_name}",
+            f"Temperature: {self.config.temperature}",
             f"Max iterations: {self.config.max_iterations}",
             f"Timeout: {self.config.timeout_seconds}s"
         ]

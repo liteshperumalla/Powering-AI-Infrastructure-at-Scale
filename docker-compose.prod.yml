@@ -1,0 +1,170 @@
+# Production Docker Compose configuration for Infra Mind
+# Learning Note: Separate production config for security and performance
+
+services:
+  # MongoDB database
+  mongodb:
+    image: mongo:7.0
+    container_name: infra_mind_mongodb_prod
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD}
+      MONGO_INITDB_DATABASE: infra_mind
+    volumes:
+      - mongodb_data:/data/db
+      - ./scripts/init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
+    networks:
+      - infra_mind_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Redis cache
+  redis:
+    image: redis:7.2-alpine
+    container_name: infra_mind_redis_prod
+    restart: always
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    networks:
+      - infra_mind_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # FastAPI application
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: infra_mind_api_prod
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      # Database configuration
+      INFRA_MIND_MONGODB_URL: mongodb://${MONGO_ROOT_USERNAME}:${MONGO_ROOT_PASSWORD}@mongodb:27017/infra_mind?authSource=admin
+      INFRA_MIND_REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
+      
+      # Application configuration
+      INFRA_MIND_ENVIRONMENT: production
+      INFRA_MIND_DEBUG: "false"
+      INFRA_MIND_SECRET_KEY: ${SECRET_KEY}
+      
+      # LLM configuration
+      INFRA_MIND_OPENAI_API_KEY: ${OPENAI_API_KEY}
+      INFRA_MIND_LLM_MODEL: ${LLM_MODEL:-gpt-4}
+      INFRA_MIND_LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.1}
+      
+      # Cloud provider configuration
+      INFRA_MIND_AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      INFRA_MIND_AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      INFRA_MIND_AWS_REGION: ${AWS_REGION:-us-east-1}
+      INFRA_MIND_AZURE_CLIENT_ID: ${AZURE_CLIENT_ID}
+      INFRA_MIND_AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET}
+      INFRA_MIND_AZURE_TENANT_ID: ${AZURE_TENANT_ID}
+      INFRA_MIND_GCP_SERVICE_ACCOUNT_PATH: ${GCP_SERVICE_ACCOUNT_PATH}
+      INFRA_MIND_GCP_PROJECT_ID: ${GCP_PROJECT_ID}
+      
+      # API configuration
+      INFRA_MIND_API_HOST: 0.0.0.0
+      INFRA_MIND_API_PORT: 8000
+      INFRA_MIND_CORS_ORIGINS: ${CORS_ORIGINS:-["https://yourdomain.com"]}
+      
+      # Rate limiting
+      INFRA_MIND_RATE_LIMIT_REQUESTS: ${RATE_LIMIT_REQUESTS:-1000}
+    depends_on:
+      - mongodb
+      - redis
+    volumes:
+      - ./logs:/app/logs
+      - ${GCP_SERVICE_ACCOUNT_PATH:-/dev/null}:${GCP_SERVICE_ACCOUNT_PATH:-/dev/null}:ro
+    networks:
+      - infra_mind_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # React Frontend
+  frontend:
+    build:
+      context: ./frontend-react
+      dockerfile: Dockerfile
+      target: production
+    container_name: infra_mind_frontend_prod
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: ${FRONTEND_API_URL:-http://localhost:8000}
+      NODE_ENV: production
+    depends_on:
+      - api
+    networks:
+      - infra_mind_network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Nginx reverse proxy (optional for production)
+  nginx:
+    image: nginx:alpine
+    container_name: infra_mind_nginx_prod
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - api
+      - frontend
+    networks:
+      - infra_mind_network
+    profiles:
+      - nginx  # Only start with: docker-compose -f docker-compose.prod.yml --profile nginx up
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+# Named volumes for data persistence
+volumes:
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# Custom network for service communication
+networks:
+  infra_mind_network:
+    driver: bridge

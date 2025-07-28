@@ -11,6 +11,7 @@ from datetime import datetime, timezone
 from .aws import AWSClient
 from .azure import AzureClient
 from .gcp import GCPClient
+from .terraform import TerraformClient
 from .base import (
     BaseCloudClient, CloudProvider, CloudService, CloudServiceResponse,
     ServiceCategory, CloudServiceError, AuthenticationError
@@ -31,7 +32,8 @@ class UnifiedCloudClient:
                  aws_access_key_id: Optional[str] = None, aws_secret_access_key: Optional[str] = None,
                  azure_subscription_id: Optional[str] = None, azure_client_id: Optional[str] = None,
                  azure_client_secret: Optional[str] = None,
-                 gcp_project_id: Optional[str] = None, gcp_service_account_path: Optional[str] = None):
+                 gcp_project_id: Optional[str] = None, gcp_service_account_path: Optional[str] = None,
+                 terraform_token: Optional[str] = None, terraform_organization: Optional[str] = None):
         """
         Initialize the unified cloud client.
         
@@ -46,6 +48,8 @@ class UnifiedCloudClient:
             azure_client_secret: Azure client secret (optional)
             gcp_project_id: GCP project ID (optional)
             gcp_service_account_path: Path to GCP service account JSON (optional)
+            terraform_token: Terraform Cloud API token (optional)
+            terraform_organization: Terraform Cloud organization (optional)
         """
         self.clients: Dict[CloudProvider, BaseCloudClient] = {}
         self.provider_regions = {
@@ -90,6 +94,17 @@ class UnifiedCloudClient:
                 logger.info("GCP project ID not provided, skipping GCP client initialization")
         except Exception as e:
             logger.error(f"Unexpected error initializing GCP client: {e}")
+        
+        # Initialize Terraform client (always available for registry access)
+        try:
+            self.terraform_client = TerraformClient(
+                terraform_token=terraform_token,
+                organization=terraform_organization
+            )
+            logger.info("Terraform client initialized successfully")
+        except Exception as e:
+            logger.error(f"Unexpected error initializing Terraform client: {e}")
+            self.terraform_client = None
     
     def get_available_providers(self) -> List[CloudProvider]:
         """Get list of available cloud providers."""

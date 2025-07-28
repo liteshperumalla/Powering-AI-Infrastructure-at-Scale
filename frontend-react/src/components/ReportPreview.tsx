@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
     Card,
     CardContent,
@@ -13,6 +13,21 @@ import {
     ListItem,
     ListItemText,
     ListItemIcon,
+    Menu,
+    MenuItem,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    TextField,
+    FormControl,
+    InputLabel,
+    Select,
+    Accordion,
+    AccordionSummary,
+    AccordionDetails,
+    IconButton,
+    Tooltip,
 } from '@mui/material';
 import {
     GetApp,
@@ -21,12 +36,29 @@ import {
     Security,
     CloudQueue,
     Assessment,
+    Share,
+    MoreVert,
+    History,
+    Edit,
+    FileCopy,
+    ExpandMore,
+    Compare,
+    Public,
+    People,
 } from '@mui/icons-material';
 
 interface ReportSection {
     title: string;
     content: string;
     type: 'executive' | 'technical' | 'financial' | 'compliance';
+}
+
+interface ReportVersion {
+    id: string;
+    version: string;
+    createdDate: string;
+    status: 'draft' | 'final' | 'in-progress';
+    isCurrent: boolean;
 }
 
 interface ReportData {
@@ -39,12 +71,24 @@ interface ReportData {
     recommendations: string[];
     estimatedSavings?: number;
     complianceScore?: number;
+    version?: string;
+    versions?: ReportVersion[];
+    sharedWith?: string[];
+    isPublic?: boolean;
+    canEdit?: boolean;
+    canShare?: boolean;
+    hasInteractiveContent?: boolean;
 }
 
 interface ReportPreviewProps {
     report: ReportData;
     onDownload?: (reportId: string) => void;
     onView?: (reportId: string) => void;
+    onShare?: (reportId: string) => void;
+    onCreateVersion?: (reportId: string) => void;
+    onCompareVersions?: (reportId1: string, reportId2: string) => void;
+    onCreateTemplate?: (reportId: string) => void;
+    onEdit?: (reportId: string) => void;
 }
 
 const getSectionIcon = (type: string) => {
@@ -69,8 +113,21 @@ const getStatusColor = (status: string) => {
 const ReportPreview: React.FC<ReportPreviewProps> = ({
     report,
     onDownload,
-    onView
+    onView,
+    onShare,
+    onCreateVersion,
+    onCompareVersions,
+    onCreateTemplate,
+    onEdit
 }) => {
+    const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+    const [shareDialogOpen, setShareDialogOpen] = useState(false);
+    const [versionDialogOpen, setVersionDialogOpen] = useState(false);
+    const [compareDialogOpen, setCompareDialogOpen] = useState(false);
+    const [selectedVersionForCompare, setSelectedVersionForCompare] = useState<string>('');
+    const [newVersionName, setNewVersionName] = useState('');
+    const [shareEmail, setShareEmail] = useState('');
+    const [sharePermission, setSharePermission] = useState('view');
     return (
         <Card>
             <CardContent>
@@ -189,23 +246,271 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
 
                 <Divider sx={{ my: 2 }} />
 
+                {/* Version History */}
+                {report.versions && report.versions.length > 1 && (
+                    <Box sx={{ mb: 2 }}>
+                        <Accordion>
+                            <AccordionSummary expandIcon={<ExpandMore />}>
+                                <Typography variant="subtitle2">
+                                    Version History ({report.versions.length} versions)
+                                </Typography>
+                            </AccordionSummary>
+                            <AccordionDetails>
+                                <List dense>
+                                    {report.versions.map((version) => (
+                                        <ListItem key={version.id} sx={{ pl: 0 }}>
+                                            <ListItemText
+                                                primary={
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                        <Typography variant="body2">
+                                                            Version {version.version}
+                                                        </Typography>
+                                                        {version.isCurrent && (
+                                                            <Chip label="Current" size="small" color="primary" />
+                                                        )}
+                                                    </Box>
+                                                }
+                                                secondary={new Date(version.createdDate).toLocaleDateString()}
+                                            />
+                                            <Button
+                                                size="small"
+                                                onClick={() => {
+                                                    setSelectedVersionForCompare(version.id);
+                                                    setCompareDialogOpen(true);
+                                                }}
+                                            >
+                                                Compare
+                                            </Button>
+                                        </ListItem>
+                                    ))}
+                                </List>
+                            </AccordionDetails>
+                        </Accordion>
+                    </Box>
+                )}
+
+                {/* Sharing Info */}
+                {(report.sharedWith && report.sharedWith.length > 0) || report.isPublic && (
+                    <Box sx={{ mb: 2 }}>
+                        <Typography variant="subtitle2" gutterBottom>
+                            Sharing
+                        </Typography>
+                        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+                            {report.isPublic && (
+                                <Chip
+                                    icon={<Public />}
+                                    label="Public"
+                                    size="small"
+                                    color="info"
+                                />
+                            )}
+                            {report.sharedWith && report.sharedWith.length > 0 && (
+                                <Chip
+                                    icon={<People />}
+                                    label={`Shared with ${report.sharedWith.length} users`}
+                                    size="small"
+                                    color="secondary"
+                                />
+                            )}
+                        </Box>
+                    </Box>
+                )}
+
+                {/* Interactive Content Indicator */}
+                {report.hasInteractiveContent && (
+                    <Box sx={{ mb: 2 }}>
+                        <Chip
+                            label="Interactive Content Available"
+                            size="small"
+                            color="success"
+                            variant="outlined"
+                        />
+                    </Box>
+                )}
+
+                <Divider sx={{ my: 2 }} />
+
                 {/* Actions */}
-                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                    <Button
-                        variant="outlined"
-                        startIcon={<Visibility />}
-                        onClick={() => onView?.(report.id)}
-                    >
-                        View Full Report
-                    </Button>
-                    <Button
-                        variant="contained"
-                        startIcon={<GetApp />}
-                        onClick={() => onDownload?.(report.id)}
-                    >
-                        Download PDF
-                    </Button>
+                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Button
+                            variant="outlined"
+                            startIcon={<Visibility />}
+                            onClick={() => onView?.(report.id)}
+                        >
+                            {report.hasInteractiveContent ? 'Interactive View' : 'View Report'}
+                        </Button>
+                        <Button
+                            variant="contained"
+                            startIcon={<GetApp />}
+                            onClick={() => onDownload?.(report.id)}
+                        >
+                            Download
+                        </Button>
+                    </Box>
+
+                    <Box>
+                        {report.canShare && (
+                            <Tooltip title="Share Report">
+                                <IconButton
+                                    onClick={() => setShareDialogOpen(true)}
+                                    color="primary"
+                                >
+                                    <Share />
+                                </IconButton>
+                            </Tooltip>
+                        )}
+
+                        <Tooltip title="More Actions">
+                            <IconButton
+                                onClick={(e) => setMenuAnchor(e.currentTarget)}
+                            >
+                                <MoreVert />
+                            </IconButton>
+                        </Tooltip>
+
+                        <Menu
+                            anchorEl={menuAnchor}
+                            open={Boolean(menuAnchor)}
+                            onClose={() => setMenuAnchor(null)}
+                        >
+                            {report.canEdit && (
+                                <MenuItem onClick={() => {
+                                    setMenuAnchor(null);
+                                    onEdit?.(report.id);
+                                }}>
+                                    <Edit sx={{ mr: 1 }} />
+                                    Edit Report
+                                </MenuItem>
+                            )}
+
+                            <MenuItem onClick={() => {
+                                setMenuAnchor(null);
+                                setVersionDialogOpen(true);
+                            }}>
+                                <History sx={{ mr: 1 }} />
+                                Create Version
+                            </MenuItem>
+
+                            {report.versions && report.versions.length > 1 && (
+                                <MenuItem onClick={() => {
+                                    setMenuAnchor(null);
+                                    setCompareDialogOpen(true);
+                                }}>
+                                    <Compare sx={{ mr: 1 }} />
+                                    Compare Versions
+                                </MenuItem>
+                            )}
+
+                            <MenuItem onClick={() => {
+                                setMenuAnchor(null);
+                                onCreateTemplate?.(report.id);
+                            }}>
+                                <FileCopy sx={{ mr: 1 }} />
+                                Create Template
+                            </MenuItem>
+                        </Menu>
+                    </Box>
                 </Box>
+
+                {/* Share Dialog */}
+                <Dialog open={shareDialogOpen} onClose={() => setShareDialogOpen(false)}>
+                    <DialogTitle>Share Report</DialogTitle>
+                    <DialogContent>
+                        <TextField
+                            fullWidth
+                            label="Email Address"
+                            value={shareEmail}
+                            onChange={(e) => setShareEmail(e.target.value)}
+                            margin="normal"
+                        />
+                        <FormControl fullWidth margin="normal">
+                            <InputLabel>Permission</InputLabel>
+                            <Select
+                                value={sharePermission}
+                                onChange={(e) => setSharePermission(e.target.value)}
+                            >
+                                <MenuItem value="view">View Only</MenuItem>
+                                <MenuItem value="edit">Edit</MenuItem>
+                                <MenuItem value="admin">Admin</MenuItem>
+                            </Select>
+                        </FormControl>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setShareDialogOpen(false)}>Cancel</Button>
+                        <Button
+                            onClick={() => {
+                                onShare?.(report.id);
+                                setShareDialogOpen(false);
+                                setShareEmail('');
+                            }}
+                            variant="contained"
+                        >
+                            Share
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Version Dialog */}
+                <Dialog open={versionDialogOpen} onClose={() => setVersionDialogOpen(false)}>
+                    <DialogTitle>Create New Version</DialogTitle>
+                    <DialogContent>
+                        <TextField
+                            fullWidth
+                            label="Version Name"
+                            value={newVersionName}
+                            onChange={(e) => setNewVersionName(e.target.value)}
+                            margin="normal"
+                            placeholder="e.g., 2.0, Draft-2024-01"
+                        />
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setVersionDialogOpen(false)}>Cancel</Button>
+                        <Button
+                            onClick={() => {
+                                onCreateVersion?.(report.id);
+                                setVersionDialogOpen(false);
+                                setNewVersionName('');
+                            }}
+                            variant="contained"
+                        >
+                            Create Version
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+
+                {/* Compare Dialog */}
+                <Dialog open={compareDialogOpen} onClose={() => setCompareDialogOpen(false)}>
+                    <DialogTitle>Compare Versions</DialogTitle>
+                    <DialogContent>
+                        <FormControl fullWidth margin="normal">
+                            <InputLabel>Compare with Version</InputLabel>
+                            <Select
+                                value={selectedVersionForCompare}
+                                onChange={(e) => setSelectedVersionForCompare(e.target.value)}
+                            >
+                                {report.versions?.map((version) => (
+                                    <MenuItem key={version.id} value={version.id}>
+                                        Version {version.version} ({new Date(version.createdDate).toLocaleDateString()})
+                                    </MenuItem>
+                                ))}
+                            </Select>
+                        </FormControl>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setCompareDialogOpen(false)}>Cancel</Button>
+                        <Button
+                            onClick={() => {
+                                onCompareVersions?.(report.id, selectedVersionForCompare);
+                                setCompareDialogOpen(false);
+                            }}
+                            variant="contained"
+                            disabled={!selectedVersionForCompare}
+                        >
+                            Compare
+                        </Button>
+                    </DialogActions>
+                </Dialog>
             </CardContent>
         </Card>
     );

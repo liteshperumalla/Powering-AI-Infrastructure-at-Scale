@@ -1,0 +1,256 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: infra-mind-api
+  namespace: infra-mind
+  labels:
+    app: infra-mind-api
+    component: backend
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  selector:
+    matchLabels:
+      app: infra-mind-api
+  template:
+    metadata:
+      labels:
+        app: infra-mind-api
+        component: backend
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: infra-mind-api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: api
+        image: infra-mind/api:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8000
+          name: http
+        env:
+        # Configuration from ConfigMap
+        - name: INFRA_MIND_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: infra-mind-config
+              key: INFRA_MIND_ENVIRONMENT
+        - name: INFRA_MIND_DEBUG
+          valueFrom:
+            configMapKeyRef:
+              name: infra-mind-config
+              key: INFRA_MIND_DEBUG
+        - name: INFRA_MIND_API_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: infra-mind-config
+              key: INFRA_MIND_API_HOST
+        - name: INFRA_MIND_API_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: infra-mind-config
+              key: INFRA_MIND_API_PORT
+        - name: INFRA_MIND_MONGODB_URL
+          valueFrom:
+            configMapKeyRef:
+              name: infra-mind-config
+              key: INFRA_MIND_MONGODB_URL
+        - name: INFRA_MIND_REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: infra-mind-config
+              key: INFRA_MIND_REDIS_URL
+        - name: INFRA_MIND_LLM_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: infra-mind-config
+              key: INFRA_MIND_LLM_MODEL
+        - name: INFRA_MIND_LLM_TEMPERATURE
+          valueFrom:
+            configMapKeyRef:
+              name: infra-mind-config
+              key: INFRA_MIND_LLM_TEMPERATURE
+        - name: INFRA_MIND_AWS_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: infra-mind-config
+              key: INFRA_MIND_AWS_REGION
+        - name: INFRA_MIND_CORS_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: infra-mind-config
+              key: INFRA_MIND_CORS_ORIGINS
+        - name: INFRA_MIND_RATE_LIMIT_REQUESTS
+          valueFrom:
+            configMapKeyRef:
+              name: infra-mind-config
+              key: INFRA_MIND_RATE_LIMIT_REQUESTS
+        
+        # Secrets
+        - name: INFRA_MIND_SECRET_KEY
+          valueFrom:
+            secretKeyRef:
+              name: infra-mind-secrets
+              key: SECRET_KEY
+        - name: INFRA_MIND_OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: infra-mind-secrets
+              key: OPENAI_API_KEY
+        - name: INFRA_MIND_AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: infra-mind-secrets
+              key: AWS_ACCESS_KEY_ID
+        - name: INFRA_MIND_AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: infra-mind-secrets
+              key: AWS_SECRET_ACCESS_KEY
+        - name: INFRA_MIND_AZURE_CLIENT_ID
+          valueFrom:
+            secretKeyRef:
+              name: infra-mind-secrets
+              key: AZURE_CLIENT_ID
+        - name: INFRA_MIND_AZURE_CLIENT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: infra-mind-secrets
+              key: AZURE_CLIENT_SECRET
+        - name: INFRA_MIND_AZURE_TENANT_ID
+          valueFrom:
+            secretKeyRef:
+              name: infra-mind-secrets
+              key: AZURE_TENANT_ID
+        - name: INFRA_MIND_GCP_PROJECT_ID
+          valueFrom:
+            secretKeyRef:
+              name: infra-mind-secrets
+              key: GCP_PROJECT_ID
+        
+        # Database credentials
+        - name: MONGO_ROOT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: infra-mind-secrets
+              key: MONGO_ROOT_USERNAME
+        - name: MONGO_ROOT_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: infra-mind-secrets
+              key: MONGO_ROOT_PASSWORD
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: infra-mind-secrets
+              key: REDIS_PASSWORD
+        
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+        - name: gcp-service-account
+          mountPath: /app/secrets
+          readOnly: true
+        
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2000m"
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+      
+      volumes:
+      - name: logs
+        emptyDir: {}
+      - name: gcp-service-account
+        secret:
+          secretName: gcp-service-account
+          optional: true
+      
+      initContainers:
+      - name: wait-for-mongodb
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z mongodb-service 27017; do echo waiting for mongodb; sleep 2; done;']
+      - name: wait-for-redis
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z redis-service 6379; do echo waiting for redis; sleep 2; done;']
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: infra-mind-api-service
+  namespace: infra-mind
+  labels:
+    app: infra-mind-api
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+spec:
+  selector:
+    app: infra-mind-api
+  ports:
+  - port: 8000
+    targetPort: 8000
+    protocol: TCP
+    name: http
+  type: ClusterIP
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: infra-mind-api
+  namespace: infra-mind
+  labels:
+    app: infra-mind-api
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: infra-mind-api-pdb
+  namespace: infra-mind
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: infra-mind-api

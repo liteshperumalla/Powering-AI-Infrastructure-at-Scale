@@ -1,0 +1,373 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  release:
+    types: [ published ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_API: ${{ github.repository }}/api
+  IMAGE_NAME_FRONTEND: ${{ github.repository }}/frontend
+
+jobs:
+  # Code Quality and Testing
+  test:
+    name: Test and Quality Checks
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.11]
+        node-version: [20]
+    
+    services:
+      mongodb:
+        image: mongo:7.0
+        env:
+          MONGO_INITDB_ROOT_USERNAME: test
+          MONGO_INITDB_ROOT_PASSWORD: test
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      
+      redis:
+        image: redis:7.2-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Set up Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: frontend-react/package-lock.json
+    
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/pyproject.toml') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e .
+        pip install pytest pytest-cov pytest-asyncio black flake8 mypy
+    
+    - name: Install Node.js dependencies
+      working-directory: ./frontend-react
+      run: npm ci
+    
+    - name: Code formatting check (Black)
+      run: black --check --diff src/ tests/
+    
+    - name: Linting (Flake8)
+      run: flake8 src/ tests/ --max-line-length=88 --extend-ignore=E203,W503
+    
+    - name: Type checking (MyPy)
+      run: mypy src/ --ignore-missing-imports
+    
+    - name: Frontend linting
+      working-directory: ./frontend-react
+      run: npm run lint
+    
+    - name: Frontend type checking
+      working-directory: ./frontend-react
+      run: npm run type-check
+    
+    - name: Run Python tests
+      env:
+        INFRA_MIND_MONGODB_URL: mongodb://test:test@localhost:27017/test_infra_mind?authSource=admin
+        INFRA_MIND_REDIS_URL: redis://localhost:6379
+        INFRA_MIND_ENVIRONMENT: test
+        INFRA_MIND_SECRET_KEY: test-secret-key-for-ci
+        INFRA_MIND_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_TEST }}
+      run: |
+        pytest tests/ -v --cov=src --cov-report=xml --cov-report=html
+    
+    - name: Run Frontend tests
+      working-directory: ./frontend-react
+      run: npm test -- --coverage --watchAll=false
+    
+    - name: Upload Python coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: python
+        name: python-coverage
+    
+    - name: Upload Frontend coverage to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./frontend-react/coverage/lcov.info
+        flags: frontend
+        name: frontend-coverage
+    
+    - name: Security scan (Bandit)
+      run: |
+        pip install bandit
+        bandit -r src/ -f json -o bandit-report.json || true
+    
+    - name: Upload security scan results
+      uses: actions/upload-artifact@v3
+      with:
+        name: security-scan-results
+        path: bandit-report.json
+
+  # Build and Push Docker Images
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name != 'pull_request'
+    
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Extract metadata for API
+      id: meta-api
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_API }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+    
+    - name: Extract metadata for Frontend
+      id: meta-frontend
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+    
+    - name: Build and push API image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: ./Dockerfile
+        target: production
+        push: true
+        tags: ${{ steps.meta-api.outputs.tags }}
+        labels: ${{ steps.meta-api.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64,linux/arm64
+    
+    - name: Build and push Frontend image
+      uses: docker/build-push-action@v5
+      with:
+        context: ./frontend-react
+        file: ./frontend-react/Dockerfile
+        target: production
+        push: true
+        tags: ${{ steps.meta-frontend.outputs.tags }}
+        labels: ${{ steps.meta-frontend.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+        platforms: linux/amd64,linux/arm64
+
+  # Security Scanning
+  security:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name != 'pull_request'
+    
+    permissions:
+      contents: read
+      security-events: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@master
+      with:
+        image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_API }}:${{ github.sha }}
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+    
+    - name: Upload Trivy scan results to GitHub Security tab
+      uses: github/codeql-action/upload-sarif@v2
+      with:
+        sarif_file: 'trivy-results.sarif'
+
+  # Deploy to Staging
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Configure kubectl
+      uses: azure/k8s-set-context@v3
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
+    
+    - name: Deploy to staging
+      run: |
+        # Update image tags in staging manifests
+        sed -i "s|image: infra-mind/api:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_API }}:${{ github.sha }}|g" k8s/api-deployment.yaml
+        sed -i "s|image: infra-mind/frontend:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:${{ github.sha }}|g" k8s/frontend-deployment.yaml
+        
+        # Apply staging configurations
+        kubectl apply -f k8s/namespace.yaml
+        kubectl apply -f k8s/configmap.yaml
+        kubectl apply -f k8s/secrets.yaml -n infra-mind-staging
+        kubectl apply -f k8s/mongodb-deployment.yaml -n infra-mind-staging
+        kubectl apply -f k8s/redis-deployment.yaml -n infra-mind-staging
+        kubectl apply -f k8s/api-deployment.yaml -n infra-mind-staging
+        kubectl apply -f k8s/frontend-deployment.yaml -n infra-mind-staging
+        kubectl apply -f k8s/ingress.yaml
+        
+        # Wait for rollout
+        kubectl rollout status deployment/infra-mind-api -n infra-mind-staging --timeout=600s
+        kubectl rollout status deployment/infra-mind-frontend -n infra-mind-staging --timeout=600s
+    
+    - name: Run smoke tests
+      run: |
+        # Wait for services to be ready
+        sleep 30
+        
+        # Test API health
+        kubectl run test-pod --image=curlimages/curl:latest --rm -i --restart=Never -n infra-mind-staging -- \
+          curl -f http://infra-mind-api-service:8000/health
+        
+        # Test frontend health
+        kubectl run test-pod --image=curlimages/curl:latest --rm -i --restart=Never -n infra-mind-staging -- \
+          curl -f http://infra-mind-frontend-service:3000/health
+
+  # Deploy to Production
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [test, build, security]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Configure kubectl
+      uses: azure/k8s-set-context@v3
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ secrets.KUBE_CONFIG_PRODUCTION }}
+    
+    - name: Deploy to production
+      run: |
+        # Update image tags in production manifests
+        sed -i "s|image: infra-mind/api:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_API }}:${{ github.sha }}|g" k8s/api-deployment.yaml
+        sed -i "s|image: infra-mind/frontend:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:${{ github.sha }}|g" k8s/frontend-deployment.yaml
+        
+        # Apply production configurations
+        kubectl apply -f k8s/namespace.yaml
+        kubectl apply -f k8s/configmap.yaml
+        kubectl apply -f k8s/secrets.yaml -n infra-mind
+        kubectl apply -f k8s/mongodb-deployment.yaml -n infra-mind
+        kubectl apply -f k8s/redis-deployment.yaml -n infra-mind
+        kubectl apply -f k8s/api-deployment.yaml -n infra-mind
+        kubectl apply -f k8s/frontend-deployment.yaml -n infra-mind
+        kubectl apply -f k8s/hpa.yaml
+        kubectl apply -f k8s/ingress.yaml
+        
+        # Wait for rollout
+        kubectl rollout status deployment/infra-mind-api -n infra-mind --timeout=600s
+        kubectl rollout status deployment/infra-mind-frontend -n infra-mind --timeout=600s
+    
+    - name: Run production smoke tests
+      run: |
+        # Wait for services to be ready
+        sleep 60
+        
+        # Test API health
+        kubectl run test-pod --image=curlimages/curl:latest --rm -i --restart=Never -n infra-mind -- \
+          curl -f http://infra-mind-api-service:8000/health
+        
+        # Test frontend health
+        kubectl run test-pod --image=curlimages/curl:latest --rm -i --restart=Never -n infra-mind -- \
+          curl -f http://infra-mind-frontend-service:3000/health
+    
+    - name: Notify deployment success
+      uses: 8398a7/action-slack@v3
+      with:
+        status: success
+        text: "🚀 Infra Mind successfully deployed to production!"
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+      if: success()
+    
+    - name: Notify deployment failure
+      uses: 8398a7/action-slack@v3
+      with:
+        status: failure
+        text: "❌ Infra Mind production deployment failed!"
+        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+      if: failure()
+
+  # Cleanup old images
+  cleanup:
+    name: Cleanup Old Images
+    runs-on: ubuntu-latest
+    needs: [deploy-production]
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Delete old container images
+      uses: actions/delete-package-versions@v4
+      with:
+        package-name: 'api'
+        package-type: 'container'
+        min-versions-to-keep: 10
+        delete-only-untagged-versions: true

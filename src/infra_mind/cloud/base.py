@@ -33,6 +33,12 @@ class ServiceCategory(str, Enum):
     SERVERLESS = "serverless"
     CONTAINERS = "containers"
     MONITORING = "monitoring"
+    CONTAINER = "container"  # For Kubernetes services
+    AI_ML = "ai_ml"  # For AI/ML services
+    MANAGEMENT = "management"  # For resource management
+    DEVELOPER_TOOLS = "developer_tools"  # For DevOps services
+    BACKUP = "backup"  # For backup services
+    DISASTER_RECOVERY = "disaster_recovery"  # For disaster recovery
 
 
 @dataclass
@@ -193,7 +199,7 @@ class BaseCloudClient(ABC):
                                    fetch_func, params: Optional[Dict[str, Any]] = None,
                                    cache_ttl: int = 3600) -> Any:
         """
-        Get data from cache or fetch from API with rate limiting.
+        Get data from cache or fetch from API with advanced resilience patterns.
         
         Args:
             service: Service name for caching
@@ -203,79 +209,75 @@ class BaseCloudClient(ABC):
             cache_ttl: Cache TTL in seconds
             
         Returns:
-            Data from cache or API
+            Data from cache or API with resilience metadata
         """
-        from ..core.cache import cache_manager, rate_limiter
+        from ..core.cache import cache_manager
+        from ..core.resilience import resilience_manager
+        from ..core.advanced_rate_limiter import advanced_rate_limiter, RateLimitExceeded
         
         if not self.cache_enabled:
             return await fetch_func()
         
-        try:
-            # Check cache first
-            cached_data = await cache_manager.get(
-                self.provider.value, service, region, params
-            )
+        # Generate service name for resilience patterns
+        service_name = f"{self.provider.value}_{service}"
+        fallback_key = f"{self.provider.value}:{service}:{region}"
+        
+        # Use resilience manager for comprehensive error handling
+        async with resilience_manager.resilient_call(
+            service_name=service_name,
+            fallback_key=fallback_key,
+            cache_manager=cache_manager
+        ) as resilient_execute:
             
-            if cached_data:
-                logger.info(f"Using cached data for {self.provider.value}:{service}:{region}")
-                return cached_data
-            
-            # Check rate limits before making API call
-            rate_check = await rate_limiter.check_rate_limit(
-                self.provider.value, service
-            )
-            
-            if not rate_check["allowed"]:
-                logger.warning(
-                    f"Rate limit exceeded for {self.provider.value}:{service}. "
-                    f"Reset at: {rate_check.get('reset_time')}"
+            async def fetch_with_rate_limiting():
+                """Fetch data with rate limiting check."""
+                # Check advanced rate limits if available
+                if advanced_rate_limiter:
+                    try:
+                        await advanced_rate_limiter.check_rate_limit(service_name)
+                    except RateLimitExceeded as e:
+                        logger.warning(f"Advanced rate limit exceeded: {e}")
+                        
+                        # Try to get stale cached data
+                        stale_data = await cache_manager.get_stale_data(
+                            self.provider.value, service, region, params
+                        )
+                        
+                        if stale_data:
+                            stale_data["rate_limited"] = True
+                            stale_data["retry_after"] = e.retry_after
+                            return stale_data
+                        
+                        raise
+                
+                # Fetch fresh data from API
+                logger.info(f"Fetching fresh data for {self.provider.value}:{service}:{region}")
+                fresh_data = await fetch_func()
+                
+                # Cache the fresh data
+                await cache_manager.set(
+                    self.provider.value, service, region, fresh_data, cache_ttl, params
                 )
                 
-                # Try to get stale cached data as fallback
-                stale_data = await cache_manager.get(
-                    self.provider.value, service, region, params
-                )
-                
-                if stale_data:
-                    stale_data["is_stale"] = True
-                    stale_data["rate_limited"] = True
-                    logger.info(f"Using stale cached data due to rate limiting")
-                    return stale_data
-                
-                raise RateLimitError(
-                    f"Rate limit exceeded and no cached data available",
-                    self.provider,
-                    "RATE_LIMIT_EXCEEDED"
-                )
+                self._increment_api_calls()
+                return fresh_data
             
-            # Fetch fresh data from API
-            logger.info(f"Fetching fresh data for {self.provider.value}:{service}:{region}")
-            fresh_data = await fetch_func()
+            # Execute with full resilience patterns
+            result = await resilient_execute(fetch_with_rate_limiting)
             
-            # Cache the fresh data
-            await cache_manager.set(
-                self.provider.value, service, region, fresh_data, cache_ttl, params
-            )
+            # Add provider metadata to result
+            if isinstance(result.get("data"), dict):
+                result["data"]["provider"] = self.provider.value
+                result["data"]["service"] = service
+                result["data"]["region"] = region
+                result["data"]["resilience_metadata"] = {
+                    "source": result["source"],
+                    "fallback_used": result["fallback_used"],
+                    "degraded_mode": result["degraded_mode"],
+                    "warnings": result["warnings"]
+                }
             
-            self._increment_api_calls()
-            return fresh_data
-            
-        except Exception as e:
-            logger.error(f"Error in cached fetch for {service}: {e}")
-            
-            # Try to get any cached data as fallback
-            fallback_data = await cache_manager.get(
-                self.provider.value, service, region, params
-            )
-            
-            if fallback_data:
-                fallback_data["is_stale"] = True
-                fallback_data["fallback_used"] = True
-                logger.info(f"Using fallback cached data due to API error")
-                return fallback_data
-            
-            # Re-raise the original exception if no fallback available
-            raise
+            return result["data"]
 
 
 class CloudServiceError(Exception):

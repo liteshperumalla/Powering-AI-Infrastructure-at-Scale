@@ -1,0 +1,306 @@
+name: Performance Testing
+
+on:
+  schedule:
+    - cron: '0 4 * * 1'  # Weekly on Monday at 4 AM UTC
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+        - staging
+        - production
+      duration:
+        description: 'Test duration in minutes'
+        required: true
+        default: '10'
+        type: string
+
+jobs:
+  load-test:
+    name: Load Testing
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install locust requests
+    
+    - name: Create Locust test file
+      run: |
+        cat > locustfile.py << 'EOF'
+        from locust import HttpUser, task, between
+        import json
+        import random
+        
+        class InfraMindUser(HttpUser):
+            wait_time = between(1, 3)
+            
+            def on_start(self):
+                # Login and get token
+                response = self.client.post("/auth/login", json={
+                    "email": "test@example.com",
+                    "password": "testpassword"
+                })
+                if response.status_code == 200:
+                    self.token = response.json().get("access_token")
+                    self.headers = {"Authorization": f"Bearer {self.token}"}
+                else:
+                    self.headers = {}
+            
+            @task(3)
+            def health_check(self):
+                self.client.get("/health")
+            
+            @task(2)
+            def get_assessments(self):
+                self.client.get("/assessments", headers=self.headers)
+            
+            @task(1)
+            def create_assessment(self):
+                assessment_data = {
+                    "business_requirements": {
+                        "company_size": "mid-size",
+                        "industry": "technology",
+                        "budget_range": "100k-500k",
+                        "timeline": "6-months",
+                        "compliance_needs": ["GDPR"],
+                        "business_goals": ["cost-optimization", "scalability"]
+                    },
+                    "technical_requirements": {
+                        "current_infrastructure": {"cloud_provider": "aws"},
+                        "workload_characteristics": {"type": "web-application"},
+                        "performance_requirements": {"response_time": "< 200ms"},
+                        "scalability_needs": {"concurrent_users": 1000}
+                    }
+                }
+                self.client.post("/assessments", 
+                               json=assessment_data, 
+                               headers=self.headers)
+            
+            @task(1)
+            def get_recommendations(self):
+                # Simulate getting recommendations for a random assessment
+                assessment_id = f"test-{random.randint(1, 100)}"
+                self.client.get(f"/assessments/{assessment_id}/recommendations", 
+                              headers=self.headers)
+        EOF
+    
+    - name: Run load test
+      env:
+        TARGET_URL: ${{ github.event.inputs.environment == 'production' && 'https://api.infra-mind.example.com' || 'https://api-staging.infra-mind.example.com' }}
+        DURATION: ${{ github.event.inputs.duration || '10' }}
+      run: |
+        locust -f locustfile.py \
+               --host=$TARGET_URL \
+               --users=50 \
+               --spawn-rate=5 \
+               --run-time=${DURATION}m \
+               --html=load-test-report.html \
+               --csv=load-test-results \
+               --headless
+    
+    - name: Upload load test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: load-test-results
+        path: |
+          load-test-report.html
+          load-test-results_*.csv
+
+  stress-test:
+    name: Stress Testing
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Install k6
+      run: |
+        sudo gpg -k
+        sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+        echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+        sudo apt-get update
+        sudo apt-get install k6
+    
+    - name: Create k6 stress test script
+      run: |
+        cat > stress-test.js << 'EOF'
+        import http from 'k6/http';
+        import { check, sleep } from 'k6';
+        import { Rate } from 'k6/metrics';
+        
+        export let errorRate = new Rate('errors');
+        
+        export let options = {
+          stages: [
+            { duration: '2m', target: 10 },   // Ramp up
+            { duration: '5m', target: 50 },   // Stay at 50 users
+            { duration: '2m', target: 100 },  // Ramp up to 100 users
+            { duration: '5m', target: 100 },  // Stay at 100 users
+            { duration: '2m', target: 200 },  // Ramp up to 200 users
+            { duration: '5m', target: 200 },  // Stay at 200 users
+            { duration: '2m', target: 0 },    // Ramp down
+          ],
+          thresholds: {
+            http_req_duration: ['p(95)<500'],
+            http_req_failed: ['rate<0.1'],
+            errors: ['rate<0.1'],
+          },
+        };
+        
+        const BASE_URL = __ENV.TARGET_URL || 'https://api-staging.infra-mind.example.com';
+        
+        export default function() {
+          // Health check
+          let response = http.get(`${BASE_URL}/health`);
+          let result = check(response, {
+            'health check status is 200': (r) => r.status === 200,
+            'health check response time < 500ms': (r) => r.timings.duration < 500,
+          });
+          errorRate.add(!result);
+          
+          sleep(1);
+          
+          // API documentation
+          response = http.get(`${BASE_URL}/docs`);
+          result = check(response, {
+            'docs status is 200': (r) => r.status === 200,
+          });
+          errorRate.add(!result);
+          
+          sleep(1);
+        }
+        EOF
+    
+    - name: Run stress test
+      env:
+        TARGET_URL: ${{ github.event.inputs.environment == 'production' && 'https://api.infra-mind.example.com' || 'https://api-staging.infra-mind.example.com' }}
+      run: |
+        k6 run --out json=stress-test-results.json stress-test.js
+    
+    - name: Upload stress test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: stress-test-results
+        path: stress-test-results.json
+
+  database-performance:
+    name: Database Performance Test
+    runs-on: ubuntu-latest
+    
+    services:
+      mongodb:
+        image: mongo:7.0
+        env:
+          MONGO_INITDB_ROOT_USERNAME: test
+          MONGO_INITDB_ROOT_PASSWORD: test
+        ports:
+          - 27017:27017
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pymongo motor pytest pytest-benchmark
+        pip install -e .
+    
+    - name: Create database performance test
+      run: |
+        cat > test_db_performance.py << 'EOF'
+        import pytest
+        import asyncio
+        from motor.motor_asyncio import AsyncIOMotorClient
+        import random
+        import string
+        from datetime import datetime
+        
+        @pytest.fixture
+        async def db_client():
+            client = AsyncIOMotorClient("mongodb://test:test@localhost:27017")
+            db = client.test_performance
+            yield db
+            await client.drop_database("test_performance")
+            client.close()
+        
+        @pytest.mark.asyncio
+        @pytest.mark.benchmark(group="insert")
+        async def test_insert_performance(benchmark, db_client):
+            async def insert_documents():
+                collection = db_client.assessments
+                documents = []
+                for i in range(100):
+                    doc = {
+                        "user_id": f"user_{i}",
+                        "status": random.choice(["pending", "completed"]),
+                        "business_requirements": {
+                            "company_size": random.choice(["small", "medium", "large"]),
+                            "industry": random.choice(["tech", "finance", "healthcare"]),
+                            "budget_range": random.choice(["10k-50k", "50k-100k", "100k+"]),
+                        },
+                        "created_at": datetime.utcnow(),
+                        "data": "".join(random.choices(string.ascii_letters, k=1000))
+                    }
+                    documents.append(doc)
+                await collection.insert_many(documents)
+            
+            await benchmark.pedantic(insert_documents, rounds=5)
+        
+        @pytest.mark.asyncio
+        @pytest.mark.benchmark(group="query")
+        async def test_query_performance(benchmark, db_client):
+            # First insert test data
+            collection = db_client.assessments
+            documents = []
+            for i in range(1000):
+                doc = {
+                    "user_id": f"user_{i % 100}",
+                    "status": random.choice(["pending", "completed"]),
+                    "created_at": datetime.utcnow(),
+                    "score": random.randint(1, 100)
+                }
+                documents.append(doc)
+            await collection.insert_many(documents)
+            
+            # Create index
+            await collection.create_index([("user_id", 1), ("status", 1)])
+            
+            async def query_documents():
+                cursor = collection.find({"user_id": "user_50", "status": "completed"})
+                results = await cursor.to_list(length=None)
+                return len(results)
+            
+            result = await benchmark.pedantic(query_documents, rounds=10)
+            assert result >= 0
+        EOF
+    
+    - name: Run database performance tests
+      run: |
+        pytest test_db_performance.py --benchmark-json=db-benchmark.json -v
+    
+    - name: Upload database performance results
+      uses: actions/upload-artifact@v3
+      with:
+        name: database-performance-results
+        path: db-benchmark.json

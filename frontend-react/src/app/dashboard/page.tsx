@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
     Container,
     Box,
@@ -9,12 +9,16 @@ import {
     Button,
     Avatar,
     Typography,
-    Chip,
-    LinearProgress,
+    SpeedDial,
+    SpeedDialAction,
+    SpeedDialIcon,
 } from '@mui/material';
 import {
     Assessment,
     GetApp,
+    Compare,
+    Analytics,
+    CloudDownload,
 } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
 import Navigation from '@/components/Navigation';
@@ -23,9 +27,84 @@ import RecommendationScoreChart from '@/components/charts/RecommendationScoreCha
 import AssessmentResultsChart from '@/components/charts/AssessmentResultsChart';
 import RecommendationTable from '@/components/RecommendationTable';
 import ReportPreview from '@/components/ReportPreview';
+// import D3InteractiveChart from '@/components/charts/D3InteractiveChart';
+import AdvancedReportExport from '@/components/AdvancedReportExport';
+import ScenarioComparison from '@/components/ScenarioComparison';
+import ProgressIndicator, { useProgressSteps } from '@/components/ProgressIndicator';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { fetchAssessments } from '@/store/slices/assessmentSlice';
+import { fetchReports } from '@/store/slices/reportSlice';
+import { fetchScenarios } from '@/store/slices/scenarioSlice';
+import { openModal, closeModal, addNotification } from '@/store/slices/uiSlice';
 
 export default function DashboardPage() {
     const router = useRouter();
+    const dispatch = useAppDispatch();
+
+    // Redux state
+    const { assessments, loading: assessmentLoading } = useAppSelector(state => state.assessment);
+    const { reports, loading: reportLoading } = useAppSelector(state => state.report);
+    const { scenarios, comparisonScenarios } = useAppSelector(state => state.scenario);
+    const { modals } = useAppSelector(state => state.ui);
+
+    // Local state
+    const [speedDialOpen, setSpeedDialOpen] = useState(false);
+
+    // Progress steps from Redux state
+    const progressSteps = useProgressSteps();
+
+    // Load data on component mount
+    useEffect(() => {
+        dispatch(fetchAssessments());
+        dispatch(fetchReports());
+        dispatch(fetchScenarios());
+    }, [dispatch]);
+
+    // Sample D3 data for interactive visualization (commented out for now)
+    // const d3SampleData = [
+    //     { id: '1', x: 10, y: 20, category: 'AWS', value: 1200, label: 'EC2 Instances', metadata: { region: 'us-east-1' } },
+    //     { id: '2', x: 15, y: 25, category: 'AWS', value: 800, label: 'RDS Database', metadata: { region: 'us-east-1' } },
+    //     { id: '3', x: 20, y: 15, category: 'Azure', value: 1100, label: 'Virtual Machines', metadata: { region: 'eastus' } },
+    //     { id: '4', x: 25, y: 30, category: 'Azure', value: 700, label: 'SQL Database', metadata: { region: 'eastus' } },
+    //     { id: '5', x: 30, y: 18, category: 'GCP', value: 950, label: 'Compute Engine', metadata: { region: 'us-central1' } },
+    //     { id: '6', x: 35, y: 22, category: 'GCP', value: 600, label: 'Cloud SQL', metadata: { region: 'us-central1' } },
+    // ];
+
+    const handleSpeedDialAction = (action: string) => {
+        setSpeedDialOpen(false);
+
+        switch (action) {
+            case 'export':
+                if (reports.length > 0) {
+                    dispatch(openModal('reportExport'));
+                } else {
+                    dispatch(addNotification({
+                        type: 'warning',
+                        message: 'No reports available to export',
+                    }));
+                }
+                break;
+            case 'compare':
+                if (scenarios.length >= 2) {
+                    dispatch(openModal('scenarioComparison'));
+                } else {
+                    dispatch(addNotification({
+                        type: 'warning',
+                        message: 'Need at least 2 scenarios to compare',
+                    }));
+                }
+                break;
+            case 'analytics':
+                router.push('/analytics');
+                break;
+            case 'download':
+                dispatch(addNotification({
+                    type: 'info',
+                    message: 'Download feature coming soon',
+                }));
+                break;
+        }
+    };
 
     return (
         <Navigation title="Dashboard">
@@ -176,6 +255,33 @@ export default function DashboardPage() {
                     </Box>
                 </Box>
 
+                {/* Interactive D3 Visualization - Placeholder for now */}
+                <Box sx={{ mb: 4 }}>
+                    <Card>
+                        <CardContent>
+                            <Typography variant="h6" gutterBottom>
+                                Advanced D3.js Visualization
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                Interactive cloud service cost vs performance analysis will be displayed here.
+                                This component uses D3.js for advanced data visualization with zoom, pan, and filtering capabilities.
+                            </Typography>
+                            <Button
+                                variant="outlined"
+                                sx={{ mt: 2 }}
+                                onClick={() => {
+                                    dispatch(addNotification({
+                                        type: 'info',
+                                        message: 'D3.js visualization feature is ready for implementation',
+                                    }));
+                                }}
+                            >
+                                Test D3 Integration
+                            </Button>
+                        </CardContent>
+                    </Card>
+                </Box>
+
                 {/* Assessment Results Chart */}
                 <Box sx={{ mb: 4 }}>
                     <AssessmentResultsChart
@@ -316,24 +422,15 @@ export default function DashboardPage() {
 
                     {/* Progress Overview */}
                     <Box>
-                        <Card>
-                            <CardContent>
-                                <Typography variant="h6" gutterBottom>
-                                    Assessment Progress
-                                </Typography>
-                                <Box sx={{ mb: 2 }}>
-                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                                        <Typography variant="body2">Overall Progress</Typography>
-                                        <Typography variant="body2">65%</Typography>
-                                    </Box>
-                                    <LinearProgress variant="determinate" value={65} />
-                                </Box>
-                                <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 3 }}>
-                                    <Chip label="Business Requirements" color="success" size="small" />
-                                    <Chip label="Technical Assessment" color="primary" size="small" />
-                                    <Chip label="Compliance Review" color="default" size="small" />
-                                </Box>
+                        <ProgressIndicator
+                            title="Assessment Progress"
+                            steps={progressSteps}
+                            variant="stepper"
+                            showPercentage={true}
+                        />
 
+                        <Card sx={{ mt: 2 }}>
+                            <CardContent>
                                 <Typography variant="h6" gutterBottom>
                                     Recent Activity
                                 </Typography>
@@ -365,6 +462,49 @@ export default function DashboardPage() {
                         </Card>
                     </Box>
                 </Box>
+
+                {/* Speed Dial for Quick Actions */}
+                <SpeedDial
+                    ariaLabel="Quick Actions"
+                    sx={{ position: 'fixed', bottom: 16, right: 16 }}
+                    icon={<SpeedDialIcon />}
+                    open={speedDialOpen}
+                    onClose={() => setSpeedDialOpen(false)}
+                    onOpen={() => setSpeedDialOpen(true)}
+                >
+                    <SpeedDialAction
+                        icon={<GetApp />}
+                        tooltipTitle="Export Report"
+                        onClick={() => handleSpeedDialAction('export')}
+                    />
+                    <SpeedDialAction
+                        icon={<Compare />}
+                        tooltipTitle="Compare Scenarios"
+                        onClick={() => handleSpeedDialAction('compare')}
+                    />
+                    <SpeedDialAction
+                        icon={<Analytics />}
+                        tooltipTitle="Advanced Analytics"
+                        onClick={() => handleSpeedDialAction('analytics')}
+                    />
+                    <SpeedDialAction
+                        icon={<CloudDownload />}
+                        tooltipTitle="Download Data"
+                        onClick={() => handleSpeedDialAction('download')}
+                    />
+                </SpeedDial>
+
+                {/* Advanced Modals */}
+                <AdvancedReportExport
+                    open={modals.reportExport}
+                    onClose={() => dispatch(closeModal('reportExport'))}
+                    reportId={reports[0]?.id || ''}
+                />
+
+                <ScenarioComparison
+                    open={modals.scenarioComparison}
+                    onClose={() => dispatch(closeModal('scenarioComparison'))}
+                />
             </Container>
         </Navigation>
     );

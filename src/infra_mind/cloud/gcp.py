@@ -52,6 +52,9 @@ class GCPClient(BaseCloudClient):
         self.compute_client = GCPComputeClient(project_id, region, service_account_path)
         self.sql_client = GCPSQLClient(project_id, region, service_account_path)
         self.ai_client = GCPAIClient(project_id, region, service_account_path)
+        self.gke_client = GCPGKEClient(project_id, region, service_account_path)
+        self.asset_client = GCPAssetClient(project_id, region, service_account_path)
+        self.recommender_client = GCPRecommenderClient(project_id, region, service_account_path)
     
     def _validate_credentials(self, service_account_path: Optional[str]):
         """Validate GCP credentials are available."""
@@ -88,6 +91,18 @@ class GCPClient(BaseCloudClient):
     async def get_ai_services(self, region: Optional[str] = None) -> CloudServiceResponse:
         """Get GCP AI/ML services."""
         return await self.ai_client.get_ai_services(region or self.region)
+    
+    async def get_kubernetes_services(self, region: Optional[str] = None) -> CloudServiceResponse:
+        """Get GCP Kubernetes Engine (GKE) services."""
+        return await self.gke_client.get_gke_services(region or self.region)
+    
+    async def get_asset_inventory(self, asset_types: Optional[List[str]] = None) -> Dict[str, Any]:
+        """Get GCP asset inventory information."""
+        return await self.asset_client.get_asset_inventory(asset_types)
+    
+    async def get_recommendations(self, recommender_type: str, region: Optional[str] = None) -> Dict[str, Any]:
+        """Get GCP recommendations for cost optimization and performance."""
+        return await self.recommender_client.get_recommendations(recommender_type, region or self.region)
     
     async def get_service_pricing(self, service_id: str, region: Optional[str] = None) -> Dict[str, Any]:
         """Get pricing for a specific GCP service."""
@@ -931,3 +946,635 @@ class GCPAIClient:
         services.append(document_ai_service)
         
         return services
+
+
+class GCPGKEClient:
+    """
+    GCP Google Kubernetes Engine (GKE) client.
+    
+    Learning Note: GKE provides managed Kubernetes clusters with various
+    node pool configurations and pricing models.
+    """
+    
+    def __init__(self, project_id: str, region: str = "us-central1", 
+                 service_account_path: Optional[str] = None):
+        """Initialize GCP GKE client."""
+        self.project_id = project_id
+        self.region = region
+        self.service_account_path = service_account_path
+        self.base_url = "https://container.googleapis.com/v1"
+        
+        logger.info("GCP GKE client initialized (using fallback data)")
+    
+    async def get_gke_services(self, region: str) -> CloudServiceResponse:
+        """
+        Get GCP GKE services with pricing information.
+        
+        Args:
+            region: GCP region
+            
+        Returns:
+            CloudServiceResponse with GKE services
+        """
+        try:
+            services = []
+            
+            # GKE cluster management pricing
+            cluster_management_service = CloudService(
+                provider=CloudProvider.GCP,
+                service_name="GKE Cluster Management",
+                service_id="gke_cluster_management",
+                category=ServiceCategory.CONTAINER,
+                region=region,
+                description="Managed Kubernetes cluster control plane",
+                pricing_model="pay_per_cluster",
+                hourly_price=0.10,  # $0.10 per cluster per hour
+                pricing_unit="cluster/hour",
+                specifications={
+                    "service_type": "cluster_management",
+                    "kubernetes_version": "1.27",
+                    "max_nodes_per_cluster": 15000,
+                    "max_pods_per_node": 110,
+                    "networking": "VPC-native"
+                },
+                features=["auto_scaling", "auto_upgrade", "workload_identity", "binary_authorization"]
+            )
+            services.append(cluster_management_service)
+            
+            # GKE node pool configurations
+            node_pool_configs = [
+                {
+                    "machine_type": "e2-micro",
+                    "vcpus": 2,
+                    "memory_gb": 1,
+                    "hourly_price": 0.0063,
+                    "description": "Shared-core node pool for development workloads"
+                },
+                {
+                    "machine_type": "e2-small",
+                    "vcpus": 2,
+                    "memory_gb": 2,
+                    "hourly_price": 0.0126,
+                    "description": "Shared-core node pool for light workloads"
+                },
+                {
+                    "machine_type": "e2-medium",
+                    "vcpus": 2,
+                    "memory_gb": 4,
+                    "hourly_price": 0.0252,
+                    "description": "Shared-core node pool for moderate workloads"
+                },
+                {
+                    "machine_type": "n1-standard-1",
+                    "vcpus": 1,
+                    "memory_gb": 3.75,
+                    "hourly_price": 0.0475,
+                    "description": "Standard node pool for general workloads"
+                },
+                {
+                    "machine_type": "n1-standard-2",
+                    "vcpus": 2,
+                    "memory_gb": 7.5,
+                    "hourly_price": 0.0950,
+                    "description": "Standard node pool for general workloads"
+                },
+                {
+                    "machine_type": "n1-standard-4",
+                    "vcpus": 4,
+                    "memory_gb": 15,
+                    "hourly_price": 0.1900,
+                    "description": "Standard node pool for compute-intensive workloads"
+                },
+                {
+                    "machine_type": "n2-standard-2",
+                    "vcpus": 2,
+                    "memory_gb": 8,
+                    "hourly_price": 0.0776,
+                    "description": "N2 node pool with balanced compute and memory"
+                },
+                {
+                    "machine_type": "n2-standard-4",
+                    "vcpus": 4,
+                    "memory_gb": 16,
+                    "hourly_price": 0.1552,
+                    "description": "N2 node pool with balanced compute and memory"
+                },
+                {
+                    "machine_type": "c2-standard-4",
+                    "vcpus": 4,
+                    "memory_gb": 16,
+                    "hourly_price": 0.1687,
+                    "description": "Compute-optimized node pool for CPU-intensive workloads"
+                },
+                {
+                    "machine_type": "n1-highmem-2",
+                    "vcpus": 2,
+                    "memory_gb": 13,
+                    "hourly_price": 0.1184,
+                    "description": "High-memory node pool for memory-intensive workloads"
+                }
+            ]
+            
+            for config in node_pool_configs:
+                service = CloudService(
+                    provider=CloudProvider.GCP,
+                    service_name=f"GKE Node Pool - {config['machine_type']}",
+                    service_id=f"gke_node_pool_{config['machine_type'].replace('-', '_')}",
+                    category=ServiceCategory.CONTAINER,
+                    region=region,
+                    description=config['description'],
+                    pricing_model="pay_per_node",
+                    hourly_price=config['hourly_price'],
+                    pricing_unit="node/hour",
+                    specifications={
+                        "machine_type": config['machine_type'],
+                        "vcpus": config['vcpus'],
+                        "memory_gb": config['memory_gb'],
+                        "disk_size_gb": 100,
+                        "disk_type": "pd-standard",
+                        "max_pods_per_node": 110
+                    },
+                    features=["auto_scaling", "preemptible_nodes", "spot_instances", "node_auto_repair"]
+                )
+                services.append(service)
+            
+            # GKE Autopilot pricing
+            autopilot_service = CloudService(
+                provider=CloudProvider.GCP,
+                service_name="GKE Autopilot",
+                service_id="gke_autopilot",
+                category=ServiceCategory.CONTAINER,
+                region=region,
+                description="Fully managed, serverless Kubernetes experience",
+                pricing_model="pay_per_resource",
+                hourly_price=0.0445,  # Per vCPU per hour
+                pricing_unit="vCPU/hour",
+                specifications={
+                    "service_type": "serverless_kubernetes",
+                    "cpu_price_per_hour": 0.0445,
+                    "memory_price_per_gb_hour": 0.0049,
+                    "ephemeral_storage_price_per_gb_hour": 0.000274,
+                    "min_cpu": 0.25,
+                    "max_cpu": 32,
+                    "min_memory_gb": 0.5,
+                    "max_memory_gb": 128
+                },
+                features=["serverless", "auto_scaling", "security_hardening", "cost_optimization"]
+            )
+            services.append(autopilot_service)
+            
+            return CloudServiceResponse(
+                provider=CloudProvider.GCP,
+                service_category=ServiceCategory.CONTAINER,
+                region=region,
+                services=services,
+                metadata={"gke_services_count": len(services)}
+            )
+            
+        except Exception as e:
+            raise CloudServiceError(
+                f"Failed to get GCP GKE services: {str(e)}",
+                CloudProvider.GCP,
+                "GKE_API_ERROR"
+            )
+
+
+class GCPAssetClient:
+    """
+    GCP Cloud Asset Inventory client.
+    
+    Learning Note: Cloud Asset Inventory provides visibility into GCP resources
+    and their configurations across projects and organizations.
+    """
+    
+    def __init__(self, project_id: str, region: str = "us-central1", 
+                 service_account_path: Optional[str] = None):
+        """Initialize GCP Asset client."""
+        self.project_id = project_id
+        self.region = region
+        self.service_account_path = service_account_path
+        self.base_url = "https://cloudasset.googleapis.com/v1"
+        
+        logger.info("GCP Asset client initialized (using fallback data)")
+    
+    async def get_asset_inventory(self, asset_types: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Get GCP asset inventory information.
+        
+        Args:
+            asset_types: List of asset types to query (optional)
+            
+        Returns:
+            Dictionary with asset inventory information
+        """
+        try:
+            # Default asset types if none specified
+            if not asset_types:
+                asset_types = [
+                    "compute.googleapis.com/Instance",
+                    "compute.googleapis.com/Disk",
+                    "storage.googleapis.com/Bucket",
+                    "sqladmin.googleapis.com/Instance",
+                    "container.googleapis.com/Cluster"
+                ]
+            
+            # Simulate asset inventory data
+            asset_inventory = {
+                "project_id": self.project_id,
+                "region": self.region,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "asset_types_queried": asset_types,
+                "assets": self._generate_sample_assets(asset_types),
+                "summary": {
+                    "total_assets": 0,
+                    "assets_by_type": {},
+                    "assets_by_region": {},
+                    "estimated_monthly_cost": 0.0
+                }
+            }
+            
+            # Calculate summary statistics
+            asset_inventory["summary"]["total_assets"] = len(asset_inventory["assets"])
+            
+            for asset in asset_inventory["assets"]:
+                asset_type = asset["asset_type"]
+                asset_region = asset.get("location", "global")
+                
+                # Count by type
+                if asset_type not in asset_inventory["summary"]["assets_by_type"]:
+                    asset_inventory["summary"]["assets_by_type"][asset_type] = 0
+                asset_inventory["summary"]["assets_by_type"][asset_type] += 1
+                
+                # Count by region
+                if asset_region not in asset_inventory["summary"]["assets_by_region"]:
+                    asset_inventory["summary"]["assets_by_region"][asset_region] = 0
+                asset_inventory["summary"]["assets_by_region"][asset_region] += 1
+                
+                # Add to estimated cost
+                asset_inventory["summary"]["estimated_monthly_cost"] += asset.get("estimated_monthly_cost", 0.0)
+            
+            return asset_inventory
+            
+        except Exception as e:
+            raise CloudServiceError(
+                f"Failed to get GCP asset inventory: {str(e)}",
+                CloudProvider.GCP,
+                "ASSET_API_ERROR"
+            )
+    
+    def _generate_sample_assets(self, asset_types: List[str]) -> List[Dict[str, Any]]:
+        """Generate sample asset data for demonstration."""
+        assets = []
+        
+        for asset_type in asset_types:
+            if asset_type == "compute.googleapis.com/Instance":
+                assets.extend([
+                    {
+                        "name": f"projects/{self.project_id}/zones/{self.region}-a/instances/web-server-1",
+                        "asset_type": asset_type,
+                        "location": f"{self.region}-a",
+                        "resource": {
+                            "machine_type": "n1-standard-2",
+                            "status": "RUNNING",
+                            "creation_timestamp": "2024-01-15T10:30:00Z"
+                        },
+                        "estimated_monthly_cost": 69.35
+                    },
+                    {
+                        "name": f"projects/{self.project_id}/zones/{self.region}-b/instances/db-server-1",
+                        "asset_type": asset_type,
+                        "location": f"{self.region}-b",
+                        "resource": {
+                            "machine_type": "n1-highmem-2",
+                            "status": "RUNNING",
+                            "creation_timestamp": "2024-01-10T14:20:00Z"
+                        },
+                        "estimated_monthly_cost": 86.44
+                    }
+                ])
+            
+            elif asset_type == "compute.googleapis.com/Disk":
+                assets.extend([
+                    {
+                        "name": f"projects/{self.project_id}/zones/{self.region}-a/disks/web-server-1-disk",
+                        "asset_type": asset_type,
+                        "location": f"{self.region}-a",
+                        "resource": {
+                            "size_gb": 100,
+                            "type": "pd-standard",
+                            "status": "READY"
+                        },
+                        "estimated_monthly_cost": 4.00
+                    },
+                    {
+                        "name": f"projects/{self.project_id}/zones/{self.region}-b/disks/db-server-1-disk",
+                        "asset_type": asset_type,
+                        "location": f"{self.region}-b",
+                        "resource": {
+                            "size_gb": 500,
+                            "type": "pd-ssd",
+                            "status": "READY"
+                        },
+                        "estimated_monthly_cost": 85.00
+                    }
+                ])
+            
+            elif asset_type == "storage.googleapis.com/Bucket":
+                assets.append({
+                    "name": f"projects/{self.project_id}/buckets/app-data-bucket",
+                    "asset_type": asset_type,
+                    "location": "global",
+                    "resource": {
+                        "storage_class": "STANDARD",
+                        "location": "US",
+                        "size_bytes": 1073741824  # 1GB
+                    },
+                    "estimated_monthly_cost": 0.02
+                })
+            
+            elif asset_type == "sqladmin.googleapis.com/Instance":
+                assets.append({
+                    "name": f"projects/{self.project_id}/instances/main-database",
+                    "asset_type": asset_type,
+                    "location": self.region,
+                    "resource": {
+                        "tier": "db-n1-standard-2",
+                        "database_version": "MYSQL_8_0",
+                        "state": "RUNNABLE"
+                    },
+                    "estimated_monthly_cost": 120.45
+                })
+            
+            elif asset_type == "container.googleapis.com/Cluster":
+                assets.append({
+                    "name": f"projects/{self.project_id}/locations/{self.region}/clusters/main-cluster",
+                    "asset_type": asset_type,
+                    "location": self.region,
+                    "resource": {
+                        "status": "RUNNING",
+                        "current_master_version": "1.27.3-gke.100",
+                        "current_node_count": 3
+                    },
+                    "estimated_monthly_cost": 73.00
+                })
+        
+        return assets
+
+
+class GCPRecommenderClient:
+    """
+    GCP Recommender API client.
+    
+    Learning Note: The Recommender API provides machine learning-driven
+    recommendations for cost optimization, security, and performance improvements.
+    """
+    
+    def __init__(self, project_id: str, region: str = "us-central1", 
+                 service_account_path: Optional[str] = None):
+        """Initialize GCP Recommender client."""
+        self.project_id = project_id
+        self.region = region
+        self.service_account_path = service_account_path
+        self.base_url = "https://recommender.googleapis.com/v1"
+        
+        logger.info("GCP Recommender client initialized (using fallback data)")
+    
+    async def get_recommendations(self, recommender_type: str, region: str) -> Dict[str, Any]:
+        """
+        Get GCP recommendations for optimization.
+        
+        Args:
+            recommender_type: Type of recommendations to get
+            region: GCP region
+            
+        Returns:
+            Dictionary with recommendations
+        """
+        try:
+            # Available recommender types
+            available_recommenders = {
+                "cost_optimization": "google.compute.instance.MachineTypeRecommender",
+                "security": "google.iam.policy.Recommender",
+                "performance": "google.compute.disk.IdleResourceRecommender",
+                "rightsizing": "google.compute.instance.IdleResourceRecommender",
+                "commitment_utilization": "google.billing.account.CommitmentUtilizationRecommender"
+            }
+            
+            if recommender_type not in available_recommenders:
+                recommender_type = "cost_optimization"  # Default
+            
+            recommendations = {
+                "project_id": self.project_id,
+                "region": region,
+                "recommender_type": recommender_type,
+                "recommender_id": available_recommenders[recommender_type],
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "recommendations": self._generate_sample_recommendations(recommender_type),
+                "summary": {
+                    "total_recommendations": 0,
+                    "potential_monthly_savings": 0.0,
+                    "recommendations_by_priority": {
+                        "HIGH": 0,
+                        "MEDIUM": 0,
+                        "LOW": 0
+                    }
+                }
+            }
+            
+            # Calculate summary statistics
+            recommendations["summary"]["total_recommendations"] = len(recommendations["recommendations"])
+            
+            for rec in recommendations["recommendations"]:
+                priority = rec.get("priority", "MEDIUM")
+                recommendations["summary"]["recommendations_by_priority"][priority] += 1
+                recommendations["summary"]["potential_monthly_savings"] += rec.get("potential_monthly_savings", 0.0)
+            
+            return recommendations
+            
+        except Exception as e:
+            raise CloudServiceError(
+                f"Failed to get GCP recommendations: {str(e)}",
+                CloudProvider.GCP,
+                "RECOMMENDER_API_ERROR"
+            )
+    
+    def _generate_sample_recommendations(self, recommender_type: str) -> List[Dict[str, Any]]:
+        """Generate sample recommendations based on type."""
+        recommendations = []
+        
+        if recommender_type == "cost_optimization":
+            recommendations.extend([
+                {
+                    "name": f"projects/{self.project_id}/locations/{self.region}/recommenders/google.compute.instance.MachineTypeRecommender/recommendations/rec-001",
+                    "description": "Resize overprovisioned VM instance web-server-1",
+                    "priority": "HIGH",
+                    "category": "COST",
+                    "impact": {
+                        "cost_projection": {
+                            "cost": {"currency_code": "USD", "units": "-25"},
+                            "duration": "2592000s"  # 30 days
+                        }
+                    },
+                    "content": {
+                        "operation_groups": [{
+                            "operations": [{
+                                "action": "replace",
+                                "resource_type": "compute.googleapis.com/Instance",
+                                "resource": f"projects/{self.project_id}/zones/{self.region}-a/instances/web-server-1",
+                                "path": "/machineType",
+                                "value": f"projects/{self.project_id}/zones/{self.region}-a/machineTypes/n1-standard-1"
+                            }]
+                        }]
+                    },
+                    "potential_monthly_savings": 25.00,
+                    "confidence": 0.85
+                },
+                {
+                    "name": f"projects/{self.project_id}/locations/{self.region}/recommenders/google.compute.disk.IdleResourceRecommender/recommendations/rec-002",
+                    "description": "Delete unused persistent disk backup-disk-old",
+                    "priority": "MEDIUM",
+                    "category": "COST",
+                    "impact": {
+                        "cost_projection": {
+                            "cost": {"currency_code": "USD", "units": "-15"},
+                            "duration": "2592000s"
+                        }
+                    },
+                    "content": {
+                        "operation_groups": [{
+                            "operations": [{
+                                "action": "remove",
+                                "resource_type": "compute.googleapis.com/Disk",
+                                "resource": f"projects/{self.project_id}/zones/{self.region}-a/disks/backup-disk-old"
+                            }]
+                        }]
+                    },
+                    "potential_monthly_savings": 15.00,
+                    "confidence": 0.95
+                }
+            ])
+        
+        elif recommender_type == "security":
+            recommendations.extend([
+                {
+                    "name": f"projects/{self.project_id}/locations/global/recommenders/google.iam.policy.Recommender/recommendations/sec-001",
+                    "description": "Remove overly broad IAM role from service account",
+                    "priority": "HIGH",
+                    "category": "SECURITY",
+                    "impact": {
+                        "security_projection": {
+                            "details": {
+                                "risk_reduction": "HIGH",
+                                "affected_resources": 1
+                            }
+                        }
+                    },
+                    "content": {
+                        "operation_groups": [{
+                            "operations": [{
+                                "action": "remove",
+                                "resource_type": "cloudresourcemanager.googleapis.com/Project",
+                                "resource": f"projects/{self.project_id}",
+                                "path": "/iamPolicy/bindings/*/members/*",
+                                "value": "serviceAccount:app-service@project.iam.gserviceaccount.com"
+                            }]
+                        }]
+                    },
+                    "potential_monthly_savings": 0.0,
+                    "confidence": 0.90
+                }
+            ])
+        
+        elif recommender_type == "performance":
+            recommendations.extend([
+                {
+                    "name": f"projects/{self.project_id}/locations/{self.region}/recommenders/google.compute.instance.MachineTypeRecommender/recommendations/perf-001",
+                    "description": "Upgrade to higher performance machine type for database workload",
+                    "priority": "MEDIUM",
+                    "category": "PERFORMANCE",
+                    "impact": {
+                        "performance_projection": {
+                            "details": {
+                                "performance_improvement": "25%",
+                                "metric": "CPU_UTILIZATION"
+                            }
+                        }
+                    },
+                    "content": {
+                        "operation_groups": [{
+                            "operations": [{
+                                "action": "replace",
+                                "resource_type": "compute.googleapis.com/Instance",
+                                "resource": f"projects/{self.project_id}/zones/{self.region}-b/instances/db-server-1",
+                                "path": "/machineType",
+                                "value": f"projects/{self.project_id}/zones/{self.region}-b/machineTypes/n1-highmem-4"
+                            }]
+                        }]
+                    },
+                    "potential_monthly_savings": -50.00,  # Negative because it's an upgrade
+                    "confidence": 0.75
+                }
+            ])
+        
+        elif recommender_type == "rightsizing":
+            recommendations.extend([
+                {
+                    "name": f"projects/{self.project_id}/locations/{self.region}/recommenders/google.compute.instance.IdleResourceRecommender/recommendations/right-001",
+                    "description": "Rightsize underutilized instance test-server-2",
+                    "priority": "MEDIUM",
+                    "category": "COST",
+                    "impact": {
+                        "cost_projection": {
+                            "cost": {"currency_code": "USD", "units": "-35"},
+                            "duration": "2592000s"
+                        }
+                    },
+                    "content": {
+                        "operation_groups": [{
+                            "operations": [{
+                                "action": "replace",
+                                "resource_type": "compute.googleapis.com/Instance",
+                                "resource": f"projects/{self.project_id}/zones/{self.region}-c/instances/test-server-2",
+                                "path": "/machineType",
+                                "value": f"projects/{self.project_id}/zones/{self.region}-c/machineTypes/e2-medium"
+                            }]
+                        }]
+                    },
+                    "potential_monthly_savings": 35.00,
+                    "confidence": 0.80
+                }
+            ])
+        
+        elif recommender_type == "commitment_utilization":
+            recommendations.extend([
+                {
+                    "name": f"projects/{self.project_id}/locations/global/recommenders/google.billing.account.CommitmentUtilizationRecommender/recommendations/commit-001",
+                    "description": "Purchase 1-year compute commitment for consistent workloads",
+                    "priority": "LOW",
+                    "category": "COST",
+                    "impact": {
+                        "cost_projection": {
+                            "cost": {"currency_code": "USD", "units": "-120"},
+                            "duration": "31536000s"  # 1 year
+                        }
+                    },
+                    "content": {
+                        "operation_groups": [{
+                            "operations": [{
+                                "action": "create",
+                                "resource_type": "compute.googleapis.com/Commitment",
+                                "resource": f"projects/{self.project_id}/regions/{self.region}/commitments/compute-commitment-1",
+                                "value": {
+                                    "plan": "TWELVE_MONTH",
+                                    "type": "GENERAL_PURPOSE_N1",
+                                    "resources": [{"type": "VCPU", "amount": "10"}]
+                                }
+                            }]
+                        }]
+                    },
+                    "potential_monthly_savings": 10.00,  # Monthly equivalent of annual savings
+                    "confidence": 0.70
+                }
+            ])
+        
+        return recommendations

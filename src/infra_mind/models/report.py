@@ -39,6 +39,91 @@ class ReportStatus(str, Enum):
     FAILED = "failed"
 
 
+class ReportTemplate(Document):
+    """
+    Report template model for customizable report generation.
+    
+    Learning Note: Templates allow organizations to standardize their
+    report formats and branding across all generated reports.
+    """
+    
+    # Template identification
+    name: str = Field(description="Template name")
+    description: Optional[str] = Field(default=None, description="Template description")
+    version: str = Field(default="1.0", description="Template version")
+    
+    # Template configuration
+    report_type: ReportType = Field(description="Type of report this template generates")
+    sections_config: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Configuration for report sections"
+    )
+    
+    # Branding and styling
+    branding_config: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Default branding configuration"
+    )
+    css_template: Optional[str] = Field(default=None, description="CSS template for styling")
+    html_template: Optional[str] = Field(default=None, description="HTML template structure")
+    
+    # Access control
+    created_by: str = Field(description="User ID who created the template")
+    is_public: bool = Field(default=False, description="Whether template is publicly available")
+    organization_id: Optional[str] = Field(default=None, description="Organization that owns this template")
+    
+    # Usage tracking
+    usage_count: int = Field(default=0, description="Number of times template has been used")
+    last_used: Optional[datetime] = Field(default=None, description="When template was last used")
+    
+    # Timestamps
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+    
+    class Settings:
+        """Beanie document settings."""
+        name = "report_templates"
+        indexes = [
+            [("report_type", 1)],  # Query templates by report type
+            [("created_by", 1)],  # Query templates by creator
+            [("organization_id", 1)],  # Query templates by organization
+            [("is_public", 1)],  # Query public templates
+            [("usage_count", -1)],  # Sort by popularity
+        ]
+    
+    def increment_usage(self) -> None:
+        """Increment usage count and update last used timestamp."""
+        self.usage_count += 1
+        self.last_used = datetime.utcnow()
+        self.updated_at = datetime.utcnow()
+    
+    def can_user_access(self, user_id: str, organization_id: Optional[str] = None) -> bool:
+        """Check if user can access this template."""
+        if self.created_by == user_id:
+            return True
+        if self.is_public:
+            return True
+        if self.organization_id and self.organization_id == organization_id:
+            return True
+        return False
+
+
+class ReportFormat(str, Enum):
+    """Available report formats."""
+    PDF = "pdf"
+    HTML = "html"
+    JSON = "json"
+    MARKDOWN = "markdown"
+
+
+class ReportStatus(str, Enum):
+    """Report generation status."""
+    PENDING = "pending"
+    GENERATING = "generating"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+
 class ReportSection(Document):
     """
     Individual report section model.
@@ -57,12 +142,27 @@ class ReportSection(Document):
     content: str = Field(description="Section content (HTML/Markdown)")
     content_type: str = Field(default="markdown", description="Content format")
     
+    # Interactive features
+    is_interactive: bool = Field(default=False, description="Whether section supports drill-down")
+    drill_down_data: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Data for interactive drill-down features"
+    )
+    charts_config: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="Configuration for interactive charts"
+    )
+    
     # Metadata
     generated_by: str = Field(description="Agent or system that generated this section")
     data_sources: List[str] = Field(
         default_factory=list,
         description="Data sources used for this section"
     )
+    
+    # Versioning
+    version: str = Field(default="1.0", description="Section version")
+    parent_section_id: Optional[str] = Field(default=None, description="Parent section for versioning")
     
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -88,6 +188,29 @@ class Report(Document):
     user_id: str = Indexed()
     title: str = Field(description="Report title")
     description: Optional[str] = Field(default=None, description="Report description")
+    
+    # Versioning and collaboration
+    version: str = Field(default="1.0", description="Report version")
+    parent_report_id: Optional[str] = Field(default=None, description="Parent report ID for versioning")
+    is_template: bool = Field(default=False, description="Whether this is a template")
+    template_id: Optional[str] = Field(default=None, description="Template used to generate this report")
+    
+    # Sharing and collaboration
+    shared_with: List[str] = Field(default_factory=list, description="User IDs with access to this report")
+    sharing_permissions: Dict[str, str] = Field(
+        default_factory=dict, 
+        description="User permissions (view, edit, admin)"
+    )
+    is_public: bool = Field(default=False, description="Whether report is publicly accessible")
+    public_link_token: Optional[str] = Field(default=None, description="Token for public access")
+    
+    # Branding and customization
+    branding_config: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Custom branding configuration"
+    )
+    custom_css: Optional[str] = Field(default=None, description="Custom CSS for report styling")
+    logo_url: Optional[str] = Field(default=None, description="Custom logo URL")
     
     # Report configuration
     report_type: ReportType = Field(description="Type of report")
@@ -204,6 +327,59 @@ class Report(Document):
         """Check if report generation can be retried."""
         return self.is_failed and self.retry_count < 3
     
+    def create_new_version(self, new_version: str) -> "Report":
+        """Create a new version of this report."""
+        new_report = Report(
+            assessment_id=self.assessment_id,
+            user_id=self.user_id,
+            title=self.title,
+            description=self.description,
+            report_type=self.report_type,
+            format=self.format,
+            template_version=self.template_version,
+            version=new_version,
+            parent_report_id=str(self.id),
+            template_id=self.template_id,
+            branding_config=self.branding_config.copy(),
+            custom_css=self.custom_css,
+            logo_url=self.logo_url
+        )
+        return new_report
+    
+    def share_with_user(self, user_id: str, permission: str = "view") -> None:
+        """Share report with a user."""
+        if user_id not in self.shared_with:
+            self.shared_with.append(user_id)
+        self.sharing_permissions[user_id] = permission
+        self.updated_at = datetime.utcnow()
+    
+    def revoke_access(self, user_id: str) -> None:
+        """Revoke user access to the report."""
+        if user_id in self.shared_with:
+            self.shared_with.remove(user_id)
+        if user_id in self.sharing_permissions:
+            del self.sharing_permissions[user_id]
+        self.updated_at = datetime.utcnow()
+    
+    def can_user_access(self, user_id: str, required_permission: str = "view") -> bool:
+        """Check if user can access the report with required permission."""
+        if self.user_id == user_id:  # Owner has all permissions
+            return True
+        if self.is_public and required_permission == "view":
+            return True
+        
+        user_permission = self.sharing_permissions.get(user_id)
+        if not user_permission:
+            return False
+        
+        permission_levels = {"view": 1, "edit": 2, "admin": 3}
+        return permission_levels.get(user_permission, 0) >= permission_levels.get(required_permission, 0)
+    
+    def apply_branding(self, branding_config: Dict[str, Any]) -> None:
+        """Apply custom branding configuration."""
+        self.branding_config.update(branding_config)
+        self.updated_at = datetime.utcnow()
+    
     def __str__(self) -> str:
         """String representation of the report."""
-        return f"Report(type={self.report_type.value}, status={self.status.value})"
+        return f"Report(type={self.report_type.value}, status={self.status.value}, version={self.version})"

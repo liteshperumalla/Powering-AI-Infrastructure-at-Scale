@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Roboto } from "next/font/google";
 import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
+import ReduxProvider from "@/components/ReduxProvider";
+import NotificationSystem from "@/components/NotificationSystem";
 
 const roboto = Roboto({
   weight: ['300', '400', '500', '700'],
@@ -22,9 +24,12 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={roboto.className}>
-        <ThemeProvider>
-          {children}
-        </ThemeProvider>
+        <ReduxProvider>
+          <ThemeProvider>
+            {children}
+            <NotificationSystem />
+          </ThemeProvider>
+        </ReduxProvider>
       </body>
     </html>
   );
