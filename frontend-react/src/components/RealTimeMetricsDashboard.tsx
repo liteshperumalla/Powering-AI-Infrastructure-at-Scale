@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { safeToFixed, formatDuration } from '../utils/numberUtils';
 import {
     Box,
     Card,
@@ -229,10 +230,8 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
         return 'success';
     };
 
-    const formatDuration = (ms: number) => {
-        if (ms < 1000) return `${ms}ms`;
-        if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-        return `${(ms / 60000).toFixed(1)}m`;
+    const formatDurationLocal = (ms: number) => {
+        return formatDuration(ms);
     };
 
     const formatTimestamp = (timestamp: number) => {
@@ -272,42 +271,43 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
                     Real-Time Metrics Dashboard
                 </Typography>
 
-                <Stack direction="row" spacing={2} alignItems="center">
-                    <FormControl size="small" sx={{ minWidth: 120 }}>
-                        <InputLabel>Time Range</InputLabel>
-                        <Select
-                            value={selectedTimeRange}
-                            label="Time Range"
-                            onChange={(e) => setSelectedTimeRange(e.target.value as any)}
-                        >
-                            <MenuItem value="5m">5 minutes</MenuItem>
-                            <MenuItem value="15m">15 minutes</MenuItem>
-                            <MenuItem value="1h">1 hour</MenuItem>
-                            <MenuItem value="6h">6 hours</MenuItem>
-                            <MenuItem value="24h">24 hours</MenuItem>
-                        </Select>
-                    </FormControl>
+                    <Stack direction="row" spacing={2} alignItems="center">
+                        <FormControl size="small" sx={{ minWidth: 120 }}>
+                            <InputLabel id="time-range-label">Time Range</InputLabel>
+                            <Select
+                                labelId="time-range-label"
+                                value={selectedTimeRange}
+                                label="Time Range"
+                                onChange={(e) => setSelectedTimeRange(e.target.value as '5m' | '15m' | '1h' | '6h' | '24h')}
+                            >
+                                <MenuItem value="5m">5 minutes</MenuItem>
+                                <MenuItem value="15m">15 minutes</MenuItem>
+                                <MenuItem value="1h">1 hour</MenuItem>
+                                <MenuItem value="6h">6 hours</MenuItem>
+                                <MenuItem value="24h">24 hours</MenuItem>
+                            </Select>
+                        </FormControl>
 
-                    <FormControlLabel
-                        control={
-                            <Switch
-                                checked={isRealTimeEnabled}
-                                onChange={(e) => setIsRealTimeEnabled(e.target.checked)}
-                            />
-                        }
-                        label="Real-time"
-                    />
+                        <FormControlLabel
+                            control={
+                                <Switch
+                                    checked={isRealTimeEnabled}
+                                    onChange={(e) => setIsRealTimeEnabled(e.target.checked)}
+                                />
+                            }
+                            label="Real-time"
+                        />
 
-                    <Tooltip title={isRealTimeEnabled ? "Pause updates" : "Resume updates"}>
-                        <IconButton onClick={() => setIsRealTimeEnabled(!isRealTimeEnabled)}>
-                            {isRealTimeEnabled ? <PauseIcon /> : <PlayIcon />}
-                        </IconButton>
-                    </Tooltip>
+                        <Tooltip title={isRealTimeEnabled ? "Pause updates" : "Resume updates"}>
+                            <IconButton onClick={() => setIsRealTimeEnabled(!isRealTimeEnabled)}>
+                                {isRealTimeEnabled ? <PauseIcon /> : <PlayIcon />}
+                            </IconButton>
+                        </Tooltip>
 
-                    <Typography variant="caption" color="text.secondary">
-                        Last updated: {lastUpdate.toLocaleTimeString()}
-                    </Typography>
-                </Stack>
+                        <Typography variant="caption" color="text.secondary">
+                            Last updated: {lastUpdate.toLocaleTimeString()}
+                        </Typography>
+                    </Stack>
             </Stack>
 
             {/* Critical Alerts Banner */}
@@ -333,7 +333,7 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
                                 <SpeedIcon color={getHealthColor(systemHealth.cpu_usage_percent, { warning: 70, critical: 85 })} />
                                 <Box sx={{ flexGrow: 1 }}>
                                     <Typography variant="h6">
-                                        {systemHealth.cpu_usage_percent.toFixed(1)}%
+                                        {safeToFixed(systemHealth.cpu_usage_percent, 1)}%
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary">
                                         CPU Usage
@@ -357,7 +357,7 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
                                 <MemoryIcon color={getHealthColor(systemHealth.memory_usage_percent, { warning: 80, critical: 90 })} />
                                 <Box sx={{ flexGrow: 1 }}>
                                     <Typography variant="h6">
-                                        {systemHealth.memory_usage_percent.toFixed(1)}%
+                                        {safeToFixed(systemHealth.memory_usage_percent, 1)}%
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary">
                                         Memory Usage
@@ -537,7 +537,7 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
                                         <Typography variant="body1">{agentName}</Typography>
                                         <Stack direction="row" spacing={2}>
                                             <Chip
-                                                label={`${(performance.success_rate * 100).toFixed(1)}% success`}
+                                                label={`${safeToFixed(performance.success_rate * 100, 1)}% success`}
                                                 color={performance.success_rate > 0.9 ? 'success' : performance.success_rate > 0.7 ? 'warning' : 'error'}
                                                 size="small"
                                             />

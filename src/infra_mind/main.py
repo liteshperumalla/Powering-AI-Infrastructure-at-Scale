@@ -6,11 +6,12 @@ including async operations, dependency injection, and automatic documentation.
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 import time
+import json
 from loguru import logger
 
 from .core.config import settings
@@ -70,10 +71,70 @@ def create_app() -> FastAPI:
     # Add routes
     app.include_router(api_router, prefix=settings.api_prefix)
     
+    # Add WebSocket endpoint
+    setup_websocket(app)
+    
     # Add custom exception handlers
     setup_exception_handlers(app)
     
     return app
+
+
+def setup_websocket(app: FastAPI) -> None:
+    """
+    Configure WebSocket endpoints.
+    """
+    
+    @app.websocket("/ws")
+    async def websocket_endpoint(websocket: WebSocket, token: str = None):
+        """
+        General WebSocket endpoint for real-time updates.
+        """
+        try:
+            await websocket.accept()
+            logger.info(f"WebSocket connection accepted with token: {token[:20] if token else 'None'}...")
+            
+            # Send welcome message
+            await websocket.send_text(json.dumps({
+                "type": "connection",
+                "message": "Connected to Infra Mind WebSocket",
+                "authenticated": token is not None,
+                "timestamp": time.time()
+            }))
+            
+            while True:
+                try:
+                    # Wait for messages from client
+                    data = await websocket.receive_text()
+                    message = json.loads(data)
+                    
+                    # Echo back for now - this can be extended with proper message handling
+                    response = {
+                        "type": "echo",
+                        "received": message,
+                        "timestamp": time.time()
+                    }
+                    await websocket.send_text(json.dumps(response))
+                    
+                except WebSocketDisconnect:
+                    logger.info("WebSocket client disconnected")
+                    break
+                except json.JSONDecodeError:
+                    await websocket.send_text(json.dumps({
+                        "type": "error",
+                        "message": "Invalid JSON format",
+                        "timestamp": time.time()
+                    }))
+                except Exception as e:
+                    logger.error(f"WebSocket error: {e}")
+                    await websocket.send_text(json.dumps({
+                        "type": "error",
+                        "message": str(e),
+                        "timestamp": time.time()
+                    }))
+                    
+        except Exception as e:
+            logger.error(f"WebSocket connection error: {e}")
 
 
 def setup_middleware(app: FastAPI) -> None:

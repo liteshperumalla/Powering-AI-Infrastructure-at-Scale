@@ -28,7 +28,7 @@ from infra_mind.agents.cto_agent import CTOAgent
 from infra_mind.agents.cloud_engineer_agent import CloudEngineerAgent
 from infra_mind.agents.research_agent import ResearchAgent
 from infra_mind.agents.report_generator_agent import ReportGeneratorAgent
-from infra_mind.cloud.unified import UnifiedCloudManager
+from infra_mind.cloud.unified import UnifiedCloudClient
 from infra_mind.forms.assessment_form import AssessmentForm
 from infra_mind.orchestration.workflow import WorkflowOrchestrator
 

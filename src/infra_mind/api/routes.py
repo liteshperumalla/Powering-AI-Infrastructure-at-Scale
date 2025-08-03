@@ -6,7 +6,7 @@ Supports API versioning for backward compatibility and evolution.
 """
 
 from fastapi import APIRouter, HTTPException, status
-from .endpoints import auth, assessments, recommendations, reports, monitoring, webhooks, admin, testing, resilience, compliance, integrations
+from .endpoints import auth, assessments, recommendations, reports, monitoring, webhooks, admin, testing, resilience, compliance, integrations, compliance_dashboard, business_tools, performance_monitoring
 
 # Create versioned API routers
 api_v1_router = APIRouter()
@@ -35,6 +35,11 @@ api_v1_router.include_router(
     reports.router,
     prefix="/reports",
     tags=["Reports"]
+)
+
+api_v1_router.include_router(
+    performance_monitoring.router,
+    tags=["Performance Monitoring"]
 )
 
 # V2 API Routes (Enhanced with new features)
@@ -102,6 +107,23 @@ api_v2_router.include_router(
     integrations.router,
     prefix="/integrations",
     tags=["Integrations"]
+)
+
+api_v2_router.include_router(
+    compliance_dashboard.router,
+    prefix="/compliance-dashboard",
+    tags=["Compliance Dashboard"]
+)
+
+api_v2_router.include_router(
+    business_tools.router,
+    prefix="/business-tools",
+    tags=["Business Tools"]
+)
+
+api_v2_router.include_router(
+    performance_monitoring.router,
+    tags=["Performance Monitoring"]
 )
 
 # Main API router that includes all versions

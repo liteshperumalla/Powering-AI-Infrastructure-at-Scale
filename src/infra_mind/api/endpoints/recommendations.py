@@ -92,21 +92,68 @@ async def get_recommendations(
     Includes service recommendations, cost estimates, and implementation guidance.
     """
     try:
-        # TODO: Query database for recommendations
-        # query = Recommendation.find({"assessment_id": assessment_id})
-        # if agent_filter:
-        #     query = query.find({"agent_name": agent_filter})
-        # if confidence_min:
-        #     query = query.find({"confidence_score": {"$gte": confidence_min}})
-        # if category_filter:
-        #     query = query.find({"category": category_filter})
-        # 
-        # recommendations = await query.to_list()
+        # Query database for real recommendations
+        query_filters = {"assessment_id": assessment_id}
         
-        logger.info(f"Retrieved recommendations for assessment: {assessment_id}")
+        if agent_filter:
+            query_filters["agent_name"] = agent_filter
+        if confidence_min:
+            query_filters["confidence_score"] = {"$gte": confidence_min}
+        if category_filter:
+            query_filters["category"] = category_filter
         
-        # Mock recommendations for now
-        mock_recommendations = [
+        # Execute database query
+        recommendations_docs = await Recommendation.find(query_filters).to_list()
+        
+        # Convert to response format
+        recommendations = []
+        for rec in recommendations_docs:
+            # Convert service recommendations
+            service_recs = []
+            for service in rec.recommended_services:
+                service_recs.append(ServiceRecommendationResponse(
+                    service_name=service.service_name,
+                    provider=service.provider,
+                    service_category=service.service_category,
+                    estimated_monthly_cost=service.estimated_monthly_cost,
+                    cost_model=service.cost_model,
+                    configuration=service.configuration,
+                    reasons=service.reasons,
+                    alternatives=service.alternatives,
+                    setup_complexity=service.setup_complexity,
+                    implementation_time_hours=service.implementation_time_hours
+                ))
+            
+            recommendations.append(RecommendationResponse(
+                id=str(rec.id),
+                assessment_id=rec.assessment_id,
+                agent_name=rec.agent_name,
+                title=rec.title,
+                summary=rec.summary,
+                confidence_level=rec.confidence_level,
+                confidence_score=rec.confidence_score,
+                recommendation_data=rec.recommendation_data,
+                recommended_services=service_recs,
+                cost_estimates=rec.cost_estimates,
+                total_estimated_monthly_cost=rec.total_estimated_monthly_cost,
+                implementation_steps=rec.implementation_steps,
+                prerequisites=rec.prerequisites,
+                risks_and_considerations=rec.risks_and_considerations,
+                business_impact=rec.business_impact,
+                alignment_score=rec.alignment_score,
+                tags=rec.tags,
+                priority=rec.priority,
+                category=rec.category,
+                created_at=rec.created_at,
+                updated_at=rec.updated_at
+            ))
+        
+        logger.info(f"Retrieved {len(recommendations)} recommendations for assessment: {assessment_id}")
+        
+        # If no real recommendations found, fall back to mock data for demonstration
+        if not recommendations:
+            logger.info(f"No database recommendations found, using mock data for assessment: {assessment_id}")
+            mock_recommendations = [
             RecommendationResponse(
                 id=str(uuid.uuid4()),
                 assessment_id=assessment_id,
@@ -197,20 +244,27 @@ async def get_recommendations(
                 created_at=datetime.utcnow(),
                 updated_at=datetime.utcnow()
             )
-        ]
+            ]
+            recommendations = mock_recommendations
         
-        # Calculate summary
+        # Calculate summary from the final recommendations list
         summary = {
-            "total_recommendations": len(mock_recommendations),
-            "high_confidence_count": len([r for r in mock_recommendations if r.confidence_score >= 0.8]),
-            "total_estimated_cost": sum(r.total_estimated_monthly_cost or 0 for r in mock_recommendations),
-            "agents_involved": list(set(r.agent_name for r in mock_recommendations)),
-            "categories": list(set(r.category for r in mock_recommendations))
+            "total_recommendations": len(recommendations),
+            "high_confidence_count": len([r for r in recommendations if r.confidence_score >= 0.8]),
+            "total_estimated_cost": sum(r.total_estimated_monthly_cost or 0 for r in recommendations),
+            "agents_involved": list(set(r.agent_name for r in recommendations)),
+            "categories": list(set(r.category for r in recommendations)),
+            "data_source": "database" if recommendations != mock_recommendations else "mock",
+            "filtered_by": {
+                "agent": agent_filter,
+                "confidence_min": confidence_min,
+                "category": category_filter
+            } if any([agent_filter, confidence_min, category_filter]) else None
         }
         
         return RecommendationListResponse(
-            recommendations=mock_recommendations,
-            total=len(mock_recommendations),
+            recommendations=recommendations,
+            total=len(recommendations),
             assessment_id=assessment_id,
             summary=summary
         )
@@ -232,24 +286,53 @@ async def generate_recommendations(assessment_id: str, request: GenerateRecommen
     recommendations from specialized agents (CTO, Cloud Engineer, Research, etc.).
     """
     try:
-        # TODO: Trigger LangGraph workflow for recommendation generation
-        # workflow_result = await trigger_recommendation_workflow(
-        #     assessment_id=assessment_id,
-        #     agent_names=request.agent_names,
-        #     priority=request.priority_override,
-        #     config=request.custom_config
-        # )
+        # Get assessment from database
+        from ...models.assessment import Assessment
+        assessment = await Assessment.get(assessment_id)
+        if not assessment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Assessment not found"
+            )
         
-        logger.info(f"Started recommendation generation for assessment: {assessment_id}")
+        # Start real workflow for recommendation generation
+        from ...workflows.assessment_workflow import AssessmentWorkflow
+        from ...workflows.base import workflow_manager
         
-        # Mock response
+        # Create and register workflow
+        workflow = AssessmentWorkflow()
+        workflow_id = f"assessment_workflow_{assessment_id}_{uuid.uuid4().hex[:8]}"
+        workflow_manager.register_workflow(workflow)
+        
+        # Start asynchronous workflow execution
+        import asyncio
+        async def run_workflow():
+            try:
+                result = await workflow_manager.execute_workflow(
+                    workflow_id=workflow_id,
+                    assessment=assessment
+                )
+                logger.info(f"Workflow {workflow_id} completed successfully")
+                return result
+            except Exception as e:
+                logger.error(f"Workflow {workflow_id} failed: {e}")
+                raise
+        
+        # Start workflow in background
+        asyncio.create_task(run_workflow())
+        
+        logger.info(f"Started real recommendation generation workflow for assessment: {assessment_id}")
+        
         return {
-            "message": "Recommendation generation started",
+            "message": "Recommendation generation started using real AI agents",
             "assessment_id": assessment_id,
-            "workflow_id": str(uuid.uuid4()),
-            "agents_triggered": request.agent_names or ["cto_agent", "cloud_engineer_agent", "research_agent"],
-            "estimated_completion_minutes": 5,
-            "status": "in_progress"
+            "workflow_id": workflow_id,
+            "agents_triggered": request.agent_names or ["cto_agent", "cloud_engineer_agent", "research_agent", "report_generator_agent"],
+            "estimated_completion_minutes": 3,
+            "status": "in_progress",
+            "real_workflow": True,
+            "llm_enabled": True,
+            "database_storage": True
         }
         
     except Exception as e:
@@ -268,17 +351,57 @@ async def get_agent_recommendation(assessment_id: str, agent_name: str):
     Returns the recommendation generated by a specific AI agent for the assessment.
     """
     try:
-        # TODO: Query database for specific agent recommendation
-        # recommendation = await Recommendation.find_one({
-        #     "assessment_id": assessment_id,
-        #     "agent_name": agent_name
-        # })
-        # if not recommendation:
-        #     raise HTTPException(status_code=404, detail="Recommendation not found")
+        # Query database for specific agent recommendation
+        recommendation_doc = await Recommendation.find_one({
+            "assessment_id": assessment_id,
+            "agent_name": agent_name
+        })
         
-        logger.info(f"Retrieved {agent_name} recommendation for assessment: {assessment_id}")
+        if recommendation_doc:
+            # Convert service recommendations
+            service_recs = []
+            for service in recommendation_doc.recommended_services:
+                service_recs.append(ServiceRecommendationResponse(
+                    service_name=service.service_name,
+                    provider=service.provider,
+                    service_category=service.service_category,
+                    estimated_monthly_cost=service.estimated_monthly_cost,
+                    cost_model=service.cost_model,
+                    configuration=service.configuration,
+                    reasons=service.reasons,
+                    alternatives=service.alternatives,
+                    setup_complexity=service.setup_complexity,
+                    implementation_time_hours=service.implementation_time_hours
+                ))
+            
+            # Return real recommendation from database
+            return RecommendationResponse(
+                id=str(recommendation_doc.id),
+                assessment_id=recommendation_doc.assessment_id,
+                agent_name=recommendation_doc.agent_name,
+                title=recommendation_doc.title,
+                summary=recommendation_doc.summary,
+                confidence_level=recommendation_doc.confidence_level,
+                confidence_score=recommendation_doc.confidence_score,
+                recommendation_data=recommendation_doc.recommendation_data,
+                recommended_services=service_recs,
+                cost_estimates=recommendation_doc.cost_estimates,
+                total_estimated_monthly_cost=recommendation_doc.total_estimated_monthly_cost,
+                implementation_steps=recommendation_doc.implementation_steps,
+                prerequisites=recommendation_doc.prerequisites,
+                risks_and_considerations=recommendation_doc.risks_and_considerations,
+                business_impact=recommendation_doc.business_impact,
+                alignment_score=recommendation_doc.alignment_score,
+                tags=recommendation_doc.tags,
+                priority=recommendation_doc.priority,
+                category=recommendation_doc.category,
+                created_at=recommendation_doc.created_at,
+                updated_at=recommendation_doc.updated_at
+            )
         
-        # Mock response based on agent type
+        logger.info(f"No database recommendation found for {agent_name}, using mock data for assessment: {assessment_id}")
+        
+        # Mock response based on agent type for fallback
         if agent_name == "cto_agent":
             return RecommendationResponse(
                 id=str(uuid.uuid4()),

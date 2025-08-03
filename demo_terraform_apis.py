@@ -53,40 +53,80 @@ async def demo_terraform_registry():
         print_subsection("Popular Terraform Providers")
         providers = await registry_client.get_providers()
         
+        # Handle resilience wrapper response
+        if isinstance(providers, dict) and "degraded_mode" in providers:
+            print(f"⚠️  Service temporarily unavailable: {providers.get('message', 'Unknown error')}")
+            print("   This may be due to rate limiting or network issues")
+            return
+        
         print(f"Found {providers['total_count']} providers")
         for provider in providers['providers'][:5]:  # Show first 5
             print(f"  • {provider['full_name']}: {provider['description'][:80]}...")
             print(f"    Downloads: {provider['downloads']:,}")
         
-        # Demo 2: Get AWS-specific providers
-        print_subsection("HashiCorp Providers")
+        # Demo 2: Get HashiCorp providers with detailed information
+        print_subsection("HashiCorp Providers (Detailed)")
         hashicorp_providers = await registry_client.get_providers(namespace="hashicorp")
         
         print(f"Found {hashicorp_providers['total_count']} HashiCorp providers")
         for provider in hashicorp_providers['providers'][:3]:
             print(f"  • {provider['name']}: {provider['description'][:60]}...")
+            print(f"    Downloads: {provider['downloads']:,}")
+            if provider.get('latest_version'):
+                print(f"    Latest Version: {provider['latest_version']}")
+            if provider.get('versions'):
+                print(f"    Available Versions: {len(provider['versions'])}")
         
-        # Demo 3: Get AWS modules
-        print_subsection("AWS Terraform Modules")
-        aws_modules = await registry_client.get_modules(provider="aws")
+        # Demo 3: Get verified AWS modules with enhanced filtering
+        print_subsection("Verified AWS Terraform Modules")
+        aws_modules = await registry_client.get_modules(
+            provider="aws", 
+            verified_only=True, 
+            limit=10
+        )
         
-        print(f"Found {aws_modules['total_count']} AWS modules")
+        print(f"Found {aws_modules['total_count']} verified AWS modules")
         for module in aws_modules['modules'][:5]:
             print(f"  • {module['namespace']}/{module['name']}")
             print(f"    Description: {module['description'][:70]}...")
-            print(f"    Downloads: {module['downloads']:,} | Verified: {module['verified']}")
+            print(f"    Downloads: {module['downloads']:,} | Category: {module['category']}")
+            print(f"    Popularity Score: {module['popularity_score']}")
         
-        # Demo 4: Get compute modules across providers
+        # Demo 4: Search for VPC modules
+        print_subsection("VPC Module Search")
+        vpc_modules = await registry_client.get_modules(
+            search="vpc",
+            verified_only=True,
+            limit=5
+        )
+        
+        print(f"Found {vpc_modules['total_count']} VPC-related modules")
+        for module in vpc_modules['modules']:
+            print(f"  • {module['full_name']}")
+            print(f"    Description: {module['description'][:60]}...")
+            print(f"    Registry URL: {module['registry_url']}")
+        
+        # Demo 5: Get compute modules across providers
         print_subsection("Compute Modules (Multi-Cloud)")
         compute_services = await registry_client.get_compute_modules()
         
         print(f"Found {len(compute_services.services)} compute-related modules")
-        for service in compute_services.services[:5]:
-            print(f"  • {service.provider.value}: {service.service_name}")
-            print(f"    Description: {service.description[:60]}...")
-            print(f"    Downloads: {service.specifications.get('downloads', 0):,}")
         
-        # Demo 5: Get storage modules
+        # Group by provider
+        by_provider = {}
+        for service in compute_services.services:
+            provider = service.provider.value
+            if provider not in by_provider:
+                by_provider[provider] = []
+            by_provider[provider].append(service)
+        
+        for provider, services in by_provider.items():
+            print(f"  {provider}: {len(services)} modules")
+            for service in services[:2]:  # Show first 2 per provider
+                print(f"    • {service.service_name}")
+                print(f"      Downloads: {service.specifications.get('downloads', 0):,}")
+        
+        # Demo 6: Get storage modules
         print_subsection("Storage Modules")
         storage_services = await registry_client.get_storage_modules()
         
@@ -95,7 +135,7 @@ async def demo_terraform_registry():
             print(f"  • {service.provider.value}: {service.service_name}")
             print(f"    Features: {', '.join(service.features)}")
         
-        # Demo 6: Get AI/ML modules
+        # Demo 7: Get AI/ML modules
         print_subsection("AI/ML Modules")
         ai_services = await registry_client.get_ai_modules()
         
@@ -120,24 +160,35 @@ async def demo_terraform_cloud():
     print_section("Terraform Cloud API Demo")
     
     # Check for required environment variables
-    terraform_token = os.getenv('TERRAFORM_TOKEN')
-    terraform_org = os.getenv('TERRAFORM_ORG')
+    terraform_token = os.getenv('INFRA_MIND_TERRAFORM_TOKEN') or os.getenv('TERRAFORM_TOKEN')
+    terraform_org = os.getenv('INFRA_MIND_TERRAFORM_ORG') or os.getenv('TERRAFORM_ORG')
     
     if not terraform_token:
-        print("⚠️  TERRAFORM_TOKEN environment variable not set")
+        print("⚠️  INFRA_MIND_TERRAFORM_TOKEN environment variable not set")
         print("   Terraform Cloud API features require authentication")
-        print("   Set TERRAFORM_TOKEN to your Terraform Cloud API token to test these features")
+        print("   Set INFRA_MIND_TERRAFORM_TOKEN to your Terraform Cloud API token to test these features")
         return
     
     if not terraform_org:
-        print("⚠️  TERRAFORM_ORG environment variable not set")
+        print("⚠️  INFRA_MIND_TERRAFORM_ORG environment variable not set")
         print("   Using 'demo-org' as default organization name")
         terraform_org = "demo-org"
     
     cloud_client = TerraformCloudClient(terraform_token, terraform_org)
+    workspace_id = None
     
     try:
-        # Demo 1: Create a test workspace
+        # Demo 1: List existing workspaces
+        print_subsection("Listing Existing Workspaces")
+        workspaces = await cloud_client.list_workspaces()
+        
+        print(f"Found {len(workspaces)} existing workspaces:")
+        for workspace in workspaces[:3]:  # Show first 3
+            print(f"  • {workspace['name']} (ID: {workspace['id']})")
+            print(f"    Terraform Version: {workspace['terraform_version']}")
+            print(f"    Resources: {workspace['resource_count']}")
+        
+        # Demo 2: Create a test workspace
         print_subsection("Creating Test Workspace")
         workspace_config = {
             "name": f"infra-mind-demo-{datetime.now().strftime('%Y%m%d-%H%M%S')}",
@@ -149,6 +200,7 @@ async def demo_terraform_cloud():
         
         print(f"Creating workspace: {workspace_config['name']}")
         workspace = await cloud_client.create_workspace(workspace_config)
+        workspace_id = workspace['id']
         
         print("✅ Workspace created successfully!")
         print(f"   ID: {workspace['id']}")
@@ -156,26 +208,27 @@ async def demo_terraform_cloud():
         print(f"   Terraform Version: {workspace['terraform_version']}")
         print(f"   Created: {workspace['created_at']}")
         
-        # Demo 2: Simulate a plan run (this would normally require actual Terraform configuration)
-        print_subsection("Simulating Plan Run")
-        print("ℹ️  Note: This demo simulates a plan run without actual Terraform configuration")
-        print("   In a real scenario, you would upload Terraform files to the workspace")
+        # Demo 3: Run a plan with minimal configuration
+        print_subsection("Running Plan with Minimal Configuration")
+        print("ℹ️  Running a speculative plan with minimal Terraform configuration")
         
         try:
             plan_config = {
-                "message": "Demo plan run from InfraMind",
-                "is_destroy": False
+                "message": "Demo plan run from InfraMind with minimal config",
+                "is_destroy": False,
+                "speculative": True  # Speculative plans don't affect real infrastructure
             }
             
-            print(f"Starting plan run for workspace: {workspace['id']}")
+            print(f"Starting speculative plan for workspace: {workspace['id']}")
             plan_result = await cloud_client.run_plan(workspace['id'], plan_config)
             
             print("✅ Plan run initiated!")
             print(f"   Run ID: {plan_result['run_id']}")
             print(f"   Status: {plan_result['status']}")
+            print(f"   Speculative: {plan_result['speculative']}")
             print(f"   Plan URL: {plan_result['plan_url']}")
             
-            # Demo 3: Get cost estimation (if available)
+            # Demo 4: Get cost estimation (if available)
             if plan_result.get('cost_estimation'):
                 cost_data = plan_result['cost_estimation']
                 if cost_data.get('monthly_cost'):
@@ -183,34 +236,53 @@ async def demo_terraform_cloud():
                     if cost_data.get('delta_monthly_cost'):
                         print(f"   Cost Change: ${cost_data['delta_monthly_cost']}")
                 else:
-                    print("   Cost estimation not available for this run")
+                    print("   Cost estimation not available for this run (expected for minimal config)")
             
         except CloudServiceError as e:
-            print(f"⚠️  Plan run simulation failed: {e}")
-            print("   This is expected without actual Terraform configuration")
+            print(f"⚠️  Plan run failed: {e}")
+            print("   This may be expected depending on workspace configuration")
         
-        # Demo 4: Direct cost estimation query
+        # Demo 5: Direct cost estimation query
         print_subsection("Cost Estimation Query")
-        print("ℹ️  Attempting to query cost estimation for a hypothetical run")
+        print("ℹ️  Testing cost estimation API with hypothetical run ID")
         
         try:
             cost_estimation = await cloud_client.get_cost_estimation("run-demo-123")
             if cost_estimation.get('cost_estimate') is None:
-                print("   Cost estimation not available (expected for demo run)")
+                print("   ✅ Cost estimation API responded correctly (no data for demo run)")
             else:
                 print(f"   Monthly Cost: ${cost_estimation['monthly_cost']}")
                 print(f"   Resources: {len(cost_estimation.get('resources', []))}")
         except CloudServiceError as e:
-            print(f"   Cost estimation query result: {e}")
+            print(f"   Cost estimation query handled: {e}")
+        
+        # Demo 6: Workspace cleanup
+        print_subsection("Workspace Cleanup")
+        print(f"Cleaning up demo workspace: {workspace_id}")
+        
+        deleted = await cloud_client.delete_workspace(workspace_id)
+        if deleted:
+            print("✅ Demo workspace deleted successfully")
+            workspace_id = None  # Mark as cleaned up
+        else:
+            print("⚠️  Workspace deletion may have failed")
     
     except AuthenticationError as e:
         print(f"❌ Authentication failed: {e}")
-        print("   Please check your TERRAFORM_TOKEN environment variable")
+        print("   Please check your INFRA_MIND_TERRAFORM_TOKEN environment variable")
     except CloudServiceError as e:
         print(f"❌ Terraform Cloud API error: {e}")
     except Exception as e:
         print(f"❌ Unexpected error: {e}")
     finally:
+        # Ensure cleanup
+        if workspace_id:
+            try:
+                await cloud_client.delete_workspace(workspace_id)
+                print(f"🧹 Cleaned up workspace: {workspace_id}")
+            except Exception as cleanup_error:
+                print(f"⚠️  Failed to cleanup workspace {workspace_id}: {cleanup_error}")
+        
         await cloud_client.close()
 
 
@@ -229,37 +301,50 @@ async def demo_unified_terraform_client():
         print_subsection("Compute Services via Unified Client")
         compute_services = await client.get_compute_services()
         
-        print(f"Found {len(compute_services.services)} compute services")
-        
-        # Group by provider
-        by_provider = {}
-        for service in compute_services.services:
-            provider = service.provider.value
-            if provider not in by_provider:
-                by_provider[provider] = []
-            by_provider[provider].append(service)
-        
-        for provider, services in by_provider.items():
-            print(f"  {provider}: {len(services)} services")
-            for service in services[:2]:  # Show first 2 per provider
-                print(f"    • {service.service_name}")
+        # Handle resilience wrapper response
+        if isinstance(compute_services, dict) and "degraded_mode" in compute_services:
+            print(f"⚠️  Service temporarily unavailable: {compute_services.get('message', 'Unknown error')}")
+            print("   This may be due to rate limiting or network issues")
+        else:
+            print(f"Found {len(compute_services.services)} compute services")
+            
+            # Group by provider
+            by_provider = {}
+            for service in compute_services.services:
+                provider = service.provider.value
+                if provider not in by_provider:
+                    by_provider[provider] = []
+                by_provider[provider].append(service)
+            
+            for provider, services in by_provider.items():
+                print(f"  {provider}: {len(services)} services")
+                for service in services[:2]:  # Show first 2 per provider
+                    print(f"    • {service.service_name}")
         
         # Demo 2: Get providers through unified client
         print_subsection("Providers via Unified Client")
         providers = await client.get_providers(namespace="hashicorp")
         
-        print(f"Found {providers['total_count']} HashiCorp providers")
-        for provider in providers['providers'][:3]:
-            print(f"  • {provider['name']}: {provider['downloads']:,} downloads")
+        # Handle resilience wrapper response
+        if isinstance(providers, dict) and "degraded_mode" in providers:
+            print(f"⚠️  Service temporarily unavailable: {providers.get('message', 'Unknown error')}")
+        else:
+            print(f"Found {providers['total_count']} HashiCorp providers")
+            for provider in providers['providers'][:3]:
+                print(f"  • {provider['name']}: {provider['downloads']:,} downloads")
         
         # Demo 3: Get modules through unified client
         print_subsection("AWS Modules via Unified Client")
         modules = await client.get_modules(provider="aws")
         
-        print(f"Found {modules['total_count']} AWS modules")
-        for module in modules['modules'][:3]:
-            print(f"  • {module['namespace']}/{module['name']}")
-            print(f"    Version: {module['version']} | Verified: {module['verified']}")
+        # Handle resilience wrapper response
+        if isinstance(modules, dict) and "degraded_mode" in modules:
+            print(f"⚠️  Service temporarily unavailable: {modules.get('message', 'Unknown error')}")
+        else:
+            print(f"Found {modules['total_count']} AWS modules")
+            for module in modules['modules'][:3]:
+                print(f"  • {module['namespace']}/{module['name']}")
+                print(f"    Version: {module['version']} | Verified: {module['verified']}")
         
         # Demo 4: Cost estimation (if token available)
         if terraform_token:
@@ -297,6 +382,13 @@ async def demo_caching_behavior():
         first_duration = (datetime.now() - start_time).total_seconds()
         
         print(f"  ✅ First call completed in {first_duration:.2f} seconds")
+        
+        # Handle resilience wrapper response
+        if isinstance(result1, dict) and "degraded_mode" in result1:
+            print(f"  ⚠️  Service in degraded mode: {result1.get('message', 'Unknown error')}")
+            print(f"  This demonstrates resilience patterns when APIs are unavailable")
+            return
+        
         print(f"  Found {len(result1.services)} services")
         
         # Second call - should use cache
@@ -306,6 +398,12 @@ async def demo_caching_behavior():
         second_duration = (datetime.now() - start_time).total_seconds()
         
         print(f"  ✅ Second call completed in {second_duration:.2f} seconds")
+        
+        # Handle resilience wrapper response for second call
+        if isinstance(result2, dict) and "degraded_mode" in result2:
+            print(f"  ⚠️  Service still in degraded mode")
+            return
+        
         print(f"  Found {len(result2.services)} services")
         
         # Compare results

@@ -7,7 +7,7 @@ and industry-specific compliance requirements for GDPR, HIPAA, CCPA, etc.
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional, Union
 from enum import Enum
 from dataclasses import dataclass
@@ -157,24 +157,34 @@ class ComplianceDatabaseIntegrator:
         # Configuration for external compliance databases
         self.compliance_apis = {
             "nist_csf": {
-                "base_url": "https://api.nist.gov/csf/v1.1",
+                "base_url": "https://csrc.nist.gov/CSRC/media/Projects/cybersecurity-framework/documents/framework-v1_1/framework-v1_1.json",
                 "api_key": getattr(self.settings, "NIST_API_KEY", None),
-                "enabled": getattr(self.settings, "ENABLE_NIST_INTEGRATION", False)
+                "enabled": getattr(self.settings, "ENABLE_NIST_INTEGRATION", True)  # Enable by default as it's public
             },
             "iso_standards": {
-                "base_url": "https://api.iso.org/standards/v1",
+                "base_url": "https://www.iso.org/obp/ui/en/#search",
                 "api_key": getattr(self.settings, "ISO_API_KEY", None),
                 "enabled": getattr(self.settings, "ENABLE_ISO_INTEGRATION", False)
             },
             "gdpr_info": {
-                "base_url": "https://api.gdpr.eu/v1",
+                "base_url": "https://gdpr-info.eu/api/v1",
                 "api_key": getattr(self.settings, "GDPR_API_KEY", None),
-                "enabled": getattr(self.settings, "ENABLE_GDPR_INTEGRATION", False)
+                "enabled": getattr(self.settings, "ENABLE_GDPR_INTEGRATION", True)  # Enable by default
             },
             "compliance_ai": {
                 "base_url": "https://api.compliance-ai.com/v2",
                 "api_key": getattr(self.settings, "COMPLIANCE_AI_API_KEY", None),
                 "enabled": getattr(self.settings, "ENABLE_COMPLIANCE_AI", False)
+            },
+            "hipaa_gov": {
+                "base_url": "https://www.hhs.gov/hipaa/for-professionals/security/guidance",
+                "api_key": None,
+                "enabled": getattr(self.settings, "ENABLE_HIPAA_INTEGRATION", True)
+            },
+            "ccpa_oag": {
+                "base_url": "https://oag.ca.gov/privacy/ccpa",
+                "api_key": None,
+                "enabled": getattr(self.settings, "ENABLE_CCPA_INTEGRATION", True)
             }
         }
         
@@ -564,6 +574,202 @@ class ComplianceDatabaseIntegrator:
         }
         
         return industry_frameworks.get(industry, [ComplianceFramework.GDPR, ComplianceFramework.SOC2])
+    
+    # Compliance Monitoring and Audit Trail
+    
+    async def create_compliance_audit_trail(self, 
+                                          assessment_id: str,
+                                          framework: ComplianceFramework,
+                                          compliance_checks: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Create compliance audit trail for an assessment."""
+        audit_trail = {
+            "audit_id": f"audit_{assessment_id}_{framework.value}_{int(datetime.now(timezone.utc).timestamp())}",
+            "assessment_id": assessment_id,
+            "framework": framework.value,
+            "audit_timestamp": datetime.now(timezone.utc).isoformat(),
+            "compliance_checks": compliance_checks,
+            "audit_summary": {
+                "total_checks": len(compliance_checks),
+                "passed_checks": sum(1 for check in compliance_checks if check.get("status") == "passed"),
+                "failed_checks": sum(1 for check in compliance_checks if check.get("status") == "failed"),
+                "warning_checks": sum(1 for check in compliance_checks if check.get("status") == "warning")
+            },
+            "recommendations": [],
+            "next_audit_date": (datetime.now(timezone.utc) + timedelta(days=90)).isoformat()
+        }
+        
+        # Generate recommendations based on failed checks
+        for check in compliance_checks:
+            if check.get("status") == "failed":
+                audit_trail["recommendations"].append({
+                    "requirement_id": check.get("requirement_id"),
+                    "recommendation": f"Address compliance gap: {check.get('description')}",
+                    "priority": "high" if check.get("mandatory", False) else "medium",
+                    "estimated_effort": check.get("estimated_effort", "medium")
+                })
+        
+        # Store audit trail (in production, this would go to a database)
+        cache_key = f"compliance_audit:{audit_trail['audit_id']}"
+        await simple_cache.set(cache_key, json.dumps(audit_trail), ttl=86400 * 365)  # Store for 1 year
+        
+        logger.info(f"Created compliance audit trail {audit_trail['audit_id']} for {framework.value}")
+        return audit_trail
+    
+    async def get_compliance_dashboard_data(self, 
+                                          industry: IndustryType,
+                                          assessment_ids: List[str] = None) -> Dict[str, Any]:
+        """Get compliance dashboard data for monitoring."""
+        dashboard_data = {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "industry": industry.value,
+            "compliance_overview": {},
+            "recent_assessments": [],
+            "compliance_trends": {},
+            "risk_indicators": [],
+            "upcoming_audits": []
+        }
+        
+        # Get applicable frameworks for industry
+        applicable_frameworks = self._get_applicable_frameworks(industry)
+        
+        # Generate compliance overview
+        for framework in applicable_frameworks:
+            requirements = await self.get_requirements_by_framework(framework, industry)
+            
+            dashboard_data["compliance_overview"][framework.value] = {
+                "total_requirements": len(requirements),
+                "mandatory_requirements": sum(1 for req in requirements if req.mandatory),
+                "last_updated": max(req.last_updated for req in requirements).isoformat() if requirements else None,
+                "compliance_status": "needs_assessment"  # Would be calculated from actual assessments
+            }
+        
+        # Add risk indicators
+        dashboard_data["risk_indicators"] = [
+            {
+                "framework": "GDPR",
+                "risk_level": "medium",
+                "description": "Data processing activities require review",
+                "action_required": "Conduct privacy impact assessment"
+            },
+            {
+                "framework": "SOC 2",
+                "risk_level": "low",
+                "description": "Security controls are up to date",
+                "action_required": "Continue monitoring"
+            }
+        ]
+        
+        # Add upcoming audits
+        dashboard_data["upcoming_audits"] = [
+            {
+                "framework": framework.value,
+                "scheduled_date": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
+                "audit_type": "quarterly_review",
+                "status": "scheduled"
+            }
+            for framework in applicable_frameworks[:2]  # Limit to first 2 frameworks
+        ]
+        
+        return dashboard_data
+    
+    async def generate_compliance_report(self, 
+                                       assessment_id: str,
+                                       frameworks: List[ComplianceFramework],
+                                       industry: IndustryType) -> Dict[str, Any]:
+        """Generate comprehensive compliance report."""
+        report = {
+            "report_id": f"compliance_report_{assessment_id}_{int(datetime.now(timezone.utc).timestamp())}",
+            "assessment_id": assessment_id,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "industry": industry.value,
+            "frameworks_assessed": [f.value for f in frameworks],
+            "executive_summary": {},
+            "detailed_findings": {},
+            "recommendations": [],
+            "implementation_roadmap": {},
+            "appendices": {}
+        }
+        
+        # Generate executive summary
+        total_requirements = 0
+        total_gaps = 0
+        
+        for framework in frameworks:
+            assessment = await self.assess_compliance(
+                framework, 
+                industry, 
+                [],  # Empty controls list for demo
+                {}   # Empty infrastructure config for demo
+            )
+            
+            total_requirements += assessment.total_requirements
+            total_gaps += (assessment.total_requirements - assessment.requirements_met)
+            
+            report["detailed_findings"][framework.value] = assessment.to_dict()
+            report["recommendations"].extend(assessment.recommendations)
+        
+        report["executive_summary"] = {
+            "overall_compliance_score": ((total_requirements - total_gaps) / total_requirements * 100) if total_requirements > 0 else 0,
+            "total_requirements_assessed": total_requirements,
+            "compliance_gaps_identified": total_gaps,
+            "critical_issues": total_gaps,
+            "recommendations_count": len(report["recommendations"])
+        }
+        
+        # Generate implementation roadmap
+        report["implementation_roadmap"] = {
+            "phase_1_immediate": {
+                "duration": "0-30 days",
+                "priority": "critical",
+                "tasks": report["recommendations"][:3]
+            },
+            "phase_2_short_term": {
+                "duration": "1-3 months", 
+                "priority": "high",
+                "tasks": report["recommendations"][3:6]
+            },
+            "phase_3_long_term": {
+                "duration": "3-12 months",
+                "priority": "medium",
+                "tasks": report["recommendations"][6:]
+            }
+        }
+        
+        logger.info(f"Generated compliance report {report['report_id']} for {len(frameworks)} frameworks")
+        return report
+    
+    async def monitor_regulatory_changes(self, frameworks: List[ComplianceFramework]) -> Dict[str, Any]:
+        """Monitor regulatory changes and updates."""
+        monitoring_results = {
+            "monitoring_date": datetime.now(timezone.utc).isoformat(),
+            "frameworks_monitored": [f.value for f in frameworks],
+            "changes_detected": [],
+            "alerts": [],
+            "next_check_date": (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
+        }
+        
+        # In a real implementation, this would check external sources for regulatory updates
+        # For now, simulate some monitoring results
+        for framework in frameworks:
+            if framework == ComplianceFramework.GDPR:
+                monitoring_results["changes_detected"].append({
+                    "framework": framework.value,
+                    "change_type": "guidance_update",
+                    "description": "Updated guidance on data processing lawfulness",
+                    "effective_date": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
+                    "impact_level": "medium",
+                    "action_required": "Review data processing procedures"
+                })
+            elif framework == ComplianceFramework.HIPAA:
+                monitoring_results["alerts"].append({
+                    "framework": framework.value,
+                    "alert_type": "compliance_deadline",
+                    "description": "Annual risk assessment due",
+                    "due_date": (datetime.now(timezone.utc) + timedelta(days=60)).isoformat(),
+                    "priority": "high"
+                })
+        
+        return monitoring_results
 
 
 # Global integrator instance

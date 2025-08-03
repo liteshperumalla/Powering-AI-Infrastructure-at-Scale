@@ -6,12 +6,16 @@ Focuses on business process analysis, AI opportunity identification, and AI tran
 """
 
 import logging
+import json
+import asyncio
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 
 from .base import BaseAgent, AgentConfig, AgentRole
 from .tools import ToolResult
+from .web_search import WebSearchClient, get_web_search_client
 from ..models.assessment import Assessment
+from ..core.llm_client import get_llm_client
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +126,10 @@ class AIConsultantAgent(BaseAgent):
             "Implementation Roadmap"
         ]
         
+        # Initialize web search for real-time market data
+        self.web_search_client = None
+        self.llm_client = None
+        
         logger.info("AI Consultant Agent initialized with generative AI expertise")
     
     async def _execute_main_logic(self) -> Dict[str, Any]:
@@ -134,36 +142,46 @@ class AIConsultantAgent(BaseAgent):
         logger.info("AI Consultant Agent starting AI transformation analysis")
         
         try:
-            # Step 1: Analyze current business processes
-            business_process_analysis = await self._analyze_business_processes()
+            # Initialize clients for real data collection
+            if not self.web_search_client:
+                self.web_search_client = await get_web_search_client()
+            if not self.llm_client:
+                self.llm_client = await get_llm_client()
             
-            # Step 2: Identify AI opportunities
-            ai_opportunities = await self._identify_ai_opportunities()
+            # Step 1: Collect real-time AI market intelligence
+            market_intelligence = await self._collect_ai_market_intelligence()
             
-            # Step 3: Assess AI readiness
-            readiness_assessment = await self._assess_ai_readiness()
+            # Step 2: Analyze current business processes with market context
+            business_process_analysis = await self._analyze_business_processes_with_market_data(market_intelligence)
             
-            # Step 4: Generate AI use case recommendations
-            use_case_recommendations = await self._generate_use_case_recommendations(
-                business_process_analysis, ai_opportunities
+            # Step 3: Identify AI opportunities using real market trends
+            ai_opportunities = await self._identify_ai_opportunities_with_trends(market_intelligence)
+            
+            # Step 4: Assess AI readiness with industry benchmarks
+            readiness_assessment = await self._assess_ai_readiness_with_benchmarks(market_intelligence)
+            
+            # Step 5: Generate AI use case recommendations with real success stories
+            use_case_recommendations = await self._generate_use_case_recommendations_with_real_data(
+                business_process_analysis, ai_opportunities, market_intelligence
             )
             
-            # Step 5: Create transformation strategy
-            transformation_strategy = await self._create_transformation_strategy(
-                readiness_assessment, use_case_recommendations
+            # Step 6: Create transformation strategy with market insights
+            transformation_strategy = await self._create_transformation_strategy_with_market_data(
+                readiness_assessment, use_case_recommendations, market_intelligence
             )
             
-            # Step 6: Develop implementation roadmap
-            implementation_roadmap = await self._develop_implementation_roadmap(
-                transformation_strategy, use_case_recommendations
+            # Step 7: Develop implementation roadmap with real timelines
+            implementation_roadmap = await self._develop_implementation_roadmap_with_real_data(
+                transformation_strategy, use_case_recommendations, market_intelligence
             )
             
-            # Step 7: Address ethics and governance
-            ethics_governance = await self._address_ethics_and_governance()
+            # Step 8: Address ethics and governance with current best practices
+            ethics_governance = await self._address_ethics_and_governance_with_current_practices(market_intelligence)
             
             result = {
                 "recommendations": use_case_recommendations,
                 "data": {
+                    "market_intelligence": market_intelligence,
                     "business_process_analysis": business_process_analysis,
                     "ai_opportunities": ai_opportunities,
                     "readiness_assessment": readiness_assessment,
@@ -1146,3 +1164,108 @@ class AIConsultantAgent(BaseAgent):
         max_cost = int(base_cost * multiplier * 1.5)
         
         return f"${min_cost:,} - ${max_cost:,}"
+    
+    # Enhanced methods with real market data integration
+    
+    async def _collect_ai_market_intelligence(self) -> Dict[str, Any]:
+        """Collect real-time AI market intelligence and trends."""
+        logger.debug("Collecting AI market intelligence")
+        
+        market_intelligence = {
+            "ai_trends": [],
+            "success_stories": [],
+            "industry_adoption": [],
+            "technology_developments": [],
+            "market_analysis": [],
+            "roi_studies": []
+        }
+        
+        try:
+            # Search for AI trends and developments
+            trends_search = await self.web_search_client.search(
+                "artificial intelligence trends 2024 2025 enterprise adoption generative AI business applications",
+                num_results=5
+            )
+            market_intelligence["ai_trends"] = trends_search.get("results", [])
+            
+            # Search for AI success stories and case studies
+            success_search = await self.web_search_client.search(
+                "AI implementation success stories case studies enterprise 2024 ROI business transformation",
+                num_results=5
+            )
+            market_intelligence["success_stories"] = success_search.get("results", [])
+            
+            # Search for industry-specific AI adoption
+            industry_search = await self.web_search_client.search(
+                "AI adoption by industry enterprise artificial intelligence implementation rates 2024 2025",
+                num_results=5
+            )
+            market_intelligence["industry_adoption"] = industry_search.get("results", [])
+            
+            # Search for technology developments
+            tech_search = await self.web_search_client.search(
+                "AI technology developments machine learning platforms 2024 2025 enterprise solutions",
+                num_results=5
+            )
+            market_intelligence["technology_developments"] = tech_search.get("results", [])
+            
+            # Search for market analysis
+            market_search = await self.web_search_client.search(
+                "AI market analysis enterprise spending artificial intelligence investment 2024 2025",
+                num_results=5
+            )
+            market_intelligence["market_analysis"] = market_search.get("results", [])
+            
+            # Search for ROI studies
+            roi_search = await self.web_search_client.search(
+                "AI ROI studies return on investment artificial intelligence enterprise business value 2024",
+                num_results=3
+            )
+            market_intelligence["roi_studies"] = roi_search.get("results", [])
+            
+            logger.info(f"Collected AI market intelligence: {sum(len(v) for v in market_intelligence.values())} sources")
+            
+        except Exception as e:
+            logger.warning(f"Failed to collect some AI market intelligence: {str(e)}")
+        
+        return market_intelligence
+    
+    def _prepare_market_context(self, market_intelligence: Dict[str, Any]) -> str:
+        """Prepare market intelligence context for LLM analysis."""
+        context_parts = []
+        
+        for category, sources in market_intelligence.items():
+            if sources:
+                context_parts.append(f"{category.replace('_', ' ').title()}:")
+                for source in sources[:3]:  # Limit to top 3 per category
+                    title = source.get("title", "")
+                    snippet = source.get("snippet", "")
+                    context_parts.append(f"- {title}: {snippet[:200]}...")
+        
+        return "\n".join(context_parts)
+    
+    def _parse_llm_response(self, response: str) -> Dict[str, Any]:
+        """Parse LLM response, handling both JSON and text formats."""
+        try:
+            # Try to parse as JSON first
+            return json.loads(response)
+        except json.JSONDecodeError:
+            # Fallback to extracting structured information from text
+            return self._extract_structured_data_from_text(response)
+    
+    def _extract_structured_data_from_text(self, text: str) -> Dict[str, Any]:
+        """Extract structured data from text when JSON parsing fails."""
+        # Simple extraction logic for common patterns
+        result = {
+            "analysis": text,
+            "extracted_points": []
+        }
+        
+        # Extract numbered points
+        lines = text.split('\n')
+        for line in lines:
+            line = line.strip()
+            if line and (line.startswith(('1.', '2.', '3.', '4.', '5.', '-', '•'))):
+                result["extracted_points"].append(line)
+        
+        return result

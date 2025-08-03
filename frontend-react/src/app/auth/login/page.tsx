@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Container,
     Paper,
@@ -20,45 +20,60 @@ import {
     Lock,
 } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { login, clearError } from '@/store/slices/authSlice';
 
 export default function LoginPage() {
     const router = useRouter();
+    const dispatch = useAppDispatch();
+    const { loading, error, isAuthenticated } = useAppSelector(state => state.auth);
+
     const [formData, setFormData] = useState({
         email: '',
         password: '',
     });
     const [showPassword, setShowPassword] = useState(false);
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
+
+    // Redirect if already authenticated
+    useEffect(() => {
+        if (isAuthenticated) {
+            router.push('/dashboard');
+        }
+    }, [isAuthenticated, router]);
+
+    // Clear error when component mounts
+    useEffect(() => {
+        dispatch(clearError());
+    }, [dispatch]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setFormData({
             ...formData,
             [e.target.name]: e.target.value,
         });
-        setError('');
+        if (error) {
+            dispatch(clearError());
+        }
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
-        setError('');
+
+        if (!formData.email || !formData.password) {
+            return;
+        }
 
         try {
-            // TODO: Implement actual authentication logic
-            // For now, simulate login
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            const result = await dispatch(login({
+                email: formData.email,
+                password: formData.password,
+            })).unwrap();
 
-            if (formData.email && formData.password) {
-                // Simulate successful login
-                router.push('/dashboard');
-            } else {
-                setError('Please fill in all fields');
-            }
-        } catch {
-            setError('Login failed. Please try again.');
-        } finally {
-            setLoading(false);
+            // Login successful, redirect to dashboard
+            router.push('/dashboard');
+        } catch (error) {
+            // Error is handled by Redux state
+            console.error('Login failed:', error);
         }
     };
 
@@ -107,14 +122,12 @@ export default function LoginPage() {
                             autoFocus
                             value={formData.email}
                             onChange={handleChange}
-                            slotProps={{
-                                input: {
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <Email />
-                                        </InputAdornment>
-                                    ),
-                                },
+                            InputProps={{
+                                startAdornment: (
+                                    <InputAdornment position="start">
+                                        <Email />
+                                    </InputAdornment>
+                                ),
                             }}
                         />
                         <TextField
@@ -128,25 +141,23 @@ export default function LoginPage() {
                             autoComplete="current-password"
                             value={formData.password}
                             onChange={handleChange}
-                            slotProps={{
-                                input: {
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <Lock />
-                                        </InputAdornment>
-                                    ),
-                                    endAdornment: (
-                                        <InputAdornment position="end">
-                                            <IconButton
-                                                aria-label="toggle password visibility"
-                                                onClick={() => setShowPassword(!showPassword)}
-                                                edge="end"
-                                            >
-                                                {showPassword ? <VisibilityOff /> : <Visibility />}
-                                            </IconButton>
-                                        </InputAdornment>
-                                    ),
-                                },
+                            InputProps={{
+                                startAdornment: (
+                                    <InputAdornment position="start">
+                                        <Lock />
+                                    </InputAdornment>
+                                ),
+                                endAdornment: (
+                                    <InputAdornment position="end">
+                                        <IconButton
+                                            aria-label="toggle password visibility"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            edge="end"
+                                        >
+                                            {showPassword ? <VisibilityOff /> : <Visibility />}
+                                        </IconButton>
+                                    </InputAdornment>
+                                ),
                             }}
                         />
                         <Button

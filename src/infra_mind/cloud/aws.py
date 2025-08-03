@@ -7,11 +7,14 @@ Provides clients for AWS Pricing API, EC2, RDS, and other services.
 import asyncio
 import json
 import logging
+import time
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 import httpx
 import boto3
-from botocore.exceptions import ClientError, NoCredentialsError
+from botocore.exceptions import ClientError, NoCredentialsError, BotoCoreError
+from botocore.config import Config
+from botocore.retries import adaptive
 
 from .base import (
     BaseCloudClient, CloudProvider, CloudService, CloudServiceResponse,
@@ -32,7 +35,7 @@ class AWSClient(BaseCloudClient):
     def __init__(self, region: str = "us-east-1", aws_access_key_id: Optional[str] = None, 
                  aws_secret_access_key: Optional[str] = None):
         """
-        Initialize AWS client.
+        Initialize AWS client with production-ready configuration.
         
         Args:
             region: AWS region
@@ -44,46 +47,84 @@ class AWSClient(BaseCloudClient):
         """
         super().__init__(CloudProvider.AWS, region)
         
+        # Configure boto3 with production settings
+        self.boto_config = Config(
+            region_name=region,
+            retries={
+                'max_attempts': 3,
+                'mode': 'adaptive'
+            },
+            max_pool_connections=50,
+            read_timeout=60,
+            connect_timeout=10
+        )
+        
+        # Store credentials for service clients
+        self.aws_access_key_id = aws_access_key_id
+        self.aws_secret_access_key = aws_secret_access_key
+        
         # Validate credentials first
         self._validate_credentials(aws_access_key_id, aws_secret_access_key)
         
-        # Initialize service clients
-        self.pricing_client = AWSPricingClient(region, aws_access_key_id, aws_secret_access_key)
-        self.ec2_client = AWSEC2Client(region, aws_access_key_id, aws_secret_access_key)
-        self.rds_client = AWSRDSClient(region, aws_access_key_id, aws_secret_access_key)
-        self.ai_client = AWSAIClient(region, aws_access_key_id, aws_secret_access_key)
+        # Initialize service clients with enhanced configuration
+        self.pricing_client = AWSPricingClient(region, aws_access_key_id, aws_secret_access_key, self.boto_config)
+        self.ec2_client = AWSEC2Client(region, aws_access_key_id, aws_secret_access_key, self.boto_config)
+        self.rds_client = AWSRDSClient(region, aws_access_key_id, aws_secret_access_key, self.boto_config)
+        self.ai_client = AWSAIClient(region, aws_access_key_id, aws_secret_access_key, self.boto_config)
         
         # Extended service clients
-        self.eks_client = AWSEKSClient(region, aws_access_key_id, aws_secret_access_key)
-        self.lambda_client = AWSLambdaClient(region, aws_access_key_id, aws_secret_access_key)
-        self.sagemaker_client = AWSSageMakerClient(region, aws_access_key_id, aws_secret_access_key)
-        self.cost_explorer_client = AWSCostExplorerClient(region, aws_access_key_id, aws_secret_access_key)
-        self.budgets_client = AWSBudgetsClient(region, aws_access_key_id, aws_secret_access_key)
+        self.eks_client = AWSEKSClient(region, aws_access_key_id, aws_secret_access_key, self.boto_config)
+        self.lambda_client = AWSLambdaClient(region, aws_access_key_id, aws_secret_access_key, self.boto_config)
+        self.sagemaker_client = AWSSageMakerClient(region, aws_access_key_id, aws_secret_access_key, self.boto_config)
+        self.cost_explorer_client = AWSCostExplorerClient(region, aws_access_key_id, aws_secret_access_key, self.boto_config)
+        self.budgets_client = AWSBudgetsClient(region, aws_access_key_id, aws_secret_access_key, self.boto_config)
         
-        # Initialize resilience patterns for AWS services
+        # Initialize rate limiting and resilience patterns
+        self._init_rate_limiting()
         self._init_resilience_patterns()
     
     def _validate_credentials(self, aws_access_key_id: Optional[str], aws_secret_access_key: Optional[str]):
-        """Validate AWS credentials are available."""
+        """Validate AWS credentials are available and working."""
         try:
             if aws_access_key_id and aws_secret_access_key:
                 test_client = boto3.client(
                     'sts',
                     aws_access_key_id=aws_access_key_id,
-                    aws_secret_access_key=aws_secret_access_key
+                    aws_secret_access_key=aws_secret_access_key,
+                    config=self.boto_config
                 )
             else:
-                test_client = boto3.client('sts')
+                test_client = boto3.client('sts', config=self.boto_config)
             
-            # Test credentials
-            test_client.get_caller_identity()
+            # Test credentials with timeout
+            identity = test_client.get_caller_identity()
+            logger.info(f"AWS credentials validated for account: {identity.get('Account', 'unknown')}")
             
-        except (NoCredentialsError, ClientError) as e:
+        except (NoCredentialsError, ClientError, BotoCoreError) as e:
+            logger.error(f"AWS credential validation failed: {e}")
             raise AuthenticationError(
-                "AWS credentials are required for real API access. Please provide valid credentials.",
+                f"AWS credentials are required for real API access. Error: {str(e)}",
                 CloudProvider.AWS,
                 "INVALID_CREDENTIALS"
             )
+    
+    def _init_rate_limiting(self):
+        """Initialize rate limiting for AWS API calls."""
+        self.rate_limits = {
+            'pricing': {'calls_per_second': 10, 'burst': 20},
+            'ec2': {'calls_per_second': 20, 'burst': 40},
+            'rds': {'calls_per_second': 20, 'burst': 40},
+            'eks': {'calls_per_second': 10, 'burst': 20},
+            'lambda': {'calls_per_second': 20, 'burst': 40},
+            'sagemaker': {'calls_per_second': 10, 'burst': 20},
+            'cost_explorer': {'calls_per_second': 5, 'burst': 10},
+            'budgets': {'calls_per_second': 5, 'burst': 10}
+        }
+        
+        # Track API call timestamps for rate limiting
+        self.api_call_history = {service: [] for service in self.rate_limits.keys()}
+        
+        logger.info("Initialized AWS API rate limiting")
     
     def _init_resilience_patterns(self):
         """Initialize resilience patterns for AWS services."""
@@ -127,6 +168,133 @@ class AWSClient(BaseCloudClient):
         )
         
         logger.info("Initialized resilience patterns for AWS services")
+    
+    async def _check_rate_limit(self, service: str) -> None:
+        """
+        Check and enforce rate limits for AWS API calls.
+        
+        Args:
+            service: Service name for rate limiting
+            
+        Raises:
+            RateLimitError: If rate limit is exceeded
+        """
+        if service not in self.rate_limits:
+            return
+        
+        current_time = time.time()
+        rate_config = self.rate_limits[service]
+        call_history = self.api_call_history[service]
+        
+        # Remove calls older than 1 second
+        call_history[:] = [call_time for call_time in call_history if current_time - call_time < 1.0]
+        
+        # Check if we're within rate limits
+        if len(call_history) >= rate_config['calls_per_second']:
+            # Check burst capacity
+            recent_calls = [call_time for call_time in call_history if current_time - call_time < 0.1]
+            if len(recent_calls) >= rate_config['burst']:
+                wait_time = 1.0 - (current_time - call_history[0])
+                raise RateLimitError(
+                    f"AWS {service} API rate limit exceeded. Wait {wait_time:.2f} seconds.",
+                    CloudProvider.AWS,
+                    "RATE_LIMIT_EXCEEDED"
+                )
+        
+        # Record this API call
+        call_history.append(current_time)
+    
+    async def _execute_with_retry(self, service: str, operation: str, func, *args, **kwargs):
+        """
+        Execute AWS API call with retry logic and rate limiting.
+        
+        Args:
+            service: Service name for rate limiting
+            operation: Operation name for logging
+            func: Function to execute
+            *args, **kwargs: Arguments for the function
+            
+        Returns:
+            Result of the function call
+            
+        Raises:
+            CloudServiceError: If all retries fail
+        """
+        max_retries = 3
+        base_delay = 1.0
+        
+        for attempt in range(max_retries + 1):
+            try:
+                # Check rate limits
+                await self._check_rate_limit(service)
+                
+                # Execute the function
+                result = await func(*args, **kwargs) if asyncio.iscoroutinefunction(func) else func(*args, **kwargs)
+                
+                # Log successful call
+                logger.debug(f"AWS {service} {operation} succeeded on attempt {attempt + 1}")
+                self._increment_api_calls()
+                return result
+                
+            except RateLimitError:
+                if attempt == max_retries:
+                    raise
+                # Wait before retry for rate limit
+                await asyncio.sleep(base_delay * (2 ** attempt))
+                
+            except ClientError as e:
+                error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+                
+                if error_code in ['Throttling', 'ThrottlingException', 'RequestLimitExceeded']:
+                    if attempt == max_retries:
+                        raise RateLimitError(
+                            f"AWS {service} API throttled after {max_retries} retries",
+                            CloudProvider.AWS,
+                            error_code
+                        )
+                    # Exponential backoff for throttling
+                    delay = base_delay * (2 ** attempt) + (attempt * 0.1)  # Add jitter
+                    logger.warning(f"AWS {service} {operation} throttled, retrying in {delay:.2f}s (attempt {attempt + 1})")
+                    await asyncio.sleep(delay)
+                    
+                elif error_code in ['ServiceUnavailable', 'InternalError']:
+                    if attempt == max_retries:
+                        raise CloudServiceError(
+                            f"AWS {service} service unavailable after {max_retries} retries",
+                            CloudProvider.AWS,
+                            error_code
+                        )
+                    # Shorter delay for service errors
+                    delay = base_delay * (1.5 ** attempt)
+                    logger.warning(f"AWS {service} {operation} service error, retrying in {delay:.2f}s (attempt {attempt + 1})")
+                    await asyncio.sleep(delay)
+                    
+                else:
+                    # Don't retry for other errors
+                    raise CloudServiceError(
+                        f"AWS {service} {operation} error: {str(e)}",
+                        CloudProvider.AWS,
+                        error_code
+                    )
+                    
+            except Exception as e:
+                if attempt == max_retries:
+                    raise CloudServiceError(
+                        f"AWS {service} {operation} unexpected error: {str(e)}",
+                        CloudProvider.AWS,
+                        "UNEXPECTED_ERROR"
+                    )
+                # Retry for unexpected errors
+                delay = base_delay * (2 ** attempt)
+                logger.warning(f"AWS {service} {operation} unexpected error, retrying in {delay:.2f}s (attempt {attempt + 1}): {e}")
+                await asyncio.sleep(delay)
+        
+        # This should never be reached
+        raise CloudServiceError(
+            f"AWS {service} {operation} failed after all retries",
+            CloudProvider.AWS,
+            "MAX_RETRIES_EXCEEDED"
+        )
     
     async def get_compute_services(self, region: Optional[str] = None) -> CloudServiceResponse:
         """Get AWS compute services (EC2 instances)."""
@@ -393,10 +561,19 @@ class AWSPricingClient:
     """
     
     def __init__(self, region: str = "us-east-1", aws_access_key_id: Optional[str] = None,
-                 aws_secret_access_key: Optional[str] = None):
+                 aws_secret_access_key: Optional[str] = None, boto_config: Optional[Config] = None):
         self.region = region
         self.base_url = "https://api.pricing.us-east-1.amazonaws.com"
         self.session = None
+        
+        # Use provided config or create default
+        if not boto_config:
+            boto_config = Config(
+                region_name='us-east-1',
+                retries={'max_attempts': 3, 'mode': 'adaptive'},
+                read_timeout=60,
+                connect_timeout=10
+            )
         
         # Initialize boto3 client for pricing (always us-east-1 for pricing API)
         try:
@@ -405,15 +582,22 @@ class AWSPricingClient:
                     'pricing',
                     region_name='us-east-1',  # Pricing API is only available in us-east-1
                     aws_access_key_id=aws_access_key_id,
-                    aws_secret_access_key=aws_secret_access_key
+                    aws_secret_access_key=aws_secret_access_key,
+                    config=boto_config
                 )
             else:
                 # Try to create client with default credentials
-                self.boto_client = boto3.client('pricing', region_name='us-east-1')
-                # Test the credentials by making a simple call
-                self.boto_client.describe_services(MaxResults=1)
-        except (NoCredentialsError, Exception) as e:
-            logger.warning(f"AWS credentials not available or invalid: {e}. Using mock pricing data.")
+                self.boto_client = boto3.client('pricing', region_name='us-east-1', config=boto_config)
+                
+            # Test the credentials by making a simple call with timeout
+            self.boto_client.describe_services(MaxResults=1)
+            logger.info("AWS Pricing API client initialized successfully")
+            
+        except (NoCredentialsError, ClientError, BotoCoreError) as e:
+            logger.warning(f"AWS credentials not available or invalid: {e}. Pricing client will use fallback data.")
+            self.boto_client = None
+        except Exception as e:
+            logger.error(f"Unexpected error initializing AWS Pricing client: {e}")
             self.boto_client = None
     
     async def get_service_pricing(self, service_code: str, region: str) -> Dict[str, Any]:
@@ -526,8 +710,17 @@ class AWSEC2Client:
     """
     
     def __init__(self, region: str = "us-east-1", aws_access_key_id: Optional[str] = None,
-                 aws_secret_access_key: Optional[str] = None):
+                 aws_secret_access_key: Optional[str] = None, boto_config: Optional[Config] = None):
         self.region = region
+        
+        # Use provided config or create default
+        if not boto_config:
+            boto_config = Config(
+                region_name=region,
+                retries={'max_attempts': 3, 'mode': 'adaptive'},
+                read_timeout=60,
+                connect_timeout=10
+            )
         
         try:
             if aws_access_key_id and aws_secret_access_key:
@@ -535,15 +728,22 @@ class AWSEC2Client:
                     'ec2',
                     region_name=region,
                     aws_access_key_id=aws_access_key_id,
-                    aws_secret_access_key=aws_secret_access_key
+                    aws_secret_access_key=aws_secret_access_key,
+                    config=boto_config
                 )
             else:
                 # Try to create client with default credentials
-                self.boto_client = boto3.client('ec2', region_name=region)
-                # Test the credentials by making a simple call
-                self.boto_client.describe_regions()
-        except (NoCredentialsError, Exception) as e:
-            logger.warning(f"AWS credentials not available or invalid: {e}. Using mock EC2 data.")
+                self.boto_client = boto3.client('ec2', region_name=region, config=boto_config)
+                
+            # Test the credentials by making a simple call with timeout
+            self.boto_client.describe_regions(MaxResults=1)
+            logger.info(f"AWS EC2 client initialized successfully for region {region}")
+            
+        except (NoCredentialsError, ClientError, BotoCoreError) as e:
+            logger.warning(f"AWS credentials not available or invalid: {e}. EC2 client will use fallback data.")
+            self.boto_client = None
+        except Exception as e:
+            logger.error(f"Unexpected error initializing AWS EC2 client: {e}")
             self.boto_client = None
     
     async def get_instance_types(self, region: str) -> CloudServiceResponse:
@@ -871,8 +1071,17 @@ class AWSRDSClient:
     """
     
     def __init__(self, region: str = "us-east-1", aws_access_key_id: Optional[str] = None,
-                 aws_secret_access_key: Optional[str] = None):
+                 aws_secret_access_key: Optional[str] = None, boto_config: Optional[Config] = None):
         self.region = region
+        
+        # Use provided config or create default
+        if not boto_config:
+            boto_config = Config(
+                region_name=region,
+                retries={'max_attempts': 3, 'mode': 'adaptive'},
+                read_timeout=60,
+                connect_timeout=10
+            )
         
         try:
             if aws_access_key_id and aws_secret_access_key:
@@ -880,15 +1089,22 @@ class AWSRDSClient:
                     'rds',
                     region_name=region,
                     aws_access_key_id=aws_access_key_id,
-                    aws_secret_access_key=aws_secret_access_key
+                    aws_secret_access_key=aws_secret_access_key,
+                    config=boto_config
                 )
             else:
                 # Try to create client with default credentials
-                self.boto_client = boto3.client('rds', region_name=region)
-                # Test the credentials by making a simple call
-                self.boto_client.describe_db_engine_versions(MaxRecords=20)
-        except (NoCredentialsError, Exception) as e:
-            logger.warning(f"AWS credentials not available or invalid: {e}. Using mock RDS data.")
+                self.boto_client = boto3.client('rds', region_name=region, config=boto_config)
+                
+            # Test the credentials by making a simple call with timeout
+            self.boto_client.describe_db_engine_versions(MaxRecords=1)
+            logger.info(f"AWS RDS client initialized successfully for region {region}")
+            
+        except (NoCredentialsError, ClientError, BotoCoreError) as e:
+            logger.warning(f"AWS credentials not available or invalid: {e}. RDS client will use fallback data.")
+            self.boto_client = None
+        except Exception as e:
+            logger.error(f"Unexpected error initializing AWS RDS client: {e}")
             self.boto_client = None
     
     async def get_database_instances(self, region: str) -> CloudServiceResponse:
@@ -1039,11 +1255,20 @@ class AWSAIClient:
     """
     
     def __init__(self, region: str = "us-east-1", aws_access_key_id: Optional[str] = None, 
-                 aws_secret_access_key: Optional[str] = None):
-        """Initialize AWS AI client."""
+                 aws_secret_access_key: Optional[str] = None, boto_config: Optional[Config] = None):
+        """Initialize AWS AI client with enhanced configuration."""
         self.region = region
         self.aws_access_key_id = aws_access_key_id
         self.aws_secret_access_key = aws_secret_access_key
+        
+        # Use provided config or create default
+        if not boto_config:
+            boto_config = Config(
+                region_name=region,
+                retries={'max_attempts': 3, 'mode': 'adaptive'},
+                read_timeout=60,
+                connect_timeout=10
+            )
         
         try:
             if aws_access_key_id and aws_secret_access_key:
@@ -1051,20 +1276,28 @@ class AWSAIClient:
                     'sagemaker',
                     region_name=region,
                     aws_access_key_id=aws_access_key_id,
-                    aws_secret_access_key=aws_secret_access_key
+                    aws_secret_access_key=aws_secret_access_key,
+                    config=boto_config
                 )
                 self.bedrock_client = boto3.client(
                     'bedrock',
                     region_name=region,
                     aws_access_key_id=aws_access_key_id,
-                    aws_secret_access_key=aws_secret_access_key
+                    aws_secret_access_key=aws_secret_access_key,
+                    config=boto_config
                 )
             else:
-                self.sagemaker_client = boto3.client('sagemaker', region_name=region)
-                self.bedrock_client = boto3.client('bedrock', region_name=region)
+                self.sagemaker_client = boto3.client('sagemaker', region_name=region, config=boto_config)
+                self.bedrock_client = boto3.client('bedrock', region_name=region, config=boto_config)
+            
+            logger.info(f"AWS AI clients initialized successfully for region {region}")
                 
+        except (NoCredentialsError, ClientError, BotoCoreError) as e:
+            logger.warning(f"AWS credentials not available or invalid: {e}. AI clients will use fallback data.")
+            self.sagemaker_client = None
+            self.bedrock_client = None
         except Exception as e:
-            logger.warning(f"Failed to initialize AWS AI clients: {e}")
+            logger.error(f"Unexpected error initializing AWS AI clients: {e}")
             self.sagemaker_client = None
             self.bedrock_client = None
     
@@ -1435,8 +1668,17 @@ class AWSEKSClient:
     """
     
     def __init__(self, region: str = "us-east-1", aws_access_key_id: Optional[str] = None,
-                 aws_secret_access_key: Optional[str] = None):
+                 aws_secret_access_key: Optional[str] = None, boto_config: Optional[Config] = None):
         self.region = region
+        
+        # Use provided config or create default
+        if not boto_config:
+            boto_config = Config(
+                region_name=region,
+                retries={'max_attempts': 3, 'mode': 'adaptive'},
+                read_timeout=60,
+                connect_timeout=10
+            )
         
         try:
             if aws_access_key_id and aws_secret_access_key:
@@ -1444,15 +1686,22 @@ class AWSEKSClient:
                     'eks',
                     region_name=region,
                     aws_access_key_id=aws_access_key_id,
-                    aws_secret_access_key=aws_secret_access_key
+                    aws_secret_access_key=aws_secret_access_key,
+                    config=boto_config
                 )
             else:
                 # Try to create client with default credentials
-                self.boto_client = boto3.client('eks', region_name=region)
-                # Test the credentials by making a simple call
-                self.boto_client.list_clusters()
-        except (NoCredentialsError, Exception) as e:
-            logger.warning(f"AWS credentials not available or invalid: {e}. Using mock EKS data.")
+                self.boto_client = boto3.client('eks', region_name=region, config=boto_config)
+                
+            # Test the credentials by making a simple call with timeout
+            self.boto_client.list_clusters(maxResults=1)
+            logger.info(f"AWS EKS client initialized successfully for region {region}")
+            
+        except (NoCredentialsError, ClientError, BotoCoreError) as e:
+            logger.warning(f"AWS credentials not available or invalid: {e}. EKS client will use fallback data.")
+            self.boto_client = None
+        except Exception as e:
+            logger.error(f"Unexpected error initializing AWS EKS client: {e}")
             self.boto_client = None
     
     async def get_eks_services(self, region: str) -> CloudServiceResponse:
@@ -1653,8 +1902,17 @@ class AWSLambdaClient:
     """
     
     def __init__(self, region: str = "us-east-1", aws_access_key_id: Optional[str] = None,
-                 aws_secret_access_key: Optional[str] = None):
+                 aws_secret_access_key: Optional[str] = None, boto_config: Optional[Config] = None):
         self.region = region
+        
+        # Use provided config or create default
+        if not boto_config:
+            boto_config = Config(
+                region_name=region,
+                retries={'max_attempts': 3, 'mode': 'adaptive'},
+                read_timeout=60,
+                connect_timeout=10
+            )
         
         try:
             if aws_access_key_id and aws_secret_access_key:
@@ -1662,15 +1920,22 @@ class AWSLambdaClient:
                     'lambda',
                     region_name=region,
                     aws_access_key_id=aws_access_key_id,
-                    aws_secret_access_key=aws_secret_access_key
+                    aws_secret_access_key=aws_secret_access_key,
+                    config=boto_config
                 )
             else:
                 # Try to create client with default credentials
-                self.boto_client = boto3.client('lambda', region_name=region)
-                # Test the credentials by making a simple call
-                self.boto_client.list_functions(MaxItems=1)
-        except (NoCredentialsError, Exception) as e:
-            logger.warning(f"AWS credentials not available or invalid: {e}. Using mock Lambda data.")
+                self.boto_client = boto3.client('lambda', region_name=region, config=boto_config)
+                
+            # Test the credentials by making a simple call with timeout
+            self.boto_client.list_functions(MaxItems=1)
+            logger.info(f"AWS Lambda client initialized successfully for region {region}")
+            
+        except (NoCredentialsError, ClientError, BotoCoreError) as e:
+            logger.warning(f"AWS credentials not available or invalid: {e}. Lambda client will use fallback data.")
+            self.boto_client = None
+        except Exception as e:
+            logger.error(f"Unexpected error initializing AWS Lambda client: {e}")
             self.boto_client = None
     
     async def get_lambda_services(self, region: str) -> CloudServiceResponse:
@@ -1820,8 +2085,17 @@ class AWSSageMakerClient:
     """
     
     def __init__(self, region: str = "us-east-1", aws_access_key_id: Optional[str] = None,
-                 aws_secret_access_key: Optional[str] = None):
+                 aws_secret_access_key: Optional[str] = None, boto_config: Optional[Config] = None):
         self.region = region
+        
+        # Use provided config or create default
+        if not boto_config:
+            boto_config = Config(
+                region_name=region,
+                retries={'max_attempts': 3, 'mode': 'adaptive'},
+                read_timeout=60,
+                connect_timeout=10
+            )
         
         try:
             if aws_access_key_id and aws_secret_access_key:
@@ -1829,15 +2103,22 @@ class AWSSageMakerClient:
                     'sagemaker',
                     region_name=region,
                     aws_access_key_id=aws_access_key_id,
-                    aws_secret_access_key=aws_secret_access_key
+                    aws_secret_access_key=aws_secret_access_key,
+                    config=boto_config
                 )
             else:
                 # Try to create client with default credentials
-                self.boto_client = boto3.client('sagemaker', region_name=region)
-                # Test the credentials by making a simple call
-                self.boto_client.list_training_jobs(MaxResults=1)
-        except (NoCredentialsError, Exception) as e:
-            logger.warning(f"AWS credentials not available or invalid: {e}. Using mock SageMaker data.")
+                self.boto_client = boto3.client('sagemaker', region_name=region, config=boto_config)
+                
+            # Test the credentials by making a simple call with timeout
+            self.boto_client.list_training_jobs(MaxResults=1)
+            logger.info(f"AWS SageMaker client initialized successfully for region {region}")
+            
+        except (NoCredentialsError, ClientError, BotoCoreError) as e:
+            logger.warning(f"AWS credentials not available or invalid: {e}. SageMaker client will use fallback data.")
+            self.boto_client = None
+        except Exception as e:
+            logger.error(f"Unexpected error initializing AWS SageMaker client: {e}")
             self.boto_client = None
     
     async def get_sagemaker_services(self, region: str) -> CloudServiceResponse:
@@ -2038,8 +2319,17 @@ class AWSCostExplorerClient:
     """
     
     def __init__(self, region: str = "us-east-1", aws_access_key_id: Optional[str] = None,
-                 aws_secret_access_key: Optional[str] = None):
+                 aws_secret_access_key: Optional[str] = None, boto_config: Optional[Config] = None):
         self.region = region
+        
+        # Use provided config or create default (Cost Explorer is only available in us-east-1)
+        if not boto_config:
+            boto_config = Config(
+                region_name='us-east-1',
+                retries={'max_attempts': 3, 'mode': 'adaptive'},
+                read_timeout=60,
+                connect_timeout=10
+            )
         
         try:
             if aws_access_key_id and aws_secret_access_key:
@@ -2047,21 +2337,29 @@ class AWSCostExplorerClient:
                     'ce',  # Cost Explorer
                     region_name='us-east-1',  # Cost Explorer is only available in us-east-1
                     aws_access_key_id=aws_access_key_id,
-                    aws_secret_access_key=aws_secret_access_key
+                    aws_secret_access_key=aws_secret_access_key,
+                    config=boto_config
                 )
             else:
                 # Try to create client with default credentials
-                self.boto_client = boto3.client('ce', region_name='us-east-1')
-                # Test the credentials by making a simple call
-                self.boto_client.get_dimension_values(
-                    TimePeriod={
-                        'Start': '2024-01-01',
-                        'End': '2024-01-02'
-                    },
-                    Dimension='SERVICE'
-                )
-        except (NoCredentialsError, Exception) as e:
-            logger.warning(f"AWS credentials not available or invalid: {e}. Using mock Cost Explorer data.")
+                self.boto_client = boto3.client('ce', region_name='us-east-1', config=boto_config)
+                
+            # Test the credentials by making a simple call with timeout
+            self.boto_client.get_dimension_values(
+                TimePeriod={
+                    'Start': '2024-01-01',
+                    'End': '2024-01-02'
+                },
+                Dimension='SERVICE',
+                MaxResults=1
+            )
+            logger.info("AWS Cost Explorer client initialized successfully")
+            
+        except (NoCredentialsError, ClientError, BotoCoreError) as e:
+            logger.warning(f"AWS credentials not available or invalid: {e}. Cost Explorer client will use fallback data.")
+            self.boto_client = None
+        except Exception as e:
+            logger.error(f"Unexpected error initializing AWS Cost Explorer client: {e}")
             self.boto_client = None
     
     async def get_cost_and_usage(self, start_date: str, end_date: str, granularity: str = "MONTHLY") -> Dict[str, Any]:
@@ -2225,8 +2523,17 @@ class AWSBudgetsClient:
     """
     
     def __init__(self, region: str = "us-east-1", aws_access_key_id: Optional[str] = None,
-                 aws_secret_access_key: Optional[str] = None):
+                 aws_secret_access_key: Optional[str] = None, boto_config: Optional[Config] = None):
         self.region = region
+        
+        # Use provided config or create default (Budgets is only available in us-east-1)
+        if not boto_config:
+            boto_config = Config(
+                region_name='us-east-1',
+                retries={'max_attempts': 3, 'mode': 'adaptive'},
+                read_timeout=60,
+                connect_timeout=10
+            )
         
         try:
             if aws_access_key_id and aws_secret_access_key:
@@ -2234,15 +2541,20 @@ class AWSBudgetsClient:
                     'budgets',
                     region_name='us-east-1',  # Budgets is only available in us-east-1
                     aws_access_key_id=aws_access_key_id,
-                    aws_secret_access_key=aws_secret_access_key
+                    aws_secret_access_key=aws_secret_access_key,
+                    config=boto_config
                 )
             else:
                 # Try to create client with default credentials
-                self.boto_client = boto3.client('budgets', region_name='us-east-1')
-                # Test the credentials by making a simple call
-                self.boto_client.describe_budgets(AccountId='123456789012', MaxResults=1)
-        except (NoCredentialsError, Exception) as e:
-            logger.warning(f"AWS credentials not available or invalid: {e}. Using mock Budgets data.")
+                self.boto_client = boto3.client('budgets', region_name='us-east-1', config=boto_config)
+                
+            logger.info("AWS Budgets client initialized successfully")
+            
+        except (NoCredentialsError, ClientError, BotoCoreError) as e:
+            logger.warning(f"AWS credentials not available or invalid: {e}. Budgets client will use fallback data.")
+            self.boto_client = None
+        except Exception as e:
+            logger.error(f"Unexpected error initializing AWS Budgets client: {e}")
             self.boto_client = None
     
     async def get_budgets(self, account_id: str) -> Dict[str, Any]:

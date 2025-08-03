@@ -54,7 +54,7 @@ interface CollaboratorStatus {
 
 interface FieldUpdate {
     fieldId: string;
-    fieldValue: any;
+    fieldValue: unknown;
     fieldType: string;
     userId: string;
     timestamp: Date;
@@ -278,7 +278,7 @@ const LiveCollaboration: React.FC<LiveCollaborationProps> = ({
     }, [websocket]);
 
     // Send form field updates
-    const sendFormUpdate = useCallback((fieldId: string, fieldValue: any, fieldType: string) => {
+    const sendFormUpdate = useCallback((fieldId: string, fieldValue: unknown, fieldType: string) => {
         if (websocket && websocket.readyState === WebSocket.OPEN) {
             websocket.send(JSON.stringify({
                 type: 'form_update',

@@ -1,20 +1,125 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
-  name: redis
+  name: redis-cluster
   namespace: infra-mind
   labels:
-    app: redis
+    app: redis-cluster
+    component: cache
+spec:
+  serviceName: redis-cluster-headless
+  replicas: 6  # 3 masters + 3 replicas for production cluster
+  selector:
+    matchLabels:
+      app: redis-cluster
+  template:
+    metadata:
+      labels:
+        app: redis-cluster
+        component: cache
+    spec:
+      containers:
+      - name: redis
+        image: redis:7.2-alpine
+        ports:
+        - containerPort: 6379
+          name: client
+        - containerPort: 16379
+          name: gossip
+        command:
+        - redis-server
+        - /usr/local/etc/redis/redis.conf
+        - --cluster-enabled
+        - "yes"
+        - --cluster-config-file
+        - /data/nodes.conf
+        - --cluster-node-timeout
+        - "5000"
+        - --appendonly
+        - "yes"
+        - --requirepass
+        - $(REDIS_PASSWORD)
+        - --masterauth
+        - $(REDIS_PASSWORD)
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: infra-mind-secrets
+              key: REDIS_PASSWORD
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        volumeMounts:
+        - name: redis-storage
+          mountPath: /data
+        - name: redis-config
+          mountPath: /usr/local/etc/redis
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "200m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          exec:
+            command:
+            - redis-cli
+            - --no-auth-warning
+            - -a
+            - $(REDIS_PASSWORD)
+            - ping
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          exec:
+            command:
+            - redis-cli
+            - --no-auth-warning
+            - -a
+            - $(REDIS_PASSWORD)
+            - ping
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      volumes:
+      - name: redis-config
+        configMap:
+          name: redis-config
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-storage
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: fast-ssd
+      resources:
+        requests:
+          storage: 10Gi
+
+---
+# Single Redis instance for development/testing
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-single
+  namespace: infra-mind
+  labels:
+    app: redis-single
     component: cache
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: redis
+      app: redis-single
   template:
     metadata:
       labels:
-        app: redis
+        app: redis-single
         component: cache
     spec:
       containers:
@@ -24,8 +129,7 @@ spec:
         - containerPort: 6379
         command:
         - redis-server
-        - --appendonly
-        - "yes"
+        - /usr/local/etc/redis/redis.conf
         - --requirepass
         - $(REDIS_PASSWORD)
         env:
@@ -73,22 +177,46 @@ spec:
       volumes:
       - name: redis-storage
         persistentVolumeClaim:
-          claimName: redis-pvc
+          claimName: redis-single-pvc
       - name: redis-config
         configMap:
           name: redis-config
 
 ---
+# Headless service for Redis cluster
 apiVersion: v1
 kind: Service
 metadata:
-  name: redis-service
+  name: redis-cluster-headless
   namespace: infra-mind
   labels:
-    app: redis
+    app: redis-cluster
+spec:
+  clusterIP: None
+  selector:
+    app: redis-cluster
+  ports:
+  - port: 6379
+    targetPort: 6379
+    protocol: TCP
+    name: client
+  - port: 16379
+    targetPort: 16379
+    protocol: TCP
+    name: gossip
+
+---
+# Service for Redis cluster access
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-cluster-service
+  namespace: infra-mind
+  labels:
+    app: redis-cluster
 spec:
   selector:
-    app: redis
+    app: redis-cluster
   ports:
   - port: 6379
     targetPort: 6379
@@ -96,10 +224,29 @@ spec:
   type: ClusterIP
 
 ---
+# Service for single Redis instance
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-single-service
+  namespace: infra-mind
+  labels:
+    app: redis-single
+spec:
+  selector:
+    app: redis-single
+  ports:
+  - port: 6379
+    targetPort: 6379
+    protocol: TCP
+  type: ClusterIP
+
+---
+# PVC for single Redis instance
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: redis-pvc
+  name: redis-single-pvc
   namespace: infra-mind
 spec:
   accessModes:
@@ -110,6 +257,43 @@ spec:
   storageClassName: fast-ssd
 
 ---
+# Job to initialize Redis cluster
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: redis-cluster-init
+  namespace: infra-mind
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+      - name: redis-cluster-init
+        image: redis:7.2-alpine
+        command:
+        - /bin/sh
+        - -c
+        - |
+          # Wait for all Redis pods to be ready
+          sleep 30
+          
+          # Get Redis cluster pod IPs
+          REDIS_NODES=""
+          for i in $(seq 0 5); do
+            POD_IP=$(nslookup redis-cluster-$i.redis-cluster-headless.infra-mind.svc.cluster.local | grep Address | tail -1 | awk '{print $2}')
+            REDIS_NODES="$REDIS_NODES $POD_IP:6379"
+          done
+          
+          # Initialize cluster
+          redis-cli --cluster create $REDIS_NODES --cluster-replicas 1 --cluster-yes -a $REDIS_PASSWORD
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: infra-mind-secrets
+              key: REDIS_PASSWORD
+
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -117,31 +301,74 @@ metadata:
   namespace: infra-mind
 data:
   redis.conf: |
-    # Redis configuration for Infra Mind
+    # Production Redis Configuration for Infra Mind Kubernetes
     
-    # Memory management
-    maxmemory 512mb
+    # Network and Security
+    bind 0.0.0.0
+    protected-mode yes
+    port 6379
+    tcp-backlog 511
+    timeout 0
+    tcp-keepalive 300
+    
+    # Memory Management
+    maxmemory 1gb
     maxmemory-policy allkeys-lru
+    maxmemory-samples 5
     
-    # Persistence
+    # Persistence Configuration
     save 900 1
     save 300 10
     save 60 10000
     
     # AOF persistence
     appendonly yes
+    appendfilename "appendonly.aof"
     appendfsync everysec
-    
-    # Security
-    protected-mode yes
-    
-    # Performance
-    tcp-keepalive 300
-    timeout 0
+    no-appendfsync-on-rewrite no
+    auto-aof-rewrite-percentage 100
+    auto-aof-rewrite-min-size 64mb
     
     # Logging
     loglevel notice
+    logfile ""
     
-    # Client connections
-    tcp-backlog 511
+    # Client Configuration
     maxclients 10000
+    
+    # Performance Tuning
+    rename-command FLUSHDB ""
+    rename-command FLUSHALL ""
+    rename-command DEBUG ""
+    rename-command CONFIG ""
+    
+    # Enable keyspace notifications
+    notify-keyspace-events Ex
+    
+    # Latency monitoring
+    latency-monitor-threshold 100
+    
+    # Memory optimization
+    hash-max-ziplist-entries 512
+    hash-max-ziplist-value 64
+    list-max-ziplist-size -2
+    set-max-intset-entries 512
+    zset-max-ziplist-entries 128
+    zset-max-ziplist-value 64
+    
+    # Active rehashing
+    activerehashing yes
+    
+    # Client output buffer limits
+    client-output-buffer-limit normal 0 0 0
+    client-output-buffer-limit replica 256mb 64mb 60
+    client-output-buffer-limit pubsub 32mb 8mb 60
+    
+    # Frequency of rehashing
+    hz 10
+    
+    # Active defragmentation
+    activedefrag yes
+    active-defrag-ignore-bytes 100mb
+    active-defrag-threshold-lower 10
+    active-defrag-threshold-upper 100

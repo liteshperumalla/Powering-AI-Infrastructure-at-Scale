@@ -8,10 +8,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Box,
-    Grid,
     Card,
     CardContent,
     Typography,
+    Grid,
     Tabs,
     Tab,
     Select,
@@ -101,7 +101,13 @@ interface RecommendationQualityMetrics {
     user_satisfaction_score: number;
     implementation_success_rate: number;
     recommendation_accuracy: number;
-    agent_performance_breakdown: Record<string, any>;
+    agent_performance_breakdown: Record<string, {
+        success_rate: number;
+        avg_response_time: number;
+        total_executions: number;
+        cost_per_execution: number;
+        error_breakdown: Record<string, number>;
+    }>;
     quality_trends: Record<string, TrendAnalysis>;
     feedback_distribution: Record<string, number>;
     cost_savings_achieved: number;
@@ -147,7 +153,11 @@ interface ComprehensiveAnalytics {
     recommendation_quality: RecommendationQualityMetrics;
     system_performance: SystemPerformanceAnalytics;
     alert_analytics: AlertAnalytics;
-    business_metrics: Record<string, any>;
+    business_metrics: Record<string, {
+        value: number;
+        trend: 'up' | 'down' | 'stable';
+        target: number;
+    }>;
     operational_insights: Array<{
         type: string;
         priority: string;
@@ -157,7 +167,11 @@ interface ComprehensiveAnalytics {
         impact: string;
         estimated_effort: string;
     }>;
-    predictive_analytics: Record<string, any>;
+    predictive_analytics: Record<string, {
+        predicted_value: number;
+        confidence_interval: [number, number];
+        historical_data: number[];
+    }>;
 }
 
 const TIMEFRAMES: AnalyticsTimeframe[] = [
@@ -439,7 +453,7 @@ const ComprehensiveAnalyticsDashboard: React.FC = () => {
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis dataKey="metric" />
                                         <YAxis domain={[0, 100]} />
-                                        <RechartsTooltip formatter={(value) => [`${value}%`, 'Score']} />
+                                        <RechartsTooltip formatter={(value: number) => [`${value}%`, 'Score']} />
                                         <Bar dataKey="value" fill="#82ca9d" />
                                     </BarChart>
                                 </ResponsiveContainer>
@@ -491,7 +505,7 @@ const ComprehensiveAnalyticsDashboard: React.FC = () => {
                                             cx="50%"
                                             cy="50%"
                                             labelLine={false}
-                                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                            label={({ name, percent }: { name: string, percent: number }) => `${name} ${(percent * 100).toFixed(0)}%`}
                                             outerRadius={80}
                                             fill="#8884d8"
                                             dataKey="value"
@@ -619,7 +633,7 @@ const ComprehensiveAnalyticsDashboard: React.FC = () => {
                                         <CartesianGrid strokeDasharray="3 3" />
                                         <XAxis dataKey="resource" />
                                         <YAxis domain={[0, 100]} />
-                                        <RechartsTooltip formatter={(value) => [`${value}%`, 'Usage']} />
+                                        <RechartsTooltip formatter={(value: number) => [`${value}%`, 'Usage']} />
                                         <Bar dataKey="usage" fill="#82ca9d" />
                                     </BarChart>
                                 </ResponsiveContainer>
@@ -740,7 +754,7 @@ const ComprehensiveAnalyticsDashboard: React.FC = () => {
                                             cx="50%"
                                             cy="50%"
                                             labelLine={false}
-                                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                            label={({ name, percent }: { name: string, percent: number }) => `${name} ${(percent * 100).toFixed(0)}%`}
                                             outerRadius={80}
                                             fill="#8884d8"
                                             dataKey="value"

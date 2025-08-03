@@ -14,6 +14,8 @@ from pathlib import Path
 import uuid
 
 from .base import BaseAgent, AgentConfig, AgentRole, AgentStatus, AgentResult
+from .research_agent import ResearchAgent
+from .web_research_agent import WebResearchAgent
 from ..models.assessment import Assessment
 from ..models.recommendation import Recommendation
 
@@ -116,6 +118,13 @@ class ReportGeneratorAgent(BaseAgent):
         super().__init__(config)
         self.report_templates = self._load_report_templates()
         
+        # Initialize research agents for real data integration
+        self.research_agent = None
+        self.web_research_agent = None
+        
+        # Cache for research data to avoid duplicate API calls
+        self.research_cache = {}
+        
         logger.info(f"Initialized Report Generator Agent: {self.name}")
     
     def _load_report_templates(self) -> Dict[str, Dict[str, Any]]:
@@ -186,8 +195,11 @@ class ReportGeneratorAgent(BaseAgent):
                 else:
                     recommendations.append(rec_data)
             
-            # Generate the report
-            report = await self._generate_report(assessment, recommendations, report_type)
+            # Collect real-time research data to enhance the report
+            research_data = await self._collect_research_data(assessment, recommendations)
+            
+            # Generate the report with enhanced data
+            report = await self._generate_report(assessment, recommendations, report_type, research_data)
             
             # Create result
             result = AgentResult(
@@ -246,7 +258,160 @@ class ReportGeneratorAgent(BaseAgent):
         rec.risks = data.get("risks", [])
         return rec
     
-    async def _generate_report(self, assessment: Any, recommendations: List[Any], report_type: str) -> Report:
+    async def _collect_research_data(self, assessment: Any, recommendations: List[Any]) -> Dict[str, Any]:
+        """Collect real-time research data to enhance report quality."""
+        logger.info("Collecting real-time research data for enhanced report generation")
+        
+        research_data = {
+            "market_intelligence": {},
+            "technology_trends": {},
+            "industry_insights": {},
+            "competitive_analysis": {},
+            "pricing_data": {},
+            "best_practices": {},
+            "research_timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        try:
+            # Initialize research agents if not already done
+            if not self.research_agent:
+                research_config = AgentConfig(
+                    name="Research Agent (Report Generator)",
+                    role=AgentRole.RESEARCH,
+                    temperature=0.3,
+                    max_tokens=2000
+                )
+                self.research_agent = ResearchAgent(research_config)
+            
+            if not self.web_research_agent:
+                web_research_config = AgentConfig(
+                    name="Web Research Agent (Report Generator)",
+                    role=AgentRole.WEB_RESEARCH,
+                    temperature=0.2,
+                    max_tokens=3000
+                )
+                self.web_research_agent = WebResearchAgent(web_research_config)
+            
+            # Identify key research topics from assessment and recommendations
+            research_topics = self._identify_research_topics(assessment, recommendations)
+            
+            # Collect industry and market research
+            if research_topics:
+                try:
+                    # Use Research Agent for comprehensive topic analysis
+                    for topic in research_topics[:3]:  # Limit to top 3 topics to avoid too many API calls
+                        cache_key = f"research_{topic}"
+                        if cache_key not in self.research_cache:
+                            self.research_agent.current_assessment = assessment
+                            topic_research = await self.research_agent.research_topic(topic)
+                            self.research_cache[cache_key] = topic_research
+                        
+                        research_data["industry_insights"][topic] = self.research_cache[cache_key]
+                    
+                    # Use Web Research Agent for competitive and market intelligence
+                    self.web_research_agent.current_assessment = assessment
+                    web_research_result = await self.web_research_agent.research_topics_with_web_search(
+                        topics=research_topics[:2],  # Limit to top 2 topics
+                        context="enterprise infrastructure market analysis"
+                    )
+                    research_data["market_intelligence"] = web_research_result
+                    
+                except Exception as e:
+                    logger.warning(f"Research data collection failed: {e}")
+                    research_data["research_error"] = str(e)
+            
+            # Enhance with technology trend analysis
+            tech_topics = self._extract_technology_topics(recommendations)
+            if tech_topics:
+                try:
+                    tech_research = await self.web_research_agent.research_topics_with_web_search(
+                        topics=tech_topics[:2],  # Limit API calls
+                        context="cloud technology trends 2024"
+                    )
+                    research_data["technology_trends"] = tech_research
+                except Exception as e:
+                    logger.warning(f"Technology trend research failed: {e}")
+            
+            logger.info(f"Collected research data for {len(research_topics)} topics")
+            
+        except Exception as e:
+            logger.error(f"Failed to collect research data: {e}")
+            research_data["collection_error"] = str(e)
+        
+        return research_data
+    
+    def _identify_research_topics(self, assessment: Any, recommendations: List[Any]) -> List[str]:
+        """Identify key topics for research based on assessment and recommendations."""
+        topics = set()
+        
+        # Extract topics from business requirements
+        business_req = getattr(assessment, 'business_requirements', {})
+        if business_req:
+            industry = business_req.get("industry", "")
+            if industry:
+                topics.add(f"{industry} cloud infrastructure")
+            
+            # Add primary goals as research topics
+            goals = business_req.get("primary_goals", [])
+            for goal in goals[:2]:  # Limit to first 2 goals
+                if goal:
+                    topics.add(f"{goal} enterprise solutions")
+        
+        # Extract topics from recommendations
+        for rec in recommendations[:3]:  # Limit to first 3 recommendations
+            category = getattr(rec, 'category', '')
+            title = getattr(rec, 'title', '')
+            
+            if category and category != 'general':
+                topics.add(f"{category} cloud services")
+            
+            # Extract key technologies from title/description
+            tech_keywords = ['kubernetes', 'serverless', 'containers', 'microservices', 'ai', 'ml', 'data', 'analytics']
+            for keyword in tech_keywords:
+                if keyword in title.lower():
+                    topics.add(f"{keyword} infrastructure")
+                    break
+        
+        # Add general infrastructure topics
+        topics.add("cloud infrastructure best practices")
+        topics.add("enterprise cloud migration")
+        
+        return list(topics)[:5]  # Return max 5 topics
+    
+    def _extract_technology_topics(self, recommendations: List[Any]) -> List[str]:
+        """Extract technology-specific topics from recommendations."""
+        tech_topics = set()
+        
+        # Common technology patterns to look for
+        tech_patterns = {
+            'aws': 'AWS cloud services',
+            'azure': 'Microsoft Azure services', 
+            'gcp': 'Google Cloud Platform',
+            'kubernetes': 'Kubernetes orchestration',
+            'docker': 'Docker containerization',
+            'serverless': 'serverless computing',
+            'microservices': 'microservices architecture',
+            'api': 'API management',
+            'database': 'cloud databases',
+            'storage': 'cloud storage solutions',
+            'security': 'cloud security',
+            'monitoring': 'infrastructure monitoring'
+        }
+        
+        for rec in recommendations:
+            title = getattr(rec, 'title', '').lower()
+            description = getattr(rec, 'description', '').lower()
+            category = getattr(rec, 'category', '').lower()
+            
+            text_to_search = f"{title} {description} {category}"
+            
+            for pattern, topic in tech_patterns.items():
+                if pattern in text_to_search:
+                    tech_topics.add(topic)
+        
+        return list(tech_topics)[:4]  # Return max 4 tech topics
+    
+    async def _generate_report(self, assessment: Any, recommendations: List[Any], report_type: str, research_data: Dict[str, Any] = None) -> Report:
         """Generate a complete report based on assessment and recommendations."""
         # Get template for report type
         template = self.report_templates.get(report_type, self.report_templates["full"])
@@ -256,7 +421,7 @@ class ReportGeneratorAgent(BaseAgent):
         if hasattr(assessment, 'business_requirements') and assessment.business_requirements:
             company_name = assessment.business_requirements.get("company_name", company_name)
         
-        # Create report
+        # Create report with enhanced metadata
         report = Report(
             id=str(uuid.uuid4()),
             title=template["title_template"].format(company_name=company_name),
@@ -265,36 +430,45 @@ class ReportGeneratorAgent(BaseAgent):
             metadata={
                 "company_name": company_name,
                 "recommendation_count": len(recommendations),
-                "template_used": report_type
+                "template_used": report_type,
+                "research_enhanced": research_data is not None,
+                "research_topics_count": len(research_data.get("industry_insights", {})) if research_data else 0,
+                "generation_method": "llm_plus_research"
             }
         )
         
-        # Generate sections based on template
+        # Generate sections based on template with research data
         for section_config in template["sections"]:
             section = await self._generate_section(
                 section_config["title"],
                 section_config["order"],
                 assessment,
-                recommendations
+                recommendations,
+                research_data
             )
             report.add_section(section)
         
         return report
     
-    async def _generate_section(self, title: str, order: int, assessment: Any, recommendations: List[Any]) -> ReportSection:
-        """Generate a specific section of the report."""
+    async def _generate_section(self, title: str, order: int, assessment: Any, recommendations: List[Any], research_data: Dict[str, Any] = None) -> ReportSection:
+        """Generate a specific section of the report with real data integration."""
         content = ""
         
-        if title == "Executive Summary":
-            content = self._generate_executive_summary(assessment, recommendations)
-        elif title == "Business Context" or title == "Business Context & Goals":
-            content = self._generate_business_context(assessment)
-        elif title == "Current State Analysis":
-            content = self._generate_current_state_analysis(assessment)
-        elif title == "Technical Requirements":
-            content = self._generate_technical_requirements(assessment)
-        elif title == "Key Recommendations" or title == "Recommendations Overview":
-            content = self._generate_recommendations_overview(recommendations)
+        # Use LLM-powered content generation with research data
+        if research_data and len(research_data.get("industry_insights", {})) > 0:
+            content = await self._generate_section_with_llm(title, assessment, recommendations, research_data)
+        else:
+            # Fallback to original content generation
+            if title == "Executive Summary":
+                content = await self._generate_executive_summary_enhanced(assessment, recommendations, research_data)
+            elif title == "Business Context" or title == "Business Context & Goals":
+                content = self._generate_business_context(assessment)
+            elif title == "Current State Analysis":
+                content = await self._generate_current_state_analysis_enhanced(assessment, research_data)
+            elif title == "Technical Requirements":
+                content = self._generate_technical_requirements(assessment)
+            elif title == "Key Recommendations" or title == "Recommendations Overview":
+                content = await self._generate_recommendations_overview_enhanced(recommendations, research_data)
         elif title == "Detailed Technical Recommendations":
             content = self._generate_detailed_recommendations(recommendations)
         elif title == "Investment Summary" or title == "Cost Analysis":

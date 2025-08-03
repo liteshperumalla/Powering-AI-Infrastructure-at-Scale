@@ -164,6 +164,13 @@ class AgentMetrics(Document):
     services_recommended: int = Field(default=0, description="Number of services recommended")
     cost_estimates_provided: int = Field(default=0, description="Number of cost estimates")
     
+    # LLM usage metrics
+    llm_tokens_used: int = Field(default=0, description="Total LLM tokens used")
+    llm_cost: float = Field(default=0.0, description="Total LLM cost in USD")
+    llm_requests: int = Field(default=0, description="Number of LLM requests made")
+    llm_models_used: List[str] = Field(default_factory=list, description="LLM models used")
+    llm_providers_used: List[str] = Field(default_factory=list, description="LLM providers used")
+    
     # Error tracking
     errors_encountered: int = Field(default=0, description="Number of errors")
     warnings_generated: int = Field(default=0, description="Number of warnings")
@@ -264,6 +271,24 @@ class AgentMetrics(Document):
         """Record errors and warnings."""
         self.errors_encountered += error_count
         self.warnings_generated += warning_count
+    
+    def record_llm_usage(
+        self,
+        tokens_used: int,
+        cost: float,
+        model: str,
+        provider: str
+    ) -> None:
+        """Record LLM usage metrics."""
+        self.llm_tokens_used += tokens_used
+        self.llm_cost += cost
+        self.llm_requests += 1
+        
+        if model not in self.llm_models_used:
+            self.llm_models_used.append(model)
+        
+        if provider not in self.llm_providers_used:
+            self.llm_providers_used.append(provider)
     
     def __str__(self) -> str:
         """String representation of agent metrics."""

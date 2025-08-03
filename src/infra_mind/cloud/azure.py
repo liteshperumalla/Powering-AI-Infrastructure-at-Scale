@@ -7,9 +7,29 @@ Provides clients for Azure Retail Prices API, Compute, SQL Database, and other s
 import asyncio
 import json
 import logging
+import os
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone, timedelta
 import httpx
+import time
+from functools import wraps
+
+# Azure SDK imports for production integration
+from azure.identity import DefaultAzureCredential, ClientSecretCredential
+from azure.mgmt.compute import ComputeManagementClient
+from azure.mgmt.sql import SqlManagementClient
+from azure.mgmt.resource import ResourceManagementClient
+from azure.mgmt.monitor import MonitorManagementClient
+from azure.mgmt.costmanagement import CostManagementClient
+from azure.mgmt.containerservice import ContainerServiceClient
+from azure.mgmt.machinelearningservices import AzureMachineLearningWorkspaces
+from azure.mgmt.recoveryservices import RecoveryServicesClient
+from azure.core.exceptions import (
+    HttpResponseError, 
+    ClientAuthenticationError, 
+    ResourceNotFoundError,
+    ServiceRequestError
+)
 
 from .base import (
     BaseCloudClient, CloudProvider, CloudService, CloudServiceResponse,
@@ -19,43 +39,200 @@ from .base import (
 logger = logging.getLogger(__name__)
 
 
+def azure_retry_with_backoff(max_retries: int = 3, base_delay: float = 1.0):
+    """
+    Decorator for Azure API calls with exponential backoff retry logic.
+    
+    Args:
+        max_retries: Maximum number of retry attempts
+        base_delay: Base delay in seconds for exponential backoff
+    """
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, **kwargs):
+            last_exception = None
+            
+            for attempt in range(max_retries + 1):
+                try:
+                    return await func(*args, **kwargs)
+                except (HttpResponseError, ServiceRequestError) as e:
+                    last_exception = e
+                    
+                    # Check if it's a rate limit error
+                    if hasattr(e, 'status_code') and e.status_code == 429:
+                        # Extract retry-after header if available
+                        retry_after = getattr(e.response, 'headers', {}).get('Retry-After', base_delay * (2 ** attempt))
+                        delay = float(retry_after) if isinstance(retry_after, (str, int)) else base_delay * (2 ** attempt)
+                        
+                        if attempt < max_retries:
+                            logger.warning(f"Rate limited on attempt {attempt + 1}, retrying after {delay}s")
+                            await asyncio.sleep(delay)
+                            continue
+                        else:
+                            raise RateLimitError(
+                                f"Azure API rate limit exceeded after {max_retries} retries",
+                                CloudProvider.AZURE,
+                                "RATE_LIMIT_EXCEEDED"
+                            )
+                    
+                    # Check if it's an authentication error
+                    elif isinstance(e, ClientAuthenticationError) or (hasattr(e, 'status_code') and e.status_code == 401):
+                        raise AuthenticationError(
+                            f"Azure authentication failed: {str(e)}",
+                            CloudProvider.AZURE,
+                            "AUTH_FAILED"
+                        )
+                    
+                    # For other errors, retry with exponential backoff
+                    elif attempt < max_retries:
+                        delay = base_delay * (2 ** attempt)
+                        logger.warning(f"Azure API error on attempt {attempt + 1}, retrying after {delay}s: {str(e)}")
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        raise CloudServiceError(
+                            f"Azure API error after {max_retries} retries: {str(e)}",
+                            CloudProvider.AZURE,
+                            "API_ERROR"
+                        )
+                
+                except Exception as e:
+                    last_exception = e
+                    if attempt < max_retries:
+                        delay = base_delay * (2 ** attempt)
+                        logger.warning(f"Unexpected error on attempt {attempt + 1}, retrying after {delay}s: {str(e)}")
+                        await asyncio.sleep(delay)
+                        continue
+                    else:
+                        raise CloudServiceError(
+                            f"Unexpected Azure API error after {max_retries} retries: {str(e)}",
+                            CloudProvider.AZURE,
+                            "UNEXPECTED_ERROR"
+                        )
+            
+            # This should never be reached, but just in case
+            if last_exception:
+                raise last_exception
+                
+        return wrapper
+    return decorator
+
+
+class AzureCredentialManager:
+    """
+    Manages Azure authentication credentials and provides credential objects.
+    """
+    
+    def __init__(self, subscription_id: Optional[str] = None, 
+                 client_id: Optional[str] = None, 
+                 client_secret: Optional[str] = None,
+                 tenant_id: Optional[str] = None):
+        # Try project-specific environment variables first, then fall back to standard Azure ones
+        self.subscription_id = (subscription_id or 
+                               os.getenv('INFRA_MIND_AZURE_SUBSCRIPTION_ID') or 
+                               os.getenv('AZURE_SUBSCRIPTION_ID'))
+        self.client_id = (client_id or 
+                         os.getenv('INFRA_MIND_AZURE_CLIENT_ID') or 
+                         os.getenv('AZURE_CLIENT_ID'))
+        self.client_secret = (client_secret or 
+                             os.getenv('INFRA_MIND_AZURE_CLIENT_SECRET') or 
+                             os.getenv('AZURE_CLIENT_SECRET'))
+        self.tenant_id = (tenant_id or 
+                         os.getenv('INFRA_MIND_AZURE_TENANT_ID') or 
+                         os.getenv('AZURE_TENANT_ID'))
+        
+        self._credential = None
+    
+    def get_credential(self):
+        """Get Azure credential object for authentication."""
+        if self._credential is None:
+            if self.client_id and self.client_secret and self.tenant_id:
+                # Use service principal authentication
+                self._credential = ClientSecretCredential(
+                    tenant_id=self.tenant_id,
+                    client_id=self.client_id,
+                    client_secret=self.client_secret
+                )
+                logger.info("Using Azure service principal authentication")
+            else:
+                # Use default credential chain (managed identity, CLI, etc.)
+                self._credential = DefaultAzureCredential()
+                logger.info("Using Azure default credential chain")
+        
+        return self._credential
+    
+    def validate_credentials(self) -> bool:
+        """Validate that credentials are properly configured."""
+        if not self.subscription_id:
+            logger.error("Azure subscription ID not configured")
+            return False
+        
+        try:
+            credential = self.get_credential()
+            # Try to get a token to validate credentials
+            token = credential.get_token("https://management.azure.com/.default")
+            return token is not None
+        except Exception as e:
+            logger.error(f"Azure credential validation failed: {str(e)}")
+            return False
+
+
 class AzureClient(BaseCloudClient):
     """
     Main Azure client that coordinates other Azure service clients.
     
     Learning Note: This acts as a facade for various Azure services,
-    providing a unified interface for Azure operations.
+    providing a unified interface for Azure operations using real Azure SDK.
     """
     
     def __init__(self, region: str = "eastus", subscription_id: Optional[str] = None,
-                 client_id: Optional[str] = None, client_secret: Optional[str] = None):
+                 client_id: Optional[str] = None, client_secret: Optional[str] = None,
+                 tenant_id: Optional[str] = None):
         """
-        Initialize Azure client.
+        Initialize Azure client with real Azure SDK authentication.
         
         Args:
             region: Azure region
-            subscription_id: Azure subscription ID (optional for pricing API)
-            client_id: Azure client ID (optional for pricing API)
-            client_secret: Azure client secret (optional for pricing API)
+            subscription_id: Azure subscription ID
+            client_id: Azure client ID for service principal auth
+            client_secret: Azure client secret for service principal auth
+            tenant_id: Azure tenant ID for service principal auth
         """
         super().__init__(CloudProvider.AZURE, region)
         
-        # Initialize service clients
+        # Initialize credential manager
+        self.credential_manager = AzureCredentialManager(
+            subscription_id=subscription_id,
+            client_id=client_id,
+            client_secret=client_secret,
+            tenant_id=tenant_id
+        )
+        
+        # Only validate credentials if they are provided (some APIs like pricing don't need auth)
+        if (self.credential_manager.subscription_id or 
+            self.credential_manager.client_id or 
+            self.credential_manager.client_secret):
+            if not self.credential_manager.validate_credentials():
+                logger.warning("Azure credentials validation failed. Some APIs may not work.")
+        else:
+            logger.info("No Azure credentials provided. Only public APIs (like pricing) will work.")
+        
+        # Initialize service clients with real Azure SDK
         self.pricing_client = AzurePricingClient(region)
-        self.compute_client = AzureComputeClient(region, subscription_id, client_id, client_secret)
-        self.sql_client = AzureSQLClient(region, subscription_id, client_id, client_secret)
-        self.ai_client = AzureAIClient(region, subscription_id, client_id, client_secret)
+        self.compute_client = AzureComputeClient(region, self.credential_manager)
+        self.sql_client = AzureSQLClient(region, self.credential_manager)
+        self.ai_client = AzureAIClient(region, self.credential_manager)
         
         # Extended Azure API clients
-        self.resource_manager_client = AzureResourceManagerClient(region, subscription_id, client_id, client_secret)
-        self.aks_client = AzureAKSClient(region, subscription_id, client_id, client_secret)
-        self.ml_client = AzureMachineLearningClient(region, subscription_id, client_id, client_secret)
-        self.cost_management_client = AzureCostManagementClient(region, subscription_id, client_id, client_secret)
+        self.resource_manager_client = AzureResourceManagerClient(region, self.credential_manager)
+        self.aks_client = AzureAKSClient(region, self.credential_manager)
+        self.ml_client = AzureMachineLearningClient(region, self.credential_manager)
+        self.cost_management_client = AzureCostManagementClient(region, self.credential_manager)
         
         # Advanced integration clients
-        self.monitor_client = AzureMonitorClient(region, subscription_id, client_id, client_secret)
-        self.devops_client = AzureDevOpsClient(region, subscription_id, client_id, client_secret)
-        self.backup_client = AzureBackupClient(region, subscription_id, client_id, client_secret)
+        self.monitor_client = AzureMonitorClient(region, self.credential_manager)
+        self.devops_client = AzureDevOpsClient(region, self.credential_manager)
+        self.backup_client = AzureBackupClient(region, self.credential_manager)
     
     async def get_compute_services(self, region: Optional[str] = None) -> CloudServiceResponse:
         """Get Azure compute services (Virtual Machines)."""
@@ -1036,26 +1213,44 @@ class AzurePricingClient:
 
 class AzureComputeClient:
     """
-    Azure Compute service client.
+    Azure Compute service client using real Azure SDK.
     
     Learning Note: Azure Compute provides virtual machines and related services.
     This client provides access to VM sizes, pricing, and availability information.
     """
     
-    def __init__(self, region: str = "eastus", subscription_id: Optional[str] = None,
-                 client_id: Optional[str] = None, client_secret: Optional[str] = None):
+    def __init__(self, region: str = "eastus", credential_manager: AzureCredentialManager = None):
         self.region = region
-        self.subscription_id = subscription_id
-        self.client_id = client_id
-        self.client_secret = client_secret
+        self.credential_manager = credential_manager
         
-        # For now, we'll use mock data since Azure SDK requires complex authentication
-        # In production, this would use azure-mgmt-compute with proper authentication
-        self.use_mock_data = True
+        # Initialize Azure SDK clients
+        self._compute_client = None
+        self._pricing_client = AzurePricingClient(region)
     
+    def _get_compute_client(self) -> ComputeManagementClient:
+        """Get or create Azure Compute Management client."""
+        if self._compute_client is None:
+            credential = self.credential_manager.get_credential()
+            subscription_id = self.credential_manager.subscription_id
+            
+            if not subscription_id:
+                raise AuthenticationError(
+                    "Azure subscription ID is required for Compute API access",
+                    CloudProvider.AZURE,
+                    "MISSING_SUBSCRIPTION_ID"
+                )
+            
+            self._compute_client = ComputeManagementClient(
+                credential=credential,
+                subscription_id=subscription_id
+            )
+        
+        return self._compute_client
+    
+    @azure_retry_with_backoff(max_retries=3, base_delay=1.0)
     async def get_vm_sizes(self, region: str) -> CloudServiceResponse:
         """
-        Get available Azure VM sizes using real pricing data only.
+        Get available Azure VM sizes using real Azure SDK and pricing data.
         
         Args:
             region: Azure region
@@ -1064,12 +1259,20 @@ class AzureComputeClient:
             CloudServiceResponse with Azure VM sizes
             
         Raises:
-            CloudServiceError: If unable to fetch real pricing data
+            CloudServiceError: If unable to fetch real data
         """
         try:
+            # Get VM sizes from Azure SDK
+            compute_client = self._get_compute_client()
+            
+            # Run in thread pool since Azure SDK is synchronous
+            vm_sizes = await asyncio.get_event_loop().run_in_executor(
+                None, 
+                lambda: list(compute_client.virtual_machine_sizes.list(region))
+            )
+            
             # Get real pricing data
-            pricing_client = AzurePricingClient(region)
-            pricing_data = await pricing_client.get_service_pricing("Virtual Machines", region)
+            pricing_data = await self._pricing_client.get_service_pricing("Virtual Machines", region)
             
             if not pricing_data.get("real_data") or not pricing_data.get("processed_pricing"):
                 raise CloudServiceError(
@@ -1078,11 +1281,21 @@ class AzureComputeClient:
                     "NO_REAL_PRICING"
                 )
             
-            # Use real pricing data
-            return await self._get_vm_sizes_with_real_pricing(region, pricing_data["processed_pricing"])
+            # Combine VM sizes with pricing data
+            return await self._combine_vm_sizes_with_pricing(
+                region, 
+                vm_sizes, 
+                pricing_data["processed_pricing"]
+            )
                 
         except CloudServiceError:
             raise
+        except ClientAuthenticationError as e:
+            raise AuthenticationError(
+                f"Azure authentication failed: {str(e)}",
+                CloudProvider.AZURE,
+                "AUTH_FAILED"
+            )
         except Exception as e:
             raise CloudServiceError(
                 f"Azure Compute API error: {str(e)}",
@@ -1090,43 +1303,87 @@ class AzureComputeClient:
                 "COMPUTE_API_ERROR"
             )
     
-    async def _get_vm_sizes_with_real_pricing(self, region: str, pricing_data: Dict[str, Dict[str, float]]) -> CloudServiceResponse:
-        """Get VM sizes with real pricing data from Azure API."""
+    async def _combine_vm_sizes_with_pricing(self, region: str, vm_sizes: List, pricing_data: Dict[str, Dict[str, float]]) -> CloudServiceResponse:
+        """Combine real VM sizes from Azure SDK with pricing data."""
         services = []
         
-        # Expanded VM specifications to match more real Azure VMs
-        vm_specs = self._get_azure_vm_specifications()
+        # Create a mapping of VM sizes from Azure SDK
+        vm_size_map = {}
+        for vm_size in vm_sizes:
+            vm_size_map[vm_size.name] = {
+                "vcpus": vm_size.number_of_cores,
+                "memory_gb": vm_size.memory_in_mb / 1024,  # Convert MB to GB
+                "os_disk_size_gb": vm_size.os_disk_size_in_mb / 1024 if vm_size.os_disk_size_in_mb else 30,
+                "max_data_disks": vm_size.max_data_disk_count,
+                "resource_disk_size_gb": vm_size.resource_disk_size_in_mb / 1024 if vm_size.resource_disk_size_in_mb else 0
+            }
         
-        # Match pricing data with VM specifications
+        # Match pricing data with real VM sizes
         for vm_name, pricing_info in pricing_data.items():
-            if vm_name in vm_specs:
-                specs = vm_specs[vm_name]
-                
+            # Try to find exact match first
+            vm_specs = vm_size_map.get(vm_name)
+            
+            # If no exact match, try to find similar VM size
+            if not vm_specs:
+                # Look for similar VM names (e.g., Standard_D2s_v3 might be in pricing as D2s_v3)
+                for size_name, specs in vm_size_map.items():
+                    if vm_name.replace("Standard_", "") == size_name.replace("Standard_", ""):
+                        vm_specs = specs
+                        break
+            
+            if vm_specs:
                 service = CloudService(
                     provider=CloudProvider.AZURE,
                     service_name=f"Azure VM {vm_name}",
                     service_id=vm_name,
                     category=ServiceCategory.COMPUTE,
                     region=region,
-                    description=f"Azure virtual machine {vm_name} with real-time pricing",
+                    description=f"Azure virtual machine {vm_name} with real-time pricing and specifications",
                     hourly_price=pricing_info["hourly"],
+                    pricing_unit=pricing_info["unit"],
                     specifications={
-                        "vcpus": specs["vcpus"],
-                        "memory_gb": specs["memory_gb"],
-                        "os_disk_size_gb": specs["os_disk_size_gb"],
-                        "max_data_disks": specs["max_data_disks"],
-                        "vm_generation": "V1"
+                        "vcpus": vm_specs["vcpus"],
+                        "memory_gb": vm_specs["memory_gb"],
+                        "os_disk_size_gb": vm_specs["os_disk_size_gb"],
+                        "max_data_disks": vm_specs["max_data_disks"],
+                        "resource_disk_size_gb": vm_specs["resource_disk_size_gb"],
+                        "vm_generation": "V2"  # Most modern VMs are V2
                     },
-                    features=["premium_storage", "accelerated_networking", "nested_virtualization"]
+                    features=["premium_storage", "accelerated_networking", "nested_virtualization", "azure_hybrid_benefit"]
                 )
                 services.append(service)
         
-        # If no matches found, raise error instead of falling back to mock data
+        # If no matches found, create services from available VM sizes with estimated pricing
+        if not services:
+            logger.warning(f"No pricing matches found for VM sizes in {region}, using available VM sizes with estimated pricing")
+            
+            for vm_name, vm_specs in list(vm_size_map.items())[:10]:  # Limit to first 10 to avoid too many services
+                service = CloudService(
+                    provider=CloudProvider.AZURE,
+                    service_name=f"Azure VM {vm_name}",
+                    service_id=vm_name,
+                    category=ServiceCategory.COMPUTE,
+                    region=region,
+                    description=f"Azure virtual machine {vm_name} (pricing not available)",
+                    hourly_price=0.0,  # No pricing available
+                    pricing_unit="hour",
+                    specifications={
+                        "vcpus": vm_specs["vcpus"],
+                        "memory_gb": vm_specs["memory_gb"],
+                        "os_disk_size_gb": vm_specs["os_disk_size_gb"],
+                        "max_data_disks": vm_specs["max_data_disks"],
+                        "resource_disk_size_gb": vm_specs["resource_disk_size_gb"],
+                        "vm_generation": "V2"
+                    },
+                    features=["premium_storage", "accelerated_networking", "nested_virtualization", "azure_hybrid_benefit"]
+                )
+                services.append(service)
+        
         if not services:
             raise CloudServiceError(
-                f"No VM pricing matches found for region {region}. Available VMs: {list(pricing_data.keys())}",
+                f"No VM sizes available for region {region}",
                 CloudProvider.AZURE,
-                "NO_VM_MATCHES"
+                "NO_VM_SIZES"
             )
         
         return CloudServiceResponse(
@@ -1134,7 +1391,12 @@ class AzureComputeClient:
             service_category=ServiceCategory.COMPUTE,
             region=region,
             services=services,
-            metadata={"real_pricing": True, "pricing_source": "azure_retail_api"}
+            metadata={
+                "real_vm_sizes": True, 
+                "real_pricing": len([s for s in services if s.hourly_price > 0]) > 0,
+                "pricing_source": "azure_retail_api",
+                "vm_sizes_source": "azure_compute_api"
+            }
         )
     
     def _get_azure_vm_specifications(self) -> Dict[str, Dict[str, Any]]:
@@ -1217,20 +1479,38 @@ class AzureSQLClient:
     with different service tiers (Basic, Standard, Premium).
     """
     
-    def __init__(self, region: str = "eastus", subscription_id: Optional[str] = None,
-                 client_id: Optional[str] = None, client_secret: Optional[str] = None):
+    def __init__(self, region: str = "eastus", credential_manager: AzureCredentialManager = None):
         self.region = region
-        self.subscription_id = subscription_id
-        self.client_id = client_id
-        self.client_secret = client_secret
+        self.credential_manager = credential_manager
         
-        # For now, we'll use mock data since Azure SDK requires complex authentication
-        # In production, this would use azure-mgmt-sql with proper authentication
-        self.use_mock_data = True
+        # Initialize Azure SDK clients
+        self._sql_client = None
+        self._pricing_client = AzurePricingClient(region)
     
+    def _get_sql_client(self) -> SqlManagementClient:
+        """Get or create Azure SQL Management client."""
+        if self._sql_client is None:
+            credential = self.credential_manager.get_credential()
+            subscription_id = self.credential_manager.subscription_id
+            
+            if not subscription_id:
+                raise AuthenticationError(
+                    "Azure subscription ID is required for SQL API access",
+                    CloudProvider.AZURE,
+                    "MISSING_SUBSCRIPTION_ID"
+                )
+            
+            self._sql_client = SqlManagementClient(
+                credential=credential,
+                subscription_id=subscription_id
+            )
+        
+        return self._sql_client
+    
+    @azure_retry_with_backoff(max_retries=3, base_delay=1.0)
     async def get_database_services(self, region: str) -> CloudServiceResponse:
         """
-        Get available Azure SQL Database services using real pricing data.
+        Get available Azure SQL Database services using real Azure SDK and pricing data.
         
         Args:
             region: Azure region
@@ -1239,12 +1519,20 @@ class AzureSQLClient:
             CloudServiceResponse with Azure SQL Database services
             
         Raises:
-            CloudServiceError: If unable to fetch real pricing data
+            CloudServiceError: If unable to fetch real data
         """
         try:
+            # Get SQL capabilities from Azure SDK
+            sql_client = self._get_sql_client()
+            
+            # Get location capabilities (available service tiers, etc.)
+            location_capabilities = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: sql_client.capabilities.list_by_location(region)
+            )
+            
             # Get real pricing data for SQL Database
-            pricing_client = AzurePricingClient(region)
-            pricing_data = await pricing_client.get_service_pricing("SQL Database", region)
+            pricing_data = await self._pricing_client.get_service_pricing("SQL Database", region)
             
             if not pricing_data.get("real_data") or not pricing_data.get("processed_pricing"):
                 raise CloudServiceError(
@@ -1253,10 +1541,20 @@ class AzureSQLClient:
                     "NO_REAL_PRICING"
                 )
             
-            return await self._get_sql_services_with_real_pricing(region, pricing_data["processed_pricing"])
+            return await self._combine_sql_capabilities_with_pricing(
+                region, 
+                location_capabilities, 
+                pricing_data["processed_pricing"]
+            )
                 
         except CloudServiceError:
             raise
+        except ClientAuthenticationError as e:
+            raise AuthenticationError(
+                f"Azure authentication failed: {str(e)}",
+                CloudProvider.AZURE,
+                "AUTH_FAILED"
+            )
         except Exception as e:
             raise CloudServiceError(
                 f"Azure SQL API error: {str(e)}",
@@ -1264,30 +1562,50 @@ class AzureSQLClient:
                 "SQL_API_ERROR"
             )
     
-    async def _get_sql_services_with_real_pricing(self, region: str, pricing_data: Dict[str, Dict[str, Any]]) -> CloudServiceResponse:
-        """Get SQL Database services with real pricing data from Azure API."""
+    async def _combine_sql_capabilities_with_pricing(self, region: str, location_capabilities, pricing_data: Dict[str, Dict[str, Any]]) -> CloudServiceResponse:
+        """Combine real SQL capabilities from Azure SDK with pricing data."""
         services = []
         
-        # SQL Database tier specifications (based on Azure documentation)
-        sql_specs = self._get_sql_database_specifications()
+        # Extract service objectives (performance tiers) from location capabilities
+        service_objectives = {}
+        try:
+            if hasattr(location_capabilities, 'supported_server_versions'):
+                for server_version in location_capabilities.supported_server_versions:
+                    if hasattr(server_version, 'supported_editions'):
+                        for edition in server_version.supported_editions:
+                            if hasattr(edition, 'supported_service_level_objectives'):
+                                for slo in edition.supported_service_level_objectives:
+                                    service_objectives[slo.name] = {
+                                        "edition": edition.name,
+                                        "max_size_bytes": getattr(slo, 'max_size_bytes', None),
+                                        "performance_level": getattr(slo, 'performance_level', None),
+                                        "server_version": server_version.name
+                                    }
+        except Exception as e:
+            logger.warning(f"Could not extract service objectives from capabilities: {str(e)}")
         
-        # Match pricing data with SQL specifications
+        # Match pricing data with service objectives
         for sql_name, pricing_info in pricing_data.items():
-            # Try to match with known SQL tiers
-            matched_spec = None
-            for spec_name, spec_info in sql_specs.items():
-                if spec_name.lower() in sql_name.lower() or sql_name.lower() in spec_name.lower():
-                    matched_spec = spec_info
+            # Try to find matching service objective
+            matched_objective = None
+            for obj_name, obj_info in service_objectives.items():
+                if obj_name.lower() in sql_name.lower() or sql_name.lower() in obj_name.lower():
+                    matched_objective = obj_info
                     break
             
-            # If no exact match, create basic specification
-            if not matched_spec:
-                matched_spec = {
-                    "service_tier": "Unknown",
-                    "max_size_gb": 100,
-                    "dtu": 10,
-                    "description": f"SQL Database service {sql_name}"
+            # If no match found, use fallback specifications
+            if not matched_objective:
+                matched_objective = {
+                    "edition": "Standard",
+                    "max_size_bytes": 107374182400,  # 100 GB
+                    "performance_level": "S1",
+                    "server_version": "12.0"
                 }
+            
+            # Convert max_size_bytes to GB
+            max_size_gb = 100  # Default
+            if matched_objective.get("max_size_bytes"):
+                max_size_gb = matched_objective["max_size_bytes"] / (1024 ** 3)
             
             service = CloudService(
                 provider=CloudProvider.AZURE,
@@ -1295,18 +1613,48 @@ class AzureSQLClient:
                 service_id=sql_name,
                 category=ServiceCategory.DATABASE,
                 region=region,
-                description=matched_spec["description"],
+                description=f"Azure SQL Database {matched_objective['edition']} edition with real-time pricing",
                 hourly_price=pricing_info["hourly"],
+                pricing_unit=pricing_info["unit"],
                 specifications={
-                    "service_tier": matched_spec["service_tier"],
-                    "max_size_gb": matched_spec["max_size_gb"],
-                    "dtu": matched_spec["dtu"],
+                    "edition": matched_objective["edition"],
+                    "max_size_gb": max_size_gb,
+                    "performance_level": matched_objective["performance_level"],
                     "engine": "sql_server",
-                    "engine_version": "12.0"
+                    "engine_version": matched_objective["server_version"]
                 },
-                features=["automated_backups", "point_in_time_restore", "geo_replication", "threat_detection"]
+                features=["automated_backups", "point_in_time_restore", "geo_replication", "threat_detection", "always_encrypted"]
             )
             services.append(service)
+        
+        # If no pricing matches, create services from available service objectives
+        if not services and service_objectives:
+            logger.warning(f"No pricing matches found for SQL Database in {region}, using available service objectives")
+            
+            for obj_name, obj_info in list(service_objectives.items())[:5]:  # Limit to first 5
+                max_size_gb = 100
+                if obj_info.get("max_size_bytes"):
+                    max_size_gb = obj_info["max_size_bytes"] / (1024 ** 3)
+                
+                service = CloudService(
+                    provider=CloudProvider.AZURE,
+                    service_name=f"Azure SQL Database {obj_name}",
+                    service_id=obj_name,
+                    category=ServiceCategory.DATABASE,
+                    region=region,
+                    description=f"Azure SQL Database {obj_info['edition']} edition (pricing not available)",
+                    hourly_price=0.0,  # No pricing available
+                    pricing_unit="hour",
+                    specifications={
+                        "edition": obj_info["edition"],
+                        "max_size_gb": max_size_gb,
+                        "performance_level": obj_info["performance_level"],
+                        "engine": "sql_server",
+                        "engine_version": obj_info["server_version"]
+                    },
+                    features=["automated_backups", "point_in_time_restore", "geo_replication", "threat_detection", "always_encrypted"]
+                )
+                services.append(service)
         
         if not services:
             raise CloudServiceError(
@@ -1385,14 +1733,11 @@ class AzureAIClient:
     Azure OpenAI, Cognitive Services, Machine Learning, and others.
     """
     
-    def __init__(self, region: str = "eastus", subscription_id: Optional[str] = None,
-                 client_id: Optional[str] = None, client_secret: Optional[str] = None):
+    def __init__(self, region: str = "eastus", credential_manager: AzureCredentialManager = None):
         """Initialize Azure AI client."""
         self.region = region
-        self.subscription_id = subscription_id
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.use_mock_data = True  # Azure AI APIs require complex authentication
+        self.credential_manager = credential_manager
+        self._pricing_client = AzurePricingClient(region)
     
     async def get_ai_services(self, region: str) -> CloudServiceResponse:
         """
@@ -1739,20 +2084,32 @@ class AzureResourceManagerClient:
     for Azure resources and includes Azure Advisor for optimization recommendations.
     """
     
-    def __init__(self, region: str = "eastus", subscription_id: Optional[str] = None,
-                 client_id: Optional[str] = None, client_secret: Optional[str] = None):
+    def __init__(self, region: str = "eastus", credential_manager: AzureCredentialManager = None):
         self.region = region
-        self.subscription_id = subscription_id
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.base_url = "https://management.azure.com"
+        self.credential_manager = credential_manager
         
-        # Use real APIs when credentials are provided, otherwise fallback to enhanced mock data
-        self.use_mock_data = not all([subscription_id, client_id, client_secret])
+        # Initialize Azure SDK clients
+        self._resource_client = None
+    
+    def _get_resource_client(self) -> ResourceManagementClient:
+        """Get or create Azure Resource Management client."""
+        if self._resource_client is None:
+            credential = self.credential_manager.get_credential()
+            subscription_id = self.credential_manager.subscription_id
+            
+            if not subscription_id:
+                raise AuthenticationError(
+                    "Azure subscription ID is required for Resource Manager API access",
+                    CloudProvider.AZURE,
+                    "MISSING_SUBSCRIPTION_ID"
+                )
+            
+            self._resource_client = ResourceManagementClient(
+                credential=credential,
+                subscription_id=subscription_id
+            )
         
-        # Initialize authentication for real API calls
-        self.auth_token = None
-        self.token_expires_at = None
+        return self._resource_client
     
     async def _get_auth_token(self) -> str:
         """Get Azure authentication token using client credentials."""
@@ -2179,20 +2536,31 @@ class AzureAKSClient:
     Azure services like Azure Active Directory, monitoring, and networking.
     """
     
-    def __init__(self, region: str = "eastus", subscription_id: Optional[str] = None,
-                 client_id: Optional[str] = None, client_secret: Optional[str] = None):
+    def __init__(self, region: str = "eastus", credential_manager: AzureCredentialManager = None):
         self.region = region
-        self.subscription_id = subscription_id
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.base_url = "https://management.azure.com"
+        self.credential_manager = credential_manager
+        self._aks_client = None
+        self._pricing_client = AzurePricingClient(region)
+    
+    def _get_aks_client(self) -> ContainerServiceClient:
+        """Get or create Azure Container Service client."""
+        if self._aks_client is None and self.credential_manager:
+            credential = self.credential_manager.get_credential()
+            subscription_id = self.credential_manager.subscription_id
+            
+            if not subscription_id:
+                raise AuthenticationError(
+                    "Azure subscription ID is required for AKS API access",
+                    CloudProvider.AZURE,
+                    "MISSING_SUBSCRIPTION_ID"
+                )
+            
+            self._aks_client = ContainerServiceClient(
+                credential=credential,
+                subscription_id=subscription_id
+            )
         
-        # Use real APIs when credentials are provided, otherwise fallback to enhanced mock data
-        self.use_mock_data = not all([subscription_id, client_id, client_secret])
-        
-        # Initialize authentication for real API calls
-        self.auth_token = None
-        self.token_expires_at = None
+        return self._aks_client
     
     async def get_aks_services(self, region: str) -> CloudServiceResponse:
         """
@@ -2627,20 +2995,11 @@ class AzureMachineLearningClient:
     management including model training, deployment, and monitoring.
     """
     
-    def __init__(self, region: str = "eastus", subscription_id: Optional[str] = None,
-                 client_id: Optional[str] = None, client_secret: Optional[str] = None):
+    def __init__(self, region: str = "eastus", credential_manager: AzureCredentialManager = None):
         self.region = region
-        self.subscription_id = subscription_id
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.base_url = "https://management.azure.com"
-        
-        # Use real APIs when credentials are provided, otherwise fallback to enhanced mock data
-        self.use_mock_data = not all([subscription_id, client_id, client_secret])
-        
-        # Initialize authentication for real API calls
-        self.auth_token = None
-        self.token_expires_at = None
+        self.credential_manager = credential_manager
+        self._ml_client = None
+        self._pricing_client = AzurePricingClient(region)
     
     async def get_ml_services(self, region: str) -> CloudServiceResponse:
         """
@@ -3209,20 +3568,10 @@ class AzureCostManagementClient:
     and recommendations for optimizing Azure spending.
     """
     
-    def __init__(self, region: str = "eastus", subscription_id: Optional[str] = None,
-                 client_id: Optional[str] = None, client_secret: Optional[str] = None):
+    def __init__(self, region: str = "eastus", credential_manager: AzureCredentialManager = None):
         self.region = region
-        self.subscription_id = subscription_id
-        self.client_id = client_id
-        self.client_secret = client_secret
-        self.base_url = "https://management.azure.com"
-        
-        # Use real APIs when credentials are provided, otherwise fallback to enhanced mock data
-        self.use_mock_data = not all([subscription_id, client_id, client_secret])
-        
-        # Initialize authentication for real API calls
-        self.auth_token = None
-        self.token_expires_at = None
+        self.credential_manager = credential_manager
+        self._cost_client = None
     
     async def get_cost_analysis(self, scope: str = "subscription", time_period: str = "month") -> Dict[str, Any]:
         """
@@ -4372,12 +4721,10 @@ class AzureMonitorClient:
     for Azure resources with metrics, logs, and application performance monitoring.
     """
     
-    def __init__(self, region: str = "eastus", subscription_id: Optional[str] = None,
-                 client_id: Optional[str] = None, client_secret: Optional[str] = None):
+    def __init__(self, region: str = "eastus", credential_manager: AzureCredentialManager = None):
         self.region = region
-        self.subscription_id = subscription_id
-        self.client_id = client_id
-        self.client_secret = client_secret
+        self.credential_manager = credential_manager
+        self._monitor_client = None
         
         # For now, we'll use mock data since Azure SDK requires complex authentication
         # In production, this would use azure-mgmt-monitor with proper authentication
@@ -4555,12 +4902,9 @@ class AzureDevOpsClient:
     version control, build pipelines, testing, and deployment automation.
     """
     
-    def __init__(self, region: str = "eastus", subscription_id: Optional[str] = None,
-                 client_id: Optional[str] = None, client_secret: Optional[str] = None):
+    def __init__(self, region: str = "eastus", credential_manager: AzureCredentialManager = None):
         self.region = region
-        self.subscription_id = subscription_id
-        self.client_id = client_id
-        self.client_secret = client_secret
+        self.credential_manager = credential_manager
         
         # For now, we'll use mock data since Azure DevOps API requires complex authentication
         self.use_mock_data = True
@@ -4693,15 +5037,10 @@ class AzureBackupClient:
     for Azure VMs, databases, and on-premises resources.
     """
     
-    def __init__(self, region: str = "eastus", subscription_id: Optional[str] = None,
-                 client_id: Optional[str] = None, client_secret: Optional[str] = None):
+    def __init__(self, region: str = "eastus", credential_manager: AzureCredentialManager = None):
         self.region = region
-        self.subscription_id = subscription_id
-        self.client_id = client_id
-        self.client_secret = client_secret
-        
-        # For now, we'll use mock data since Azure SDK requires complex authentication
-        self.use_mock_data = True
+        self.credential_manager = credential_manager
+        self._backup_client = None
     
     async def get_backup_services(self, region: str) -> CloudServiceResponse:
         """

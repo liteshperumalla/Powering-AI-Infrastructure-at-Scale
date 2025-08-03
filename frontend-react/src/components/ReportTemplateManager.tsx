@@ -78,8 +78,8 @@ interface BrandingConfig {
     secondaryColor?: string;
     logoUrl?: string;
     fontFamily?: string;
-    headerStyle?: any;
-    footerStyle?: any;
+    headerStyle?: Record<string, unknown>;
+    footerStyle?: Record<string, unknown>;
 }
 
 interface ReportTemplateManagerProps {
@@ -475,7 +475,7 @@ const ReportTemplateManager: React.FC<ReportTemplateManagerProps> = ({
                                     <InputLabel>Report Type</InputLabel>
                                     <Select
                                         value={formData.reportType}
-                                        onChange={(e) => setFormData({ ...formData, reportType: e.target.value as any })}
+                                        onChange={(e) => setFormData({ ...formData, reportType: e.target.value as ReportTemplate['reportType'] })}
                                     >
                                         <MenuItem value="executive_summary">Executive Summary</MenuItem>
                                         <MenuItem value="technical_roadmap">Technical Roadmap</MenuItem>
@@ -581,7 +581,7 @@ const ReportTemplateManager: React.FC<ReportTemplateManagerProps> = ({
                                     <InputLabel>Report Type</InputLabel>
                                     <Select
                                         value={formData.reportType}
-                                        onChange={(e) => setFormData({ ...formData, reportType: e.target.value as any })}
+                                        onChange={(e) => setFormData({ ...formData, reportType: e.target.value as ReportTemplate['reportType'] })}
                                     >
                                         <MenuItem value="executive_summary">Executive Summary</MenuItem>
                                         <MenuItem value="technical_roadmap">Technical Roadmap</MenuItem>

@@ -14,16 +14,9 @@ from urllib.parse import urljoin, urlparse
 import json
 import re
 
-# Optional imports for web scraping
-try:
-    import aiohttp
-    from bs4 import BeautifulSoup
-    WEB_SCRAPING_AVAILABLE = True
-except ImportError:
-    WEB_SCRAPING_AVAILABLE = False
-
 from .base import BaseAgent, AgentConfig, AgentRole
 from .tools import ToolResult
+from .web_search import get_web_search_client, search_cloud_infrastructure_topics
 from ..models.assessment import Assessment
 from ..models.web_research import WebResearchData
 from ..core.cache import cache_manager
@@ -157,6 +150,529 @@ class WebResearchAgent(BaseAgent):
         
         logger.info("Web Research Agent initialized with web scraping capabilities")
     
+    async def research_topics_with_web_search(self, topics: List[str], context: str = "") -> Dict[str, Any]:
+        """
+        Research multiple topics using real web search APIs.
+        
+        Args:
+            topics: List of topics to research
+            context: Additional context for the research
+            
+        Returns:
+            Dictionary containing comprehensive research results
+        """
+        logger.info(f"Starting web search research for topics: {topics}")
+        
+        try:
+            # Get web search client
+            search_client = await get_web_search_client()
+            
+            # Enhanced context for cloud infrastructure
+            enhanced_context = f"{context} cloud infrastructure technology trends pricing analysis".strip()
+            
+            # Perform comprehensive search for each topic
+            research_results = {
+                "research_timestamp": datetime.now(timezone.utc).isoformat(),
+                "topics_researched": topics,
+                "context_used": enhanced_context,
+                "topic_results": {},
+                "aggregated_insights": {},
+                "data_sources": []
+            }
+            
+            # Search each topic with multiple strategies
+            for topic in topics:
+                topic_data = await self._comprehensive_topic_research(search_client, topic, enhanced_context)
+                research_results["topic_results"][topic] = topic_data
+                
+                # Collect unique data sources
+                for source in topic_data.get("sources_used", []):
+                    if source not in research_results["data_sources"]:
+                        research_results["data_sources"].append(source)
+            
+            # Generate aggregated insights across all topics
+            research_results["aggregated_insights"] = await self._generate_aggregated_insights(
+                research_results["topic_results"]
+            )
+            
+            # Calculate overall research quality
+            research_results["research_quality"] = self._calculate_research_quality(
+                research_results["topic_results"]
+            )
+            
+            logger.info(f"Completed web research for {len(topics)} topics with {len(research_results['data_sources'])} sources")
+            return research_results
+            
+        except Exception as e:
+            logger.error(f"Web search research failed: {e}")
+            return {
+                "research_timestamp": datetime.now(timezone.utc).isoformat(),
+                "topics_researched": topics,
+                "error": str(e),
+                "fallback_data": await self._fallback_topic_research(topics, context)
+            }
+    
+    async def _comprehensive_topic_research(self, search_client, topic: str, context: str) -> Dict[str, Any]:
+        """
+        Perform comprehensive research on a single topic using multiple search strategies.
+        
+        Args:
+            search_client: Web search client instance
+            topic: Topic to research
+            context: Research context
+            
+        Returns:
+            Dictionary containing topic research results
+        """
+        topic_data = {
+            "topic": topic,
+            "search_strategies": [],
+            "search_results": [],
+            "sources_used": [],
+            "key_insights": [],
+            "market_data": {},
+            "technical_data": {},
+            "pricing_data": {}
+        }
+        
+        # Define multiple search strategies for comprehensive coverage
+        search_strategies = [
+            {
+                "query": f"{topic} {context} latest updates 2024",
+                "type": "general",
+                "focus": "current_trends"
+            },
+            {
+                "query": f"{topic} market analysis competitive landscape",
+                "type": "general", 
+                "focus": "market_intelligence"
+            },
+            {
+                "query": f"{topic} technical specifications performance benchmarks",
+                "type": "technical",
+                "focus": "technical_analysis"
+            },
+            {
+                "query": f"{topic} pricing cost comparison value proposition",
+                "type": "general",
+                "focus": "pricing_analysis"
+            },
+            {
+                "query": f"{topic} case studies implementation examples",
+                "type": "general",
+                "focus": "practical_insights"
+            }
+        ]
+        
+        # Execute each search strategy
+        all_results = []
+        for strategy in search_strategies:
+            try:
+                search_result = await search_client.search(
+                    query=strategy["query"],
+                    max_results=8,
+                    search_type=strategy["type"]
+                )
+                
+                if search_result.get("results"):
+                    # Tag results with strategy focus
+                    for result in search_result["results"]:
+                        result["strategy_focus"] = strategy["focus"]
+                        result["search_query"] = strategy["query"]
+                    
+                    all_results.extend(search_result["results"])
+                    
+                    topic_data["search_strategies"].append({
+                        "focus": strategy["focus"],
+                        "query": strategy["query"],
+                        "results_count": len(search_result["results"]),
+                        "search_method": search_result["metadata"]["search_method"]
+                    })
+                    
+                    # Track unique sources
+                    for result in search_result["results"]:
+                        source = result.get("source", "unknown")
+                        if source not in topic_data["sources_used"]:
+                            topic_data["sources_used"].append(source)
+                
+                # Small delay to be respectful to APIs
+                await asyncio.sleep(0.3)
+                
+            except Exception as e:
+                logger.warning(f"Search strategy '{strategy['focus']}' failed for topic '{topic}': {e}")
+                continue
+        
+        # Process and categorize results
+        topic_data["search_results"] = self._process_and_categorize_results(all_results)
+        
+        # Extract insights from results
+        topic_data["key_insights"] = await self._extract_topic_insights(all_results, topic)
+        
+        # Categorize data by type
+        topic_data["market_data"] = self._extract_market_data(all_results)
+        topic_data["technical_data"] = self._extract_technical_data(all_results)
+        topic_data["pricing_data"] = self._extract_pricing_data(all_results)
+        
+        return topic_data
+    
+    def _process_and_categorize_results(self, results: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        Process and categorize search results by focus area.
+        
+        Args:
+            results: List of search results
+            
+        Returns:
+            Dictionary of categorized results
+        """
+        categorized = {
+            "current_trends": [],
+            "market_intelligence": [],
+            "technical_analysis": [],
+            "pricing_analysis": [],
+            "practical_insights": []
+        }
+        
+        for result in results:
+            focus = result.get("strategy_focus", "general")
+            if focus in categorized:
+                categorized[focus].append({
+                    "title": result.get("title", ""),
+                    "url": result.get("url", ""),
+                    "snippet": result.get("snippet", ""),
+                    "source": result.get("source", ""),
+                    "relevance_score": result.get("relevance_score", 0.5),
+                    "published_date": result.get("published_date", "")
+                })
+        
+        # Sort each category by relevance score
+        for category in categorized:
+            categorized[category].sort(
+                key=lambda x: x.get("relevance_score", 0), 
+                reverse=True
+            )
+        
+        return categorized
+    
+    async def _extract_topic_insights(self, results: List[Dict[str, Any]], topic: str) -> List[str]:
+        """
+        Extract key insights from search results using pattern matching and analysis.
+        
+        Args:
+            results: List of search results
+            topic: The research topic
+            
+        Returns:
+            List of key insights
+        """
+        insights = []
+        
+        # Analyze titles and snippets for key patterns
+        all_text = []
+        for result in results:
+            title = result.get("title", "")
+            snippet = result.get("snippet", "")
+            all_text.append(f"{title} {snippet}")
+        
+        combined_text = " ".join(all_text).lower()
+        
+        # Extract insights based on common patterns
+        if "growth" in combined_text or "growing" in combined_text:
+            insights.append(f"{topic} shows growth trends in the market")
+        
+        if "adoption" in combined_text:
+            insights.append(f"{topic} adoption is mentioned across multiple sources")
+        
+        if "cost" in combined_text or "pricing" in combined_text:
+            insights.append(f"Cost and pricing information available for {topic}")
+        
+        if "performance" in combined_text or "benchmark" in combined_text:
+            insights.append(f"Performance data and benchmarks found for {topic}")
+        
+        if "competition" in combined_text or "vs" in combined_text:
+            insights.append(f"Competitive analysis data available for {topic}")
+        
+        # Add source diversity insight
+        unique_sources = set(result.get("source", "unknown") for result in results)
+        if len(unique_sources) > 2:
+            insights.append(f"Information sourced from {len(unique_sources)} different platforms")
+        
+        return insights[:6]  # Limit to top 6 insights
+    
+    def _extract_market_data(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Extract market-related data from search results."""
+        market_data = {
+            "market_mentions": 0,
+            "competitor_mentions": [],
+            "growth_indicators": [],
+            "market_size_info": []
+        }
+        
+        competitors = ["aws", "azure", "gcp", "google cloud", "microsoft", "amazon"]
+        growth_terms = ["growth", "increase", "expansion", "growing", "rising"]
+        
+        for result in results:
+            text = f"{result.get('title', '')} {result.get('snippet', '')}".lower()
+            
+            # Count market mentions
+            if "market" in text:
+                market_data["market_mentions"] += 1
+            
+            # Detect competitor mentions
+            for competitor in competitors:
+                if competitor in text and competitor not in market_data["competitor_mentions"]:
+                    market_data["competitor_mentions"].append(competitor)
+            
+            # Detect growth indicators
+            for term in growth_terms:
+                if term in text and term not in market_data["growth_indicators"]:
+                    market_data["growth_indicators"].append(term)
+            
+            # Look for market size information
+            if re.search(r'\$\d+.*billion|\$\d+.*million|market size', text):
+                market_data["market_size_info"].append(result.get("title", ""))
+        
+        return market_data
+    
+    def _extract_technical_data(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Extract technical data from search results."""
+        technical_data = {
+            "technical_mentions": 0,
+            "technologies_mentioned": [],
+            "performance_indicators": [],
+            "integration_mentions": []
+        }
+        
+        technologies = ["kubernetes", "docker", "serverless", "microservices", "api", "cloud native"]
+        performance_terms = ["performance", "speed", "latency", "throughput", "scalability"]
+        integration_terms = ["integration", "api", "sdk", "connector", "plugin"]
+        
+        for result in results:
+            text = f"{result.get('title', '')} {result.get('snippet', '')}".lower()
+            
+            # Count technical mentions
+            if any(tech in text for tech in technologies):
+                technical_data["technical_mentions"] += 1
+            
+            # Detect technology mentions
+            for tech in technologies:
+                if tech in text and tech not in technical_data["technologies_mentioned"]:
+                    technical_data["technologies_mentioned"].append(tech)
+            
+            # Detect performance indicators
+            for term in performance_terms:
+                if term in text and term not in technical_data["performance_indicators"]:
+                    technical_data["performance_indicators"].append(term)
+            
+            # Detect integration mentions
+            for term in integration_terms:
+                if term in text and term not in technical_data["integration_mentions"]:
+                    technical_data["integration_mentions"].append(term)
+        
+        return technical_data
+    
+    def _extract_pricing_data(self, results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Extract pricing-related data from search results."""
+        pricing_data = {
+            "pricing_mentions": 0,
+            "cost_terms": [],
+            "pricing_models": [],
+            "savings_mentions": []
+        }
+        
+        cost_terms = ["cost", "price", "pricing", "fee", "charge", "expense"]
+        pricing_models = ["pay-per-use", "subscription", "freemium", "tiered", "usage-based"]
+        savings_terms = ["save", "discount", "cheaper", "cost-effective", "value"]
+        
+        for result in results:
+            text = f"{result.get('title', '')} {result.get('snippet', '')}".lower()
+            
+            # Count pricing mentions
+            if any(term in text for term in cost_terms):
+                pricing_data["pricing_mentions"] += 1
+            
+            # Detect cost terms
+            for term in cost_terms:
+                if term in text and term not in pricing_data["cost_terms"]:
+                    pricing_data["cost_terms"].append(term)
+            
+            # Detect pricing models
+            for model in pricing_models:
+                if model in text and model not in pricing_data["pricing_models"]:
+                    pricing_data["pricing_models"].append(model)
+            
+            # Detect savings mentions
+            for term in savings_terms:
+                if term in text and term not in pricing_data["savings_mentions"]:
+                    pricing_data["savings_mentions"].append(term)
+        
+        return pricing_data
+    
+    async def _generate_aggregated_insights(self, topic_results: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generate aggregated insights across all researched topics.
+        
+        Args:
+            topic_results: Results for all topics
+            
+        Returns:
+            Dictionary containing aggregated insights
+        """
+        aggregated = {
+            "cross_topic_trends": [],
+            "common_technologies": [],
+            "market_patterns": [],
+            "pricing_patterns": [],
+            "data_quality_assessment": {}
+        }
+        
+        # Collect data across all topics
+        all_sources = set()
+        all_technologies = []
+        all_competitors = []
+        total_results = 0
+        
+        for topic, data in topic_results.items():
+            all_sources.update(data.get("sources_used", []))
+            
+            technical_data = data.get("technical_data", {})
+            all_technologies.extend(technical_data.get("technologies_mentioned", []))
+            
+            market_data = data.get("market_data", {})
+            all_competitors.extend(market_data.get("competitor_mentions", []))
+            
+            total_results += len(data.get("search_results", {}))
+        
+        # Identify common technologies across topics
+        tech_counts = {}
+        for tech in all_technologies:
+            tech_counts[tech] = tech_counts.get(tech, 0) + 1
+        
+        common_techs = [tech for tech, count in tech_counts.items() if count > 1]
+        aggregated["common_technologies"] = common_techs
+        
+        # Identify market patterns
+        competitor_counts = {}
+        for comp in all_competitors:
+            competitor_counts[comp] = competitor_counts.get(comp, 0) + 1
+        
+        if competitor_counts:
+            top_competitor = max(competitor_counts, key=competitor_counts.get)
+            aggregated["market_patterns"].append(f"Most mentioned provider: {top_competitor}")
+        
+        # Assess data quality
+        aggregated["data_quality_assessment"] = {
+            "unique_sources": len(all_sources),
+            "total_search_results": total_results,
+            "topics_covered": len(topic_results),
+            "average_results_per_topic": total_results / len(topic_results) if topic_results else 0,
+            "source_diversity_score": min(len(all_sources) / 5, 1.0)  # Normalize to 0-1
+        }
+        
+        return aggregated
+    
+    def _calculate_research_quality(self, topic_results: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Calculate overall research quality metrics.
+        
+        Args:
+            topic_results: Results for all topics
+            
+        Returns:
+            Dictionary containing quality metrics
+        """
+        quality_metrics = {
+            "overall_score": 0.0,
+            "coverage_score": 0.0,
+            "source_diversity_score": 0.0,
+            "data_completeness_score": 0.0,
+            "quality_grade": "unknown"
+        }
+        
+        if not topic_results:
+            return quality_metrics
+        
+        # Calculate coverage score (based on search strategies executed)
+        total_strategies = 0
+        successful_strategies = 0
+        
+        for topic, data in topic_results.items():
+            strategies = data.get("search_strategies", [])
+            total_strategies += 5  # We attempt 5 strategies per topic
+            successful_strategies += len(strategies)
+        
+        quality_metrics["coverage_score"] = successful_strategies / total_strategies if total_strategies > 0 else 0
+        
+        # Calculate source diversity score
+        all_sources = set()
+        for topic, data in topic_results.items():
+            all_sources.update(data.get("sources_used", []))
+        
+        quality_metrics["source_diversity_score"] = min(len(all_sources) / 10, 1.0)  # Max score with 10+ sources
+        
+        # Calculate data completeness score
+        topics_with_insights = sum(
+            1 for data in topic_results.values() 
+            if len(data.get("key_insights", [])) > 0
+        )
+        quality_metrics["data_completeness_score"] = topics_with_insights / len(topic_results)
+        
+        # Calculate overall score
+        quality_metrics["overall_score"] = (
+            quality_metrics["coverage_score"] * 0.4 +
+            quality_metrics["source_diversity_score"] * 0.3 +
+            quality_metrics["data_completeness_score"] * 0.3
+        )
+        
+        # Determine quality grade
+        score = quality_metrics["overall_score"]
+        if score >= 0.8:
+            quality_metrics["quality_grade"] = "excellent"
+        elif score >= 0.6:
+            quality_metrics["quality_grade"] = "good"
+        elif score >= 0.4:
+            quality_metrics["quality_grade"] = "fair"
+        else:
+            quality_metrics["quality_grade"] = "poor"
+        
+        return quality_metrics
+    
+    async def _fallback_topic_research(self, topics: List[str], context: str) -> Dict[str, Any]:
+        """
+        Fallback research method when web search fails.
+        
+        Args:
+            topics: List of topics to research
+            context: Research context
+            
+        Returns:
+            Dictionary containing fallback research data
+        """
+        logger.info(f"Using fallback research for topics: {topics}")
+        
+        fallback_data = {
+            "research_method": "fallback",
+            "topics": topics,
+            "context": context,
+            "fallback_insights": [],
+            "research_timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Generate basic insights for each topic
+        for topic in topics:
+            fallback_data["fallback_insights"].append({
+                "topic": topic,
+                "insights": [
+                    f"Research required for {topic} in {context} context",
+                    f"Market analysis needed for {topic}",
+                    f"Technical evaluation of {topic} recommended"
+                ],
+                "confidence": "low",
+                "data_source": "fallback_method"
+            })
+        
+        return fallback_data
+    
     async def _execute_main_logic(self) -> Dict[str, Any]:
         """
         Execute Web Research agent's main research logic.
@@ -281,7 +797,7 @@ class WebResearchAgent(BaseAgent):
     
     async def _collect_web_data(self, requirements: Dict[str, Any]) -> List[Dict[str, Any]]:
         """
-        Collect data from web sources based on requirements.
+        Collect data from web sources based on requirements using real web search API.
         
         Args:
             requirements: Research requirements
@@ -289,37 +805,293 @@ class WebResearchAgent(BaseAgent):
         Returns:
             List of collected web data
         """
-        logger.info("Starting web data collection")
+        logger.info("Starting real web data collection using search APIs")
         
         collected_data = []
         
-        # Collect data for each priority area
+        # Get web search client for real data collection
+        search_client = await get_web_search_client()
+        
         for area in requirements["priority_areas"]:
-            if area == "pricing_analysis":
-                pricing_data = await self._scrape_pricing_data(requirements["target_providers"])
-                collected_data.extend(pricing_data)
-            
-            elif area == "competitive_analysis":
-                competitive_data = await self._scrape_competitive_data(requirements["target_providers"])
-                collected_data.extend(competitive_data)
-            
-            elif area == "industry_trends":
-                trend_data = await self._scrape_trend_data()
-                collected_data.extend(trend_data)
-            
-            elif area == "regulatory_tracking":
-                regulatory_data = await self._scrape_regulatory_data()
-                collected_data.extend(regulatory_data)
-            
-            elif area == "best_practices":
-                best_practices_data = await self._scrape_best_practices_data(requirements["target_providers"])
-                collected_data.extend(best_practices_data)
+            try:
+                if area == "pricing_analysis":
+                    pricing_data = await self._collect_pricing_data_with_search(
+                        search_client, requirements["target_providers"]
+                    )
+                    collected_data.append({
+                        "source_type": "pricing_analysis",
+                        "data": pricing_data,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    })
+                
+                elif area == "competitive_analysis":
+                    competitive_data = await self._collect_competitive_data_with_search(
+                        search_client, requirements["target_providers"]
+                    )
+                    collected_data.append({
+                        "source_type": "competitive_analysis", 
+                        "data": competitive_data,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    })
+                
+                elif area == "industry_trends":
+                    trend_keywords = ["cloud computing", "AI infrastructure", "serverless", "kubernetes"]
+                    trend_data = await self._collect_trend_data_with_search(search_client, trend_keywords)
+                    collected_data.append({
+                        "source_type": "industry_trends",
+                        "data": trend_data,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    })
+                
+                elif area == "regulatory_tracking":
+                    compliance_frameworks = ["GDPR", "HIPAA", "CCPA", "SOC 2"]
+                    regulatory_data = await self._collect_regulatory_data_with_search(
+                        search_client, compliance_frameworks
+                    )
+                    collected_data.append({
+                        "source_type": "regulatory_tracking",
+                        "data": regulatory_data,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    })
+                
+                elif area == "best_practices":
+                    best_practices_data = await self._collect_best_practices_with_search(
+                        search_client, requirements["target_providers"]
+                    )
+                    collected_data.append({
+                        "source_type": "best_practices",
+                        "data": best_practices_data,
+                        "timestamp": datetime.now(timezone.utc).isoformat()
+                    })
+                
+                # Small delay between different research areas
+                await asyncio.sleep(0.5)
+                
+            except Exception as e:
+                logger.error(f"Failed to collect data for {area}: {e}")
+                # Add error information to collected data
+                collected_data.append({
+                    "source_type": area,
+                    "data": {"error": str(e), "fallback_needed": True},
+                    "timestamp": datetime.now(timezone.utc).isoformat()
+                })
         
-        # Store collected data in database
-        await self._store_web_research_data(collected_data)
-        
-        logger.info(f"Collected {len(collected_data)} web data items")
+        logger.info(f"Collected {len(collected_data)} web data items using real search APIs")
         return collected_data
+    
+    async def _collect_pricing_data_with_search(self, search_client, providers: List[str]) -> Dict[str, Any]:
+        """Collect pricing data using real web search."""
+        pricing_data = {
+            "providers": providers,
+            "search_results": {},
+            "pricing_insights": [],
+            "collection_timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        for provider in providers:
+            try:
+                # Search for pricing information
+                query = f"{provider} cloud pricing calculator cost per hour month"
+                search_result = await search_client.search(
+                    query=query,
+                    max_results=6,
+                    search_type="general"
+                )
+                
+                pricing_data["search_results"][provider] = {
+                    "query": query,
+                    "results": search_result.get("results", []),
+                    "search_method": search_result.get("metadata", {}).get("search_method", "unknown")
+                }
+                
+                # Extract pricing insights from results
+                for result in search_result.get("results", []):
+                    snippet = result.get("snippet", "").lower()
+                    if any(term in snippet for term in ["$", "price", "cost", "pricing"]):
+                        pricing_data["pricing_insights"].append({
+                            "provider": provider,
+                            "insight": result.get("snippet", "")[:200],
+                            "source": result.get("url", "")
+                        })
+                
+            except Exception as e:
+                logger.error(f"Failed to collect pricing data for {provider}: {e}")
+                pricing_data["search_results"][provider] = {"error": str(e)}
+        
+        return pricing_data
+    
+    async def _collect_competitive_data_with_search(self, search_client, providers: List[str]) -> Dict[str, Any]:
+        """Collect competitive analysis data using real web search."""
+        competitive_data = {
+            "providers": providers,
+            "comparisons": {},
+            "market_insights": [],
+            "collection_timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        # Search for competitive comparisons
+        for i, provider in enumerate(providers):
+            for j, competitor in enumerate(providers[i+1:], i+1):
+                try:
+                    query = f"{provider} vs {competitor} cloud services comparison features pricing"
+                    search_result = await search_client.search(
+                        query=query,
+                        max_results=5,
+                        search_type="general"
+                    )
+                    
+                    comparison_key = f"{provider}_vs_{competitor}"
+                    competitive_data["comparisons"][comparison_key] = {
+                        "query": query,
+                        "results": search_result.get("results", []),
+                        "search_method": search_result.get("metadata", {}).get("search_method")
+                    }
+                    
+                    # Extract market insights
+                    for result in search_result.get("results", []):
+                        title = result.get("title", "").lower()
+                        snippet = result.get("snippet", "").lower()
+                        if any(term in f"{title} {snippet}" for term in ["leader", "market share", "better", "advantage"]):
+                            competitive_data["market_insights"].append({
+                                "comparison": comparison_key,
+                                "insight": result.get("title", ""),
+                                "detail": result.get("snippet", "")[:150],
+                                "source": result.get("url", "")
+                            })
+                    
+                    await asyncio.sleep(0.3)  # Rate limiting
+                    
+                except Exception as e:
+                    logger.error(f"Failed to collect competitive data for {provider} vs {competitor}: {e}")
+        
+        return competitive_data
+    
+    async def _collect_trend_data_with_search(self, search_client, trend_keywords: List[str]) -> Dict[str, Any]:
+        """Collect trend data using real web search."""
+        trend_data = {
+            "keywords": trend_keywords,
+            "trend_results": {},
+            "emerging_trends": [],
+            "collection_timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        for keyword in trend_keywords:
+            try:
+                query = f"{keyword} trends 2024 adoption growth market analysis"
+                search_result = await search_client.search(
+                    query=query,
+                    max_results=6,
+                    search_type="general"
+                )
+                
+                trend_data["trend_results"][keyword] = {
+                    "query": query,
+                    "results": search_result.get("results", []),
+                    "search_method": search_result.get("metadata", {}).get("search_method")
+                }
+                
+                # Extract emerging trends
+                for result in search_result.get("results", []):
+                    title = result.get("title", "").lower()
+                    snippet = result.get("snippet", "").lower()
+                    if any(term in f"{title} {snippet}" for term in ["growing", "emerging", "trend", "adoption", "increase"]):
+                        trend_data["emerging_trends"].append({
+                            "keyword": keyword,
+                            "trend": result.get("title", ""),
+                            "description": result.get("snippet", "")[:150],
+                            "source": result.get("url", "")
+                        })
+                
+            except Exception as e:
+                logger.error(f"Failed to collect trend data for {keyword}: {e}")
+                trend_data["trend_results"][keyword] = {"error": str(e)}
+        
+        return trend_data
+    
+    async def _collect_regulatory_data_with_search(self, search_client, frameworks: List[str]) -> Dict[str, Any]:
+        """Collect regulatory data using real web search."""
+        regulatory_data = {
+            "frameworks": frameworks,
+            "regulatory_results": {},
+            "compliance_updates": [],
+            "collection_timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        for framework in frameworks:
+            try:
+                query = f"{framework} compliance updates 2024 requirements cloud security"
+                search_result = await search_client.search(
+                    query=query,
+                    max_results=5,
+                    search_type="general"
+                )
+                
+                regulatory_data["regulatory_results"][framework] = {
+                    "query": query,
+                    "results": search_result.get("results", []),
+                    "search_method": search_result.get("metadata", {}).get("search_method")
+                }
+                
+                # Extract compliance updates
+                for result in search_result.get("results", []):
+                    title = result.get("title", "").lower()
+                    snippet = result.get("snippet", "").lower()
+                    if any(term in f"{title} {snippet}" for term in ["update", "new", "requirement", "change", "compliance"]):
+                        regulatory_data["compliance_updates"].append({
+                            "framework": framework,
+                            "update": result.get("title", ""),
+                            "details": result.get("snippet", "")[:150],
+                            "source": result.get("url", ""),
+                            "published_date": result.get("published_date", "")
+                        })
+                
+            except Exception as e:
+                logger.error(f"Failed to collect regulatory data for {framework}: {e}")
+                regulatory_data["regulatory_results"][framework] = {"error": str(e)}
+        
+        return regulatory_data
+    
+    async def _collect_best_practices_with_search(self, search_client, providers: List[str]) -> Dict[str, Any]:
+        """Collect best practices data using real web search."""
+        best_practices_data = {
+            "providers": providers,
+            "practices_results": {},
+            "best_practices": [],
+            "collection_timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        for provider in providers:
+            try:
+                query = f"{provider} cloud best practices architecture guidelines recommendations"
+                search_result = await search_client.search(
+                    query=query,
+                    max_results=6,
+                    search_type="technical"
+                )
+                
+                best_practices_data["practices_results"][provider] = {
+                    "query": query,
+                    "results": search_result.get("results", []),
+                    "search_method": search_result.get("metadata", {}).get("search_method")
+                }
+                
+                # Extract best practices
+                for result in search_result.get("results", []):
+                    title = result.get("title", "").lower()
+                    snippet = result.get("snippet", "").lower()
+                    if any(term in f"{title} {snippet}" for term in ["best practice", "recommendation", "guide", "pattern", "architecture"]):
+                        best_practices_data["best_practices"].append({
+                            "provider": provider,
+                            "practice": result.get("title", ""),
+                            "description": result.get("snippet", "")[:150],
+                            "source": result.get("url", "")
+                        })
+                
+            except Exception as e:
+                logger.error(f"Failed to collect best practices for {provider}: {e}")
+                best_practices_data["practices_results"][provider] = {"error": str(e)}
+        
+        return best_practices_data
     
     async def _scrape_pricing_data(self, providers: List[str]) -> List[Dict[str, Any]]:
         """
@@ -464,6 +1236,74 @@ class WebResearchAgent(BaseAgent):
                             best_practices_data.append(data)
                 except Exception as e:
                     logger.warning(f"Failed to scrape best practices from {url}: {str(e)}")
+        
+        return best_practices_data
+    
+    async def _research_competitive_landscape(self, providers: List[str], scraper) -> Dict[str, Any]:
+        """Research competitive landscape using real web scraping."""
+        competitive_data = {
+            "research_date": datetime.now(timezone.utc).isoformat(),
+            "providers": providers,
+            "competitive_analysis": {}
+        }
+        
+        for provider in providers:
+            # Search for competitive information
+            query = f"{provider} vs competitors cloud services comparison"
+            search_results = await scraper.multi_provider_search(query, num_results=5)
+            
+            # Scrape competitive content
+            urls_to_scrape = []
+            for results in search_results.values():
+                urls_to_scrape.extend([r.url for r in results[:3]])
+            
+            scraped_contents = await scraper.scrape_multiple_urls(
+                urls_to_scrape,
+                ContentType.COMPETITIVE,
+                max_concurrent=2
+            )
+            
+            competitive_data["competitive_analysis"][provider] = {
+                "search_results": {
+                    prov.value: [r.to_dict() for r in results]
+                    for prov, results in search_results.items()
+                },
+                "scraped_content": [content.to_dict() for content in scraped_contents]
+            }
+        
+        return competitive_data
+    
+    async def _research_best_practices(self, providers: List[str], scraper) -> Dict[str, Any]:
+        """Research best practices using real web scraping."""
+        best_practices_data = {
+            "research_date": datetime.now(timezone.utc).isoformat(),
+            "providers": providers,
+            "best_practices": {}
+        }
+        
+        for provider in providers:
+            # Search for best practices
+            query = f"{provider} cloud best practices architecture guidelines"
+            search_results = await scraper.multi_provider_search(query, num_results=5)
+            
+            # Scrape best practices content
+            urls_to_scrape = []
+            for results in search_results.values():
+                urls_to_scrape.extend([r.url for r in results[:3]])
+            
+            scraped_contents = await scraper.scrape_multiple_urls(
+                urls_to_scrape,
+                ContentType.BEST_PRACTICES,
+                max_concurrent=2
+            )
+            
+            best_practices_data["best_practices"][provider] = {
+                "search_results": {
+                    prov.value: [r.to_dict() for r in results]
+                    for prov, results in search_results.items()
+                },
+                "scraped_content": [content.to_dict() for content in scraped_contents]
+            }
         
         return best_practices_data
     

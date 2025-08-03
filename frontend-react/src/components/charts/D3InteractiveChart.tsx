@@ -121,8 +121,8 @@ export default function D3InteractiveChart({
 
                 // Update points
                 g.selectAll('.data-point')
-                    .attr('cx', (d: any) => newXScale(d.x))
-                    .attr('cy', (d: any) => newYScale(d.y));
+                    .attr('cx', (d: DataPoint) => newXScale(d.x))
+                    .attr('cy', (d: DataPoint) => newYScale(d.y));
 
                 if (onZoom) {
                     onZoom(transform);
@@ -152,7 +152,7 @@ export default function D3InteractiveChart({
                 d3.select(this)
                     .transition()
                     .duration(200)
-                    .attr('r', (d: any) => (chartType === 'bubble' ? sizeScale(d.value) : 6) * 1.5)
+                    .attr('r', (d: DataPoint) => (chartType === 'bubble' ? sizeScale(d.value) : 6) * 1.5)
                     .style('opacity', 1);
 
                 setHoveredPoint(d);
@@ -161,7 +161,7 @@ export default function D3InteractiveChart({
                 d3.select(this)
                     .transition()
                     .duration(200)
-                    .attr('r', (d: any) => chartType === 'bubble' ? sizeScale(d.value) : 6)
+                    .attr('r', (d: DataPoint) => chartType === 'bubble' ? sizeScale(d.value) : 6)
                     .style('opacity', 0.8);
 
                 setHoveredPoint(null);
@@ -185,7 +185,7 @@ export default function D3InteractiveChart({
     const handleZoomIn = () => {
         const svg = d3.select(svgRef.current);
         svg.transition().call(
-            d3.zoom<SVGSVGElement, unknown>().scaleBy as any,
+            (d3.zoom<SVGSVGElement, unknown>().scaleBy as (transition: d3.Transition<SVGSVGElement, unknown, null, undefined>, k: number) => void),
             1.5
         );
     };
@@ -193,7 +193,7 @@ export default function D3InteractiveChart({
     const handleZoomOut = () => {
         const svg = d3.select(svgRef.current);
         svg.transition().call(
-            d3.zoom<SVGSVGElement, unknown>().scaleBy as any,
+            (d3.zoom<SVGSVGElement, unknown>().scaleBy as (transition: d3.Transition<SVGSVGElement, unknown, null, undefined>, k: number) => void),
             1 / 1.5
         );
     };
@@ -201,7 +201,7 @@ export default function D3InteractiveChart({
     const handleReset = () => {
         const svg = d3.select(svgRef.current);
         svg.transition().call(
-            d3.zoom<SVGSVGElement, unknown>().transform as any,
+            (d3.zoom<SVGSVGElement, unknown>().transform as (transition: d3.Transition<SVGSVGElement, unknown, null, undefined>, transform: d3.ZoomTransform) => void),
             d3.zoomIdentity
         );
         setZoomLevel(1);

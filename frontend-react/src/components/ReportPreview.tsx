@@ -61,7 +61,7 @@ interface ReportVersion {
     isCurrent: boolean;
 }
 
-interface ReportData {
+export interface ReportData {
     id: string;
     title: string;
     generatedDate: string;

@@ -1,16 +1,21 @@
 """
-Authentication API endpoints for Infra Mind.
+Production-grade authentication API endpoints for Infra Mind.
 
-Handles user registration, login, token refresh, and password management.
+Handles user registration, login, token refresh, password management,
+and comprehensive security features.
 """
 
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, validator
 from typing import Optional
 import logging
+from datetime import datetime
 
-from ..core.auth import AuthService, TokenManager, AuthenticationError, security
+from ..core.auth import (
+    auth_service, AuthenticationError, security, get_current_active_user,
+    log_authentication_event, log_security_event, AuditEventType, AuditSeverity
+)
 from ..models.user import User
 from ..schemas.base import SuccessResponse, ErrorResponse
 
@@ -20,28 +25,46 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
 
-# Request/Response models
+# Request/Response models with enhanced validation
 class LoginRequest(BaseModel):
-    """Login request model."""
+    """Production-grade login request model."""
     email: EmailStr = Field(description="User email address")
-    password: str = Field(description="User password", min_length=1)
+    password: str = Field(description="User password", min_length=1, max_length=128)
     remember_me: bool = Field(default=False, description="Extend token expiration")
+    
+    @validator('email')
+    def validate_email(cls, v):
+        return v.lower().strip()
 
 
 class RegisterRequest(BaseModel):
-    """User registration request model."""
+    """Production-grade user registration request model."""
     email: EmailStr = Field(description="User email address")
-    password: str = Field(description="User password", min_length=8)
-    full_name: str = Field(description="User's full name", min_length=1, max_length=100)
-    company_name: Optional[str] = Field(default=None, description="Company name")
+    password: str = Field(description="User password", min_length=8, max_length=128)
+    full_name: str = Field(description="User's full name", min_length=2, max_length=100)
+    company_name: Optional[str] = Field(default=None, description="Company name", max_length=200)
+    job_title: Optional[str] = Field(default=None, description="Job title", max_length=100)
+    
+    @validator('email')
+    def validate_email(cls, v):
+        return v.lower().strip()
+    
+    @validator('full_name')
+    def validate_full_name(cls, v):
+        return v.strip()
+    
+    @validator('company_name')
+    def validate_company_name(cls, v):
+        return v.strip() if v else None
 
 
 class TokenResponse(BaseModel):
-    """Token response model."""
+    """Enhanced token response model."""
     access_token: str = Field(description="JWT access token")
     refresh_token: str = Field(description="JWT refresh token")
     token_type: str = Field(description="Token type (bearer)")
     expires_in: int = Field(description="Token expiration time in seconds")
+    session_id: str = Field(description="Session identifier")
     user: dict = Field(description="User information")
 
 
@@ -53,38 +76,64 @@ class RefreshTokenRequest(BaseModel):
 class PasswordResetRequest(BaseModel):
     """Password reset request model."""
     email: EmailStr = Field(description="User email address")
+    
+    @validator('email')
+    def validate_email(cls, v):
+        return v.lower().strip()
 
 
 class PasswordResetConfirm(BaseModel):
     """Password reset confirmation model."""
     token: str = Field(description="Password reset token")
-    new_password: str = Field(description="New password", min_length=8)
+    new_password: str = Field(description="New password", min_length=8, max_length=128)
 
 
 class ChangePasswordRequest(BaseModel):
     """Change password request model."""
     current_password: str = Field(description="Current password")
-    new_password: str = Field(description="New password", min_length=8)
+    new_password: str = Field(description="New password", min_length=8, max_length=128)
+
+
+class UserInfoResponse(BaseModel):
+    """User information response model."""
+    id: str
+    email: str
+    full_name: str
+    company_name: Optional[str]
+    job_title: Optional[str]
+    role: str
+    is_active: bool
+    is_verified: bool
+    created_at: datetime
+    last_login: Optional[datetime]
+    login_count: int
+    assessments_created: int
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(request: RegisterRequest):
+async def register(request: RegisterRequest, http_request: Request):
     """
-    Register a new user account.
+    Register a new user account with comprehensive validation.
     
     Creates a new user account and returns authentication tokens.
+    Includes security monitoring and audit logging.
     """
+    client_ip = http_request.client.host if http_request.client else None
+    user_agent = http_request.headers.get("user-agent")
+    
     try:
-        # Create user
-        user = await AuthService.create_user(
+        # Create user with enhanced validation
+        user = await auth_service.create_user(
             email=request.email,
             password=request.password,
             full_name=request.full_name,
-            company_name=request.company_name
+            company_name=request.company_name,
+            job_title=request.job_title,
+            ip_address=client_ip
         )
         
         # Create tokens
-        tokens = AuthService.create_tokens_for_user(user)
+        tokens = await auth_service.create_tokens_for_user(user, client_ip)
         
         logger.info(f"New user registered: {user.email}")
         
@@ -92,12 +141,38 @@ async def register(request: RegisterRequest):
         
     except ValueError as e:
         logger.warning(f"Registration failed for {request.email}: {str(e)}")
+        
+        # Log registration failure
+        log_security_event(
+            AuditEventType.USER_CREATED,
+            ip_address=client_ip,
+            details={
+                "email": request.email,
+                "reason": str(e),
+                "user_agent": user_agent
+            },
+            severity=AuditSeverity.MEDIUM
+        )
+        
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except Exception as e:
         logger.error(f"Registration error for {request.email}: {str(e)}")
+        
+        # Log system error
+        log_security_event(
+            AuditEventType.USER_CREATED,
+            ip_address=client_ip,
+            details={
+                "email": request.email,
+                "error": str(e),
+                "user_agent": user_agent
+            },
+            severity=AuditSeverity.HIGH
+        )
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Registration failed"
@@ -105,26 +180,35 @@ async def register(request: RegisterRequest):
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(request: LoginRequest):
+async def login(request: LoginRequest, http_request: Request):
     """
-    Authenticate user and return tokens.
+    Authenticate user with comprehensive security checks.
     
     Validates user credentials and returns JWT tokens for API access.
+    Includes rate limiting, account lockout, and audit logging.
     """
+    client_ip = http_request.client.host if http_request.client else None
+    user_agent = http_request.headers.get("user-agent")
+    
     try:
-        # Authenticate user
-        user = await AuthService.authenticate_user(request.email, request.password)
+        # Authenticate user with security checks
+        user = await auth_service.authenticate_user(
+            email=request.email,
+            password=request.password,
+            ip_address=client_ip,
+            user_agent=user_agent
+        )
         
         if not user:
-            logger.warning(f"Failed login attempt for {request.email}")
+            # Generic error message to prevent user enumeration
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect email or password",
+                detail="Invalid credentials",
                 headers={"WWW-Authenticate": "Bearer"},
             )
         
         # Create tokens
-        tokens = AuthService.create_tokens_for_user(user)
+        tokens = await auth_service.create_tokens_for_user(user, client_ip)
         
         logger.info(f"User logged in: {user.email}")
         
@@ -134,6 +218,19 @@ async def login(request: LoginRequest):
         raise
     except Exception as e:
         logger.error(f"Login error for {request.email}: {str(e)}")
+        
+        # Log system error
+        log_security_event(
+            AuditEventType.LOGIN_FAILURE,
+            ip_address=client_ip,
+            details={
+                "email": request.email,
+                "error": str(e),
+                "user_agent": user_agent
+            },
+            severity=AuditSeverity.HIGH
+        )
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Login failed"
@@ -141,24 +238,41 @@ async def login(request: LoginRequest):
 
 
 @router.post("/refresh", response_model=dict)
-async def refresh_token(request: RefreshTokenRequest):
+async def refresh_token(request: RefreshTokenRequest, http_request: Request):
     """
-    Refresh access token using refresh token.
+    Refresh access token using refresh token with security validation.
     
     Generates a new access token from a valid refresh token.
+    Includes comprehensive validation and audit logging.
     """
+    client_ip = http_request.client.host if http_request.client else None
+    
     try:
-        # Refresh access token
-        new_access_token = TokenManager.refresh_access_token(request.refresh_token)
+        # Refresh access token with validation
+        new_access_token, user = await auth_service.token_manager.refresh_access_token(
+            request.refresh_token
+        )
         
         return {
             "access_token": new_access_token,
             "token_type": "bearer",
-            "expires_in": 30 * 60  # 30 minutes in seconds
+            "expires_in": auth_service.token_manager.ACCESS_TOKEN_EXPIRE_MINUTES * 60
         }
         
     except AuthenticationError as e:
         logger.warning(f"Token refresh failed: {str(e)}")
+        
+        # Log refresh failure
+        log_security_event(
+            AuditEventType.TOKEN_REFRESH,
+            ip_address=client_ip,
+            details={
+                "error": str(e),
+                "action": "refresh_failed"
+            },
+            severity=AuditSeverity.MEDIUM
+        )
+        
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
@@ -173,114 +287,123 @@ async def refresh_token(request: RefreshTokenRequest):
 
 
 @router.post("/logout", response_model=SuccessResponse)
-async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    """
-    Logout user (client-side token invalidation).
-    
-    Note: JWT tokens are stateless, so logout is handled client-side
-    by removing the token. In production, you might want to implement
-    a token blacklist for enhanced security.
-    """
-    # In a stateless JWT system, logout is primarily client-side
-    # The client should remove the tokens from storage
-    
-    # For enhanced security, you could implement token blacklisting here
-    # by storing invalidated tokens in Redis with their expiration time
-    
-    logger.info("User logged out")
-    
-    return SuccessResponse(
-        message="Successfully logged out",
-        data={"instruction": "Remove tokens from client storage"}
-    )
-
-
-@router.get("/me", response_model=dict)
-async def get_current_user_info(
+async def logout(
+    http_request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security)
 ):
     """
-    Get current user information.
+    Logout user with token blacklisting for enhanced security.
     
-    Returns the profile information of the currently authenticated user.
+    Revokes the current token and logs the logout event.
     """
+    client_ip = http_request.client.host if http_request.client else None
+    
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
     try:
-        token = credentials.credentials
-        user = await AuthService.get_current_user(token)
+        # Logout user with token revocation
+        await auth_service.logout_user(
+            token=credentials.credentials,
+            ip_address=client_ip
+        )
         
-        return {
-            "id": str(user.id),
-            "email": user.email,
-            "full_name": user.full_name,
-            "company_name": user.company_name,
-            "company_size": user.company_size,
-            "industry": user.industry,
-            "job_title": user.job_title,
-            "is_active": user.is_active,
-            "is_verified": user.is_verified,
-            "created_at": user.created_at.isoformat(),
-            "last_login": user.last_login.isoformat() if user.last_login else None,
-            "login_count": user.login_count,
-            "assessments_created": user.assessments_created
-        }
+        return SuccessResponse(
+            message="Successfully logged out",
+            data={"instruction": "Token has been revoked"}
+        )
         
     except AuthenticationError as e:
+        logger.warning(f"Logout failed: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(e),
             headers={"WWW-Authenticate": "Bearer"},
         )
     except Exception as e:
-        logger.error(f"Get user info error: {str(e)}")
+        logger.error(f"Logout error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to get user information"
+            detail="Logout failed"
         )
+
+
+@router.get("/me", response_model=UserInfoResponse)
+async def get_current_user_info(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get current user information with comprehensive profile data.
+    
+    Returns the profile information of the currently authenticated user.
+    """
+    return UserInfoResponse(
+        id=str(current_user.id),
+        email=current_user.email,
+        full_name=current_user.full_name,
+        company_name=current_user.company_name,
+        job_title=current_user.job_title,
+        role=current_user.role,
+        is_active=current_user.is_active,
+        is_verified=current_user.is_verified,
+        created_at=current_user.created_at,
+        last_login=current_user.last_login,
+        login_count=current_user.login_count,
+        assessments_created=current_user.assessments_created
+    )
 
 
 @router.put("/change-password", response_model=SuccessResponse)
 async def change_password(
     request: ChangePasswordRequest,
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    http_request: Request,
+    current_user: User = Depends(get_current_active_user)
 ):
     """
-    Change user password.
+    Change user password with comprehensive validation.
     
-    Allows authenticated users to change their password.
+    Allows authenticated users to change their password with
+    strength validation and audit logging.
     """
+    client_ip = http_request.client.host if http_request.client else None
+    
     try:
-        token = credentials.credentials
-        user = await AuthService.get_current_user(token)
+        # Change password with validation
+        await auth_service.change_password(
+            user=current_user,
+            current_password=request.current_password,
+            new_password=request.new_password,
+            ip_address=client_ip
+        )
         
-        # Verify current password
-        if not user.verify_password(request.current_password):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Current password is incorrect"
-            )
-        
-        # Update password
-        from ..core.auth import PasswordManager
-        user.hashed_password = PasswordManager.hash_password(request.new_password)
-        user.updated_at = user.created_at.__class__.utcnow()
-        await user.save()
-        
-        logger.info(f"Password changed for user: {user.email}")
+        logger.info(f"Password changed for user: {current_user.email}")
         
         return SuccessResponse(
             message="Password changed successfully"
         )
         
-    except HTTPException:
-        raise
-    except AuthenticationError as e:
+    except ValueError as e:
+        logger.warning(f"Password change failed for {current_user.email}: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=str(e),
-            headers={"WWW-Authenticate": "Bearer"},
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
         )
     except Exception as e:
-        logger.error(f"Change password error: {str(e)}")
+        logger.error(f"Change password error for {current_user.email}: {str(e)}")
+        
+        # Log system error
+        log_security_event(
+            AuditEventType.PASSWORD_CHANGE,
+            user=current_user,
+            ip_address=client_ip,
+            details={"error": str(e)},
+            severity=AuditSeverity.HIGH
+        )
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to change password"
@@ -381,19 +504,27 @@ async def reset_password(request: PasswordResetConfirm):
 @router.post("/verify-token", response_model=dict)
 async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """
-    Verify if a token is valid.
+    Verify if a token is valid with comprehensive validation.
     
     Checks if the provided JWT token is valid and returns token info.
     """
+    if not credentials:
+        return {
+            "valid": False,
+            "error": "No token provided"
+        }
+    
     try:
         token = credentials.credentials
-        payload = TokenManager.verify_token(token, "access")
+        claims = await auth_service.token_manager.verify_token(token)
         
         return {
             "valid": True,
-            "user_id": payload.get("sub"),
-            "email": payload.get("email"),
-            "expires_at": payload.get("exp")
+            "user_id": claims.sub,
+            "email": claims.email,
+            "role": claims.role,
+            "expires_at": claims.exp,
+            "session_id": claims.session_id
         }
         
     except AuthenticationError as e:
@@ -407,3 +538,61 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
             "valid": False,
             "error": "Token verification failed"
         }
+
+
+@router.post("/revoke-token", response_model=SuccessResponse)
+async def revoke_token(
+    http_request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Revoke a specific token.
+    
+    Adds the token to the blacklist to prevent further use.
+    """
+    client_ip = http_request.client.host if http_request.client else None
+    
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    try:
+        # Revoke the token
+        await auth_service.token_manager.revoke_token(credentials.credentials)
+        
+        return SuccessResponse(
+            message="Token revoked successfully"
+        )
+        
+    except AuthenticationError as e:
+        logger.warning(f"Token revocation failed: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except Exception as e:
+        logger.error(f"Token revocation error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Token revocation failed"
+        )
+
+
+# Dependency for getting current user (alias for compatibility)
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
+    """Get current authenticated user (alias for get_current_active_user)."""
+    return await get_current_active_user(credentials)
+
+# Dependency for getting current admin user
+async def get_current_admin_user(current_user: User = Depends(get_current_user)) -> User:
+    """Get current authenticated admin user."""
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required"
+        )
+    return current_user

@@ -16,6 +16,7 @@ from .infrastructure_agent import InfrastructureAgent
 from .compliance_agent import ComplianceAgent
 from .web_research_agent import WebResearchAgent
 from .simulation_agent import SimulationAgent
+from .chatbot_agent import ChatbotAgent
 # from .ai_consultant_agent import AIConsultantAgent
 
 # Register agent types
@@ -28,6 +29,7 @@ agent_registry.register_agent_type(AgentRole.INFRASTRUCTURE, InfrastructureAgent
 agent_registry.register_agent_type(AgentRole.COMPLIANCE, ComplianceAgent)
 agent_registry.register_agent_type(AgentRole.WEB_RESEARCH, WebResearchAgent)
 agent_registry.register_agent_type(AgentRole.SIMULATION, SimulationAgent)
+agent_registry.register_agent_type(AgentRole.CHATBOT, ChatbotAgent)
 # agent_registry.register_agent_type(AgentRole.AI_CONSULTANT, AIConsultantAgent)
 
 __all__ = [
@@ -48,6 +50,7 @@ __all__ = [
     "ComplianceAgent",
     "WebResearchAgent",
     "SimulationAgent",
+    "ChatbotAgent",
     # "AIConsultantAgent",
     "Report",
     "ReportSection",

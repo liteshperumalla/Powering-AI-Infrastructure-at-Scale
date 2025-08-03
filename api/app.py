@@ -28,6 +28,7 @@ from infra_mind.core.config import get_settings
 from infra_mind.core.auth import get_current_user_from_token
 from infra_mind.core.metrics_collector import initialize_metrics_collection, shutdown_metrics_collection
 from infra_mind.core.metrics_middleware import MetricsMiddleware, HealthCheckMiddleware, MetricsEndpointMiddleware
+from infra_mind.core.security_middleware import setup_security_middleware
 from infra_mind.orchestration.events import EventManager
 from infra_mind.orchestration.monitoring import get_workflow_monitor, initialize_workflow_monitoring
 
@@ -162,20 +163,8 @@ app = FastAPI(
     terms_of_service="https://infra-mind.com/terms"
 )
 
-# Configure CORS for frontend integration (must be added before other middleware)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000", 
-        "http://localhost:3001",
-        "https://app.infra-mind.com",
-        "https://staging-app.infra-mind.com"
-    ],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-    allow_headers=["*"],
-    expose_headers=["X-Request-ID", "X-Response-Time", "X-API-Version", "X-RateLimit-*"]
-)
+# Set up comprehensive security middleware (includes CORS)
+setup_security_middleware(app)
 
 # Add enhanced middleware stack
 from infra_mind.api.middleware import (
@@ -188,10 +177,8 @@ from infra_mind.api.middleware import (
 
 # Add middleware in reverse order (last added = first executed)
 app.add_middleware(MaintenanceModeMiddleware)
-app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(APIVersioningMiddleware)
 app.add_middleware(RequestTrackingMiddleware)
-app.add_middleware(RateLimitMiddleware, default_rate_limit=1000)
 
 # Add original metrics middleware
 app.add_middleware(MetricsMiddleware)

@@ -274,8 +274,8 @@ async def get_service_failover_status(
 
 @router.post("/failover/service/{service_name}/trigger")
 async def trigger_manual_failover(
-    service_name: str = Path(..., description="Name of the service"),
     request: ManualFailoverRequest,
+    service_name: str = Path(..., description="Name of the service"),
     current_user: str = Depends(get_current_user)
 ):
     """

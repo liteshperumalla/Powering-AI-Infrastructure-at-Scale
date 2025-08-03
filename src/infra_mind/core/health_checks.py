@@ -821,13 +821,266 @@ def get_health_manager() -> HealthCheckManager:
     return health_manager
 
 
+class AlertingSystem:
+    """Comprehensive alerting system for health monitoring."""
+    
+    def __init__(self):
+        """Initialize alerting system."""
+        self.alert_rules: List[Dict[str, Any]] = []
+        self.active_alerts: Dict[str, Dict[str, Any]] = {}
+        self.alert_history: List[Dict[str, Any]] = []
+        self.notification_channels: List[Callable] = []
+        self.alert_cooldowns: Dict[str, datetime] = {}
+        self.escalation_rules: Dict[str, List[Dict[str, Any]]] = {}
+    
+    def add_alert_rule(self, rule: Dict[str, Any]) -> None:
+        """Add an alert rule."""
+        required_fields = ['name', 'condition', 'severity', 'message']
+        if not all(field in rule for field in required_fields):
+            raise ValueError(f"Alert rule must contain: {required_fields}")
+        
+        self.alert_rules.append(rule)
+        logger.info(f"Added alert rule: {rule['name']}")
+    
+    def add_notification_channel(self, channel: Callable) -> None:
+        """Add a notification channel."""
+        self.notification_channels.append(channel)
+    
+    async def evaluate_alerts(self, health_results: Dict[str, HealthCheckResult]) -> None:
+        """Evaluate alert rules against health check results."""
+        current_time = datetime.utcnow()
+        
+        for rule in self.alert_rules:
+            try:
+                alert_key = rule['name']
+                
+                # Check cooldown
+                if alert_key in self.alert_cooldowns:
+                    cooldown_end = self.alert_cooldowns[alert_key]
+                    if current_time < cooldown_end:
+                        continue
+                
+                # Evaluate condition
+                if await self._evaluate_condition(rule['condition'], health_results):
+                    # Create or update alert
+                    if alert_key not in self.active_alerts:
+                        alert = {
+                            'id': f"{alert_key}_{int(current_time.timestamp())}",
+                            'rule_name': rule['name'],
+                            'severity': rule['severity'],
+                            'message': rule['message'],
+                            'created_at': current_time,
+                            'updated_at': current_time,
+                            'count': 1,
+                            'status': 'active',
+                            'affected_components': self._get_affected_components(rule['condition'], health_results)
+                        }
+                        
+                        self.active_alerts[alert_key] = alert
+                        self.alert_history.append(alert.copy())
+                        
+                        # Send notifications
+                        await self._send_alert_notifications(alert)
+                        
+                        # Set cooldown
+                        cooldown_minutes = rule.get('cooldown_minutes', 15)
+                        self.alert_cooldowns[alert_key] = current_time + timedelta(minutes=cooldown_minutes)
+                        
+                        logger.warning(f"Alert triggered: {rule['name']}")
+                    else:
+                        # Update existing alert
+                        self.active_alerts[alert_key]['count'] += 1
+                        self.active_alerts[alert_key]['updated_at'] = current_time
+                
+                else:
+                    # Clear alert if condition no longer met
+                    if alert_key in self.active_alerts:
+                        alert = self.active_alerts[alert_key]
+                        alert['status'] = 'resolved'
+                        alert['resolved_at'] = current_time
+                        
+                        # Send resolution notification
+                        await self._send_resolution_notification(alert)
+                        
+                        del self.active_alerts[alert_key]
+                        logger.info(f"Alert resolved: {rule['name']}")
+            
+            except Exception as e:
+                logger.error(f"Error evaluating alert rule {rule['name']}: {e}")
+    
+    async def _evaluate_condition(self, condition: Dict[str, Any], health_results: Dict[str, HealthCheckResult]) -> bool:
+        """Evaluate alert condition."""
+        condition_type = condition.get('type')
+        
+        if condition_type == 'component_status':
+            component = condition.get('component')
+            expected_status = condition.get('status')
+            
+            if component in health_results:
+                return health_results[component].status == expected_status
+        
+        elif condition_type == 'response_time':
+            component = condition.get('component')
+            threshold_ms = condition.get('threshold_ms')
+            operator = condition.get('operator', 'gt')
+            
+            if component in health_results:
+                response_time = health_results[component].response_time_ms
+                if operator == 'gt':
+                    return response_time > threshold_ms
+                elif operator == 'lt':
+                    return response_time < threshold_ms
+        
+        elif condition_type == 'error_rate':
+            # Calculate error rate from recent results
+            error_count = sum(1 for result in health_results.values() if result.status == HealthStatus.UNHEALTHY)
+            total_count = len(health_results)
+            error_rate = (error_count / total_count * 100) if total_count > 0 else 0
+            
+            threshold = condition.get('threshold_percent')
+            return error_rate > threshold
+        
+        elif condition_type == 'multiple_failures':
+            # Check if multiple components are failing
+            failure_count = sum(1 for result in health_results.values() if result.status == HealthStatus.UNHEALTHY)
+            threshold = condition.get('threshold_count', 2)
+            return failure_count >= threshold
+        
+        return False
+    
+    def _get_affected_components(self, condition: Dict[str, Any], health_results: Dict[str, HealthCheckResult]) -> List[str]:
+        """Get list of components affected by the alert condition."""
+        affected = []
+        
+        condition_type = condition.get('type')
+        
+        if condition_type == 'component_status':
+            component = condition.get('component')
+            if component:
+                affected.append(component)
+        elif condition_type in ['error_rate', 'multiple_failures']:
+            # Include all unhealthy components
+            affected = [
+                name for name, result in health_results.items()
+                if result.status == HealthStatus.UNHEALTHY
+            ]
+        
+        return affected
+    
+    async def _send_alert_notifications(self, alert: Dict[str, Any]) -> None:
+        """Send alert notifications through all channels."""
+        for channel in self.notification_channels:
+            try:
+                await channel(alert, 'alert')
+            except Exception as e:
+                logger.error(f"Failed to send alert notification: {e}")
+    
+    async def _send_resolution_notification(self, alert: Dict[str, Any]) -> None:
+        """Send alert resolution notifications."""
+        for channel in self.notification_channels:
+            try:
+                await channel(alert, 'resolution')
+            except Exception as e:
+                logger.error(f"Failed to send resolution notification: {e}")
+    
+    def get_active_alerts(self) -> List[Dict[str, Any]]:
+        """Get all active alerts."""
+        return list(self.active_alerts.values())
+    
+    def get_alert_history(self, limit: int = 100) -> List[Dict[str, Any]]:
+        """Get alert history."""
+        return self.alert_history[-limit:]
+
+
+class AutoRecoverySystem:
+    """Automated recovery system for failed components."""
+    
+    def __init__(self):
+        """Initialize auto-recovery system."""
+        self.recovery_strategies: Dict[str, List[Callable]] = {}
+        self.recovery_history: List[Dict[str, Any]] = []
+        self.recovery_cooldowns: Dict[str, datetime] = {}
+    
+    def register_recovery_strategy(self, component_name: str, strategy: Callable) -> None:
+        """Register a recovery strategy for a component."""
+        if component_name not in self.recovery_strategies:
+            self.recovery_strategies[component_name] = []
+        
+        self.recovery_strategies[component_name].append(strategy)
+        logger.info(f"Registered recovery strategy for {component_name}")
+    
+    async def attempt_recovery(self, component_name: str, health_result: HealthCheckResult) -> Dict[str, Any]:
+        """Attempt to recover a failed component."""
+        current_time = datetime.utcnow()
+        
+        # Check cooldown
+        cooldown_key = f"{component_name}_recovery"
+        if cooldown_key in self.recovery_cooldowns:
+            if current_time < self.recovery_cooldowns[cooldown_key]:
+                return {
+                    'success': False,
+                    'message': 'Recovery in cooldown period',
+                    'next_attempt': self.recovery_cooldowns[cooldown_key].isoformat()
+                }
+        
+        recovery_result = {
+            'component_name': component_name,
+            'started_at': current_time,
+            'strategies_attempted': [],
+            'success': False,
+            'error_message': None
+        }
+        
+        if component_name in self.recovery_strategies:
+            for strategy in self.recovery_strategies[component_name]:
+                try:
+                    strategy_name = getattr(strategy, '__name__', 'unknown_strategy')
+                    logger.info(f"Attempting recovery strategy '{strategy_name}' for {component_name}")
+                    
+                    result = await strategy(health_result)
+                    recovery_result['strategies_attempted'].append({
+                        'strategy': strategy_name,
+                        'success': result.get('success', False),
+                        'message': result.get('message', '')
+                    })
+                    
+                    if result.get('success', False):
+                        recovery_result['success'] = True
+                        break
+                
+                except Exception as e:
+                    logger.error(f"Recovery strategy failed for {component_name}: {e}")
+                    recovery_result['strategies_attempted'].append({
+                        'strategy': strategy_name,
+                        'success': False,
+                        'message': str(e)
+                    })
+        
+        recovery_result['completed_at'] = datetime.utcnow()
+        self.recovery_history.append(recovery_result)
+        
+        # Set cooldown (5 minutes)
+        self.recovery_cooldowns[cooldown_key] = current_time + timedelta(minutes=5)
+        
+        return recovery_result
+    
+    def get_recovery_history(self, component_name: Optional[str] = None, limit: int = 50) -> List[Dict[str, Any]]:
+        """Get recovery history."""
+        history = self.recovery_history
+        
+        if component_name:
+            history = [r for r in history if r['component_name'] == component_name]
+        
+        return history[-limit:]
+
+
 async def initialize_health_checks(
     mongodb_url: str,
     redis_url: str,
     external_apis: Optional[Dict[str, str]] = None
 ) -> None:
     """
-    Initialize health checks for core system components.
+    Initialize comprehensive health checks for core system components.
     
     Args:
         mongodb_url: MongoDB connection URL
@@ -872,6 +1125,65 @@ async def initialize_health_checks(
     # Start monitoring
     await manager.start_monitoring()
     logger.info("Health check system initialized")
+
+
+async def shutdown_health_checks() -> None:
+    """Shutdown health check system."""
+    manager = get_health_manager()
+    await manager.stop_monitoring()
+    logger.info("Health check system shutdown")
+
+
+async def setup_monitoring_dashboard(
+    mongodb_url: str = "mongodb://localhost:27017",
+    redis_url: str = "redis://localhost:6379",
+    external_apis: Optional[Dict[str, str]] = None
+) -> None:
+    """Setup comprehensive monitoring dashboard with health checks."""
+    manager = get_health_manager()
+    
+    # Database health check
+    db_config = HealthCheckConfig(
+        check_interval_seconds=30,
+        timeout_seconds=10.0,
+        failure_threshold=3,
+        recovery_threshold=2,
+        enable_auto_recovery=True,
+        critical_component=True
+    )
+    db_health_check = DatabaseHealthCheck("mongodb", mongodb_url, db_config)
+    manager.register_health_check(db_health_check)
+    
+    # Cache health check
+    cache_config = HealthCheckConfig(
+        check_interval_seconds=30,
+        timeout_seconds=5.0,
+        failure_threshold=3,
+        recovery_threshold=2,
+        enable_auto_recovery=True,
+        critical_component=True
+    )
+    cache_health_check = CacheHealthCheck("redis", redis_url, cache_config)
+    manager.register_health_check(cache_health_check)
+    
+    # External API health checks
+    if external_apis:
+        api_config = HealthCheckConfig(
+            check_interval_seconds=60,
+            timeout_seconds=15.0,
+            failure_threshold=5,
+            recovery_threshold=3,
+            enable_auto_recovery=False,
+            critical_component=False
+        )
+        
+        for api_name, api_url in external_apis.items():
+            api_health_check = ExternalAPIHealthCheck(api_name, api_url, api_config)
+            manager.register_health_check(api_health_check)
+    
+    # Start monitoring
+    await manager.start_monitoring()
+    logger.info("Monitoring dashboard setup completed")
 
 
 async def shutdown_health_checks() -> None:

@@ -1,3 +1,6 @@
+# Production Frontend Deployment for Infra Mind
+# Learning Note: Next.js frontend with production optimizations and security
+
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -6,79 +9,178 @@ metadata:
   labels:
     app: infra-mind-frontend
     component: frontend
+    version: v1.0.0
+    tier: production
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    kubernetes.io/change-cause: "Production frontend deployment"
 spec:
   replicas: 2
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 0
+      maxSurge: 50%
+      maxUnavailable: 25%
   selector:
     matchLabels:
       app: infra-mind-frontend
+      version: v1.0.0
   template:
     metadata:
       labels:
         app: infra-mind-frontend
         component: frontend
+        version: v1.0.0
+        tier: production
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "3000"
+        prometheus.io/path: "/api/metrics"
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
     spec:
+      serviceAccountName: infra-mind-frontend
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
         runAsUser: 1001
+        runAsGroup: 1001
         fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - infra-mind-frontend
+              topologyKey: kubernetes.io/hostname
       containers:
       - name: frontend
-        image: infra-mind/frontend:latest
-        imagePullPolicy: Always
+        image: infra-mind/frontend:v1.0.0
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000
           name: http
+          protocol: TCP
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+          runAsGroup: 1001
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
         env:
+        # Configuration from ConfigMap
+        - name: NODE_ENV
+          value: "production"
+        - name: NEXT_TELEMETRY_DISABLED
+          value: "1"
+        - name: PORT
+          value: "3000"
         - name: NEXT_PUBLIC_API_URL
           valueFrom:
             configMapKeyRef:
               name: infra-mind-config
-              key: NEXT_PUBLIC_API_URL
-        - name: NODE_ENV
+              key: FRONTEND_API_URL
+        - name: NEXT_PUBLIC_WS_URL
           valueFrom:
             configMapKeyRef:
               name: infra-mind-config
-              key: NODE_ENV
-        
+              key: FRONTEND_WS_URL
+        - name: NEXT_PUBLIC_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: infra-mind-config
+              key: INFRA_MIND_ENVIRONMENT
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+          readOnly: false
+        - name: cache
+          mountPath: /app/.next/cache
+          readOnly: false
+        - name: nextjs-cache
+          mountPath: /app/.next/server/pages
+          readOnly: false
         resources:
           requests:
-            memory: "256Mi"
-            cpu: "100m"
+            memory: "512Mi"
+            cpu: "250m"
+            ephemeral-storage: "1Gi"
           limits:
-            memory: "1Gi"
-            cpu: "500m"
-        
+            memory: "2Gi"
+            cpu: "1000m"
+            ephemeral-storage: "3Gi"
         livenessProbe:
           httpGet:
-            path: /health
+            path: /api/health
             port: 3000
-          initialDelaySeconds: 30
+            scheme: HTTP
+            httpHeaders:
+            - name: User-Agent
+              value: "k8s-liveness-probe"
+          initialDelaySeconds: 60
           periodSeconds: 30
           timeoutSeconds: 10
           failureThreshold: 3
-        
+          successThreshold: 1
         readinessProbe:
           httpGet:
-            path: /health
+            path: /api/ready
             port: 3000
-          initialDelaySeconds: 10
+            scheme: HTTP
+            httpHeaders:
+            - name: User-Agent
+              value: "k8s-readiness-probe"
+          initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3
-        
+          successThreshold: 1
         startupProbe:
           httpGet:
-            path: /health
+            path: /api/health
             port: 3000
-          initialDelaySeconds: 10
-          periodSeconds: 5
-          timeoutSeconds: 3
-          failureThreshold: 20
+            scheme: HTTP
+            httpHeaders:
+            - name: User-Agent
+              value: "k8s-startup-probe"
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+          successThreshold: 1
+      volumes:
+      - name: tmp
+        emptyDir:
+          sizeLimit: 500Mi
+      - name: cache
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: nextjs-cache
+        emptyDir:
+          sizeLimit: 2Gi
+      initContainers:
+      - name: wait-for-api
+        image: busybox:1.35
+        command: ['sh', '-c', 'until nc -z infra-mind-api-service 8000; do echo waiting for api; sleep 2; done;']
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
 
 ---
 apiVersion: v1
@@ -88,6 +190,9 @@ metadata:
   namespace: infra-mind
   labels:
     app: infra-mind-frontend
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3000"
 spec:
   selector:
     app: infra-mind-frontend
@@ -97,6 +202,15 @@ spec:
     protocol: TCP
     name: http
   type: ClusterIP
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: infra-mind-frontend
+  namespace: infra-mind
+  labels:
+    app: infra-mind-frontend
 
 ---
 apiVersion: policy/v1

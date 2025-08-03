@@ -16,6 +16,9 @@ import {
     Box,
     useTheme,
     useMediaQuery,
+    Avatar,
+    Badge,
+    Chip,
 } from '@mui/material';
 import {
     Dashboard,
@@ -28,8 +31,12 @@ import {
     Menu as MenuIcon,
     Notifications,
     Logout,
+    Person,
 } from '@mui/icons-material';
 import { useRouter, usePathname } from 'next/navigation';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { logout } from '@/store/slices/authSlice';
+import UserProfile from './UserProfile';
 
 const navigationItems = [
     { text: 'Dashboard', icon: <Dashboard />, path: '/dashboard' },
@@ -51,9 +58,13 @@ export default function Navigation({ title = 'Dashboard', children }: Navigation
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
     const router = useRouter();
     const pathname = usePathname();
+    const dispatch = useAppDispatch();
+    const { user, isAuthenticated } = useAppSelector(state => state.auth);
 
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [mobileOpen, setMobileOpen] = useState(false);
+    const [profileOpen, setProfileOpen] = useState(false);
+    const [notificationCount] = useState(3); // Mock notification count
 
     const handleProfileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
         setAnchorEl(event.currentTarget);
@@ -67,10 +78,22 @@ export default function Navigation({ title = 'Dashboard', children }: Navigation
         setMobileOpen(!mobileOpen);
     };
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
         handleMenuClose();
-        // Clear any stored auth tokens here
-        router.push('/');
+        try {
+            await dispatch(logout()).unwrap();
+            router.push('/auth/login');
+        } catch (error) {
+            console.error('Logout failed:', error);
+            // Force logout even if API call fails
+            localStorage.removeItem('auth_token');
+            router.push('/auth/login');
+        }
+    };
+
+    const handleProfileClick = () => {
+        handleMenuClose();
+        setProfileOpen(true);
     };
 
     const drawer = (
@@ -144,19 +167,41 @@ export default function Navigation({ title = 'Dashboard', children }: Navigation
                     <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
                         {title}
                     </Typography>
-                    <IconButton color="inherit" sx={{ mr: 1 }}>
-                        <Notifications />
-                    </IconButton>
-                    <IconButton
-                        size="large"
-                        edge="end"
-                        aria-label="account of current user"
-                        aria-haspopup="true"
-                        onClick={handleProfileMenuOpen}
-                        color="inherit"
-                    >
-                        <AccountCircle />
-                    </IconButton>
+
+                    {isAuthenticated && (
+                        <>
+                            <Badge badgeContent={notificationCount} color="error" sx={{ mr: 2 }}>
+                                <IconButton color="inherit">
+                                    <Notifications />
+                                </IconButton>
+                            </Badge>
+
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 1 }}>
+                                {user && (
+                                    <>
+                                        <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+                                            <Typography variant="body2">
+                                                {user.name}
+                                            </Typography>
+                                            <Chip
+                                                label={user.role}
+                                                size="small"
+                                                color="secondary"
+                                                sx={{ height: 16, fontSize: '0.7rem' }}
+                                            />
+                                        </Box>
+                                        <Avatar
+                                            sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}
+                                            onClick={handleProfileMenuOpen}
+                                            style={{ cursor: 'pointer' }}
+                                        >
+                                            <Person fontSize="small" />
+                                        </Avatar>
+                                    </>
+                                )}
+                            </Box>
+                        </>
+                    )}
                 </Toolbar>
             </AppBar>
 
@@ -192,33 +237,45 @@ export default function Navigation({ title = 'Dashboard', children }: Navigation
             </Box>
 
             {/* Profile Menu */}
-            <Menu
-                anchorEl={anchorEl}
-                anchorOrigin={{
-                    vertical: 'top',
-                    horizontal: 'right',
-                }}
-                keepMounted
-                transformOrigin={{
-                    vertical: 'top',
-                    horizontal: 'right',
-                }}
-                open={Boolean(anchorEl)}
-                onClose={handleMenuClose}
-            >
-                <MenuItem onClick={handleMenuClose}>
-                    <AccountCircle sx={{ mr: 1 }} />
-                    Profile
-                </MenuItem>
-                <MenuItem onClick={handleMenuClose}>
-                    <Settings sx={{ mr: 1 }} />
-                    Settings
-                </MenuItem>
-                <MenuItem onClick={handleLogout}>
-                    <Logout sx={{ mr: 1 }} />
-                    Logout
-                </MenuItem>
-            </Menu>
+            {/* Profile Menu */}
+            {isAuthenticated && (
+                <Menu
+                    anchorEl={anchorEl}
+                    anchorOrigin={{
+                        vertical: 'bottom',
+                        horizontal: 'right',
+                    }}
+                    keepMounted
+                    transformOrigin={{
+                        vertical: 'top',
+                        horizontal: 'right',
+                    }}
+                    open={Boolean(anchorEl)}
+                    onClose={handleMenuClose}
+                >
+                    <MenuItem onClick={handleProfileClick}>
+                        <AccountCircle sx={{ mr: 1 }} />
+                        Profile
+                    </MenuItem>
+                    <MenuItem onClick={() => {
+                        handleMenuClose();
+                        router.push('/settings');
+                    }}>
+                        <Settings sx={{ mr: 1 }} />
+                        Settings
+                    </MenuItem>
+                    <MenuItem onClick={handleLogout}>
+                        <Logout sx={{ mr: 1 }} />
+                        Logout
+                    </MenuItem>
+                </Menu>
+            )}
+
+            {/* User Profile Dialog */}
+            <UserProfile
+                open={profileOpen}
+                onClose={() => setProfileOpen(false)}
+            />
 
             {/* Main Content */}
             <Box

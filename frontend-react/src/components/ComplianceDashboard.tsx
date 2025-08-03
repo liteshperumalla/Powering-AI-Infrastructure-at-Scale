@@ -10,6 +10,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { safeSlice } from '../utils/numberUtils';
 import {
     Box,
     Card,
@@ -297,7 +298,7 @@ const ComplianceDashboard: React.FC = () => {
         }
     };
 
-    const getConsentStatusColor = (status: string) => {
+    const getConsentStatusColor = (status: string): 'success' | 'error' | 'warning' | 'default' => {
         switch (status) {
             case 'granted': return 'success';
             case 'denied': return 'error';
@@ -370,7 +371,7 @@ const ComplianceDashboard: React.FC = () => {
                                                 <Chip
                                                     icon={getConsentStatusIcon(consent?.status || 'pending')}
                                                     label={consent?.status || 'pending'}
-                                                    color={getConsentStatusColor(consent?.status || 'pending') as any}
+                                                    color={getConsentStatusColor(consent?.status || 'pending')}
                                                     size="small"
                                                 />
                                                 <Switch
@@ -531,7 +532,7 @@ const ComplianceDashboard: React.FC = () => {
                                             </TableRow>
                                         </TableHead>
                                         <TableBody>
-                                            {auditEvents.slice(0, 10).map((event, index) => (
+                                            {safeSlice(auditEvents, 0, 10).map((event, index) => (
                                                 <TableRow key={index}>
                                                     <TableCell>
                                                         {new Date(event.timestamp).toLocaleString()}

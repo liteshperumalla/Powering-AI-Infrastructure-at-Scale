@@ -1,16 +1,30 @@
 """
-Terraform API integration for Infra Mind.
+Production Terraform API integration for Infra Mind.
 
-Provides clients for Terraform Cloud API and Terraform Registry API.
+Provides real clients for Terraform Cloud API and Terraform Registry API
+with production-ready authentication, error handling, and workspace management.
+
+This implementation replaces all mock Terraform clients with real API integrations:
+- Terraform Cloud API for cost estimation and workspace management
+- Terraform Registry API for provider and module information
+- Production-ready authentication and error handling
+- Real workspace operations and plan execution
 """
 
 import asyncio
 import json
 import logging
-from typing import Dict, Any, List, Optional
+import os
+import time
+import hashlib
+import base64
+from typing import Dict, Any, List, Optional, Union
 from datetime import datetime, timezone
 import httpx
 from urllib.parse import urljoin
+import tarfile
+import tempfile
+from pathlib import Path
 
 from .base import (
     BaseCloudClient, CloudProvider, CloudService, CloudServiceResponse,
@@ -28,31 +42,39 @@ class TerraformProvider(str):
 
 class TerraformClient(BaseCloudClient):
     """
-    Main Terraform client that coordinates Terraform Cloud and Registry APIs.
+    Production Terraform client that coordinates Terraform Cloud and Registry APIs.
     
-    Learning Note: This acts as a facade for Terraform services,
-    providing unified access to cost estimation and provider information.
+    This client provides unified access to:
+    - Terraform Cloud API for cost estimation and workspace management
+    - Terraform Registry API for provider and module information
+    - Real authentication and error handling
+    - Production-ready workspace operations
     """
     
     def __init__(self, terraform_token: Optional[str] = None, organization: Optional[str] = None):
         """
-        Initialize Terraform client.
+        Initialize production Terraform client.
         
         Args:
-            terraform_token: Terraform Cloud API token (optional for registry access)
-            organization: Terraform Cloud organization name
+            terraform_token: Terraform Cloud API token (from env or parameter)
+            organization: Terraform Cloud organization name (from env or parameter)
             
         Raises:
             AuthenticationError: If required credentials are missing for Terraform Cloud operations
         """
         super().__init__(CloudProvider.AWS, "global")  # Using AWS as base, region is global for Terraform
         
-        self.terraform_token = terraform_token
-        self.organization = organization
+        # Get credentials from environment if not provided
+        self.terraform_token = terraform_token or os.getenv('INFRA_MIND_TERRAFORM_TOKEN')
+        self.organization = organization or os.getenv('INFRA_MIND_TERRAFORM_ORG')
         
-        # Initialize service clients
-        self.cloud_client = TerraformCloudClient(terraform_token, organization)
+        # Initialize service clients with real authentication
+        self.cloud_client = TerraformCloudClient(self.terraform_token, self.organization)
         self.registry_client = TerraformRegistryClient()
+        
+        # Track API usage for cost optimization
+        self.api_calls_count = 0
+        self.last_api_call = None
     
     async def get_compute_services(self, region: Optional[str] = None) -> CloudServiceResponse:
         """Get Terraform compute-related modules and providers."""
@@ -152,24 +174,41 @@ class TerraformClient(BaseCloudClient):
 
 class TerraformCloudClient:
     """
-    Terraform Cloud API client for cost estimation and workspace management.
+    Production Terraform Cloud API client for cost estimation and workspace management.
     
-    Learning Note: Terraform Cloud provides cost estimation for infrastructure
-    changes before they are applied, helping with budget planning.
+    This client provides:
+    - Real authentication with Terraform Cloud
+    - Workspace creation and management
+    - Cost estimation for infrastructure changes
+    - Plan execution and monitoring
+    - Proper error handling and rate limiting
     """
     
     def __init__(self, terraform_token: Optional[str] = None, organization: Optional[str] = None):
         """
-        Initialize Terraform Cloud client.
+        Initialize production Terraform Cloud client.
         
         Args:
             terraform_token: Terraform Cloud API token
             organization: Terraform Cloud organization name
+            
+        Raises:
+            AuthenticationError: If token is invalid or missing for authenticated operations
         """
         self.terraform_token = terraform_token
         self.organization = organization
         self.base_url = "https://app.terraform.io/api/v2"
         self.session = None
+        self.rate_limit_remaining = None
+        self.rate_limit_reset = None
+        
+        # Validate token format if provided
+        if self.terraform_token and not self.terraform_token.startswith(('at-', 'user-')):
+            logger.warning("Terraform token should start with 'at-' (team token) or 'user-' (user token)")
+        
+        # Validate organization name
+        if self.organization and not self.organization.replace('-', '').replace('_', '').isalnum():
+            raise ValueError("Invalid organization name format")
     
     async def _get_session(self) -> httpx.AsyncClient:
         """Get or create HTTP session with authentication."""
@@ -347,7 +386,7 @@ class TerraformCloudClient:
         
         Args:
             workspace_id: Terraform Cloud workspace ID
-            configuration: Terraform configuration
+            configuration: Terraform configuration with optional files
             
         Returns:
             Plan run data with cost estimation
@@ -360,7 +399,8 @@ class TerraformCloudClient:
                 "data": {
                     "type": "configuration-versions",
                     "attributes": {
-                        "auto-queue-runs": True
+                        "auto-queue-runs": True,
+                        "speculative": configuration.get("speculative", False)
                     }
                 }
             }
@@ -373,11 +413,12 @@ class TerraformCloudClient:
             config_version = config_data.get("data", {})
             upload_url = config_version.get("attributes", {}).get("upload-url")
             
-            # Upload configuration (simplified - in practice would upload tar.gz)
-            if upload_url:
-                # This would typically involve creating and uploading a tar.gz file
-                # For now, we'll simulate this step
-                logger.info(f"Configuration upload URL: {upload_url}")
+            # Upload configuration if provided
+            if upload_url and configuration.get("terraform_files"):
+                await self._upload_configuration(upload_url, configuration["terraform_files"])
+            elif upload_url:
+                # Create a minimal configuration for testing
+                await self._upload_minimal_configuration(upload_url)
             
             # Create a run
             run_payload = {
@@ -385,7 +426,9 @@ class TerraformCloudClient:
                     "type": "runs",
                     "attributes": {
                         "message": configuration.get("message", "Plan run from InfraMind"),
-                        "is-destroy": configuration.get("is_destroy", False)
+                        "is-destroy": configuration.get("is_destroy", False),
+                        "refresh": configuration.get("refresh", True),
+                        "refresh-only": configuration.get("refresh_only", False)
                     },
                     "relationships": {
                         "workspace": {
@@ -412,9 +455,13 @@ class TerraformCloudClient:
             run = run_data.get("data", {})
             run_attributes = run.get("attributes", {})
             
-            # Wait a moment for the run to initialize, then get cost estimation
-            await asyncio.sleep(2)
+            # Wait for the run to initialize
+            await asyncio.sleep(3)
             
+            # Get updated run status
+            run_status = await self._get_run_status(run.get("id"))
+            
+            # Try to get cost estimation
             try:
                 cost_estimation = await self.get_cost_estimation(run.get("id"))
             except Exception as e:
@@ -423,12 +470,14 @@ class TerraformCloudClient:
             
             return {
                 "run_id": run.get("id"),
-                "status": run_attributes.get("status"),
+                "status": run_status.get("status", run_attributes.get("status")),
                 "message": run_attributes.get("message"),
                 "created_at": run_attributes.get("created-at"),
                 "workspace_id": workspace_id,
+                "configuration_version_id": config_version.get("id"),
                 "cost_estimation": cost_estimation,
-                "plan_url": f"https://app.terraform.io/app/{self.organization}/workspaces/{workspace_id}/runs/{run.get('id')}"
+                "plan_url": f"https://app.terraform.io/app/{self.organization}/workspaces/{workspace_id}/runs/{run.get('id')}",
+                "speculative": configuration.get("speculative", False)
             }
             
         except httpx.HTTPStatusError as e:
@@ -447,6 +496,222 @@ class TerraformCloudClient:
         except Exception as e:
             raise CloudServiceError(
                 f"Unexpected error running plan: {str(e)}",
+                CloudProvider.AWS,
+                "UNEXPECTED_ERROR"
+            )
+    
+    async def _upload_configuration(self, upload_url: str, terraform_files: Dict[str, str]) -> None:
+        """
+        Upload Terraform configuration files to Terraform Cloud.
+        
+        Args:
+            upload_url: Upload URL from configuration version
+            terraform_files: Dictionary of filename -> content
+        """
+        try:
+            # Create a tar.gz file with the configuration
+            with tempfile.NamedTemporaryFile(suffix='.tar.gz', delete=False) as temp_file:
+                with tarfile.open(temp_file.name, 'w:gz') as tar:
+                    for filename, content in terraform_files.items():
+                        # Create a temporary file for each Terraform file
+                        with tempfile.NamedTemporaryFile(mode='w', suffix='.tf', delete=False) as tf_file:
+                            tf_file.write(content)
+                            tf_file.flush()
+                            tar.add(tf_file.name, arcname=filename)
+                            os.unlink(tf_file.name)
+                
+                # Upload the tar.gz file
+                with open(temp_file.name, 'rb') as upload_file:
+                    upload_response = await httpx.AsyncClient().put(
+                        upload_url,
+                        content=upload_file.read(),
+                        headers={'Content-Type': 'application/octet-stream'}
+                    )
+                    upload_response.raise_for_status()
+                
+                # Clean up
+                os.unlink(temp_file.name)
+                
+        except Exception as e:
+            logger.error(f"Failed to upload configuration: {e}")
+            raise CloudServiceError(
+                f"Configuration upload failed: {str(e)}",
+                CloudProvider.AWS,
+                "UPLOAD_ERROR"
+            )
+    
+    async def _upload_minimal_configuration(self, upload_url: str) -> None:
+        """
+        Upload a minimal Terraform configuration for testing.
+        
+        Args:
+            upload_url: Upload URL from configuration version
+        """
+        minimal_config = {
+            "main.tf": '''
+# Minimal Terraform configuration for InfraMind testing
+terraform {
+  required_version = ">= 1.0"
+  required_providers {
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.0"
+    }
+  }
+}
+
+# Null resource for testing - no actual infrastructure created
+resource "null_resource" "infra_mind_test" {
+  triggers = {
+    timestamp = timestamp()
+  }
+}
+
+output "test_output" {
+  value = "InfraMind Terraform integration test successful"
+}
+'''
+        }
+        
+        await self._upload_configuration(upload_url, minimal_config)
+    
+    async def _get_run_status(self, run_id: str) -> Dict[str, Any]:
+        """
+        Get the current status of a Terraform run.
+        
+        Args:
+            run_id: Terraform Cloud run ID
+            
+        Returns:
+            Run status information
+        """
+        try:
+            session = await self._get_session()
+            
+            url = f"{self.base_url}/runs/{run_id}"
+            response = await session.get(url)
+            response.raise_for_status()
+            
+            data = response.json()
+            run = data.get("data", {})
+            attributes = run.get("attributes", {})
+            
+            return {
+                "id": run.get("id"),
+                "status": attributes.get("status"),
+                "status_timestamps": attributes.get("status-timestamps", {}),
+                "has_changes": attributes.get("has-changes"),
+                "is_destroy": attributes.get("is-destroy"),
+                "message": attributes.get("message"),
+                "plan_only": attributes.get("plan-only"),
+                "source": attributes.get("source"),
+                "terraform_version": attributes.get("terraform-version")
+            }
+            
+        except Exception as e:
+            logger.warning(f"Could not get run status: {e}")
+            return {"status": "unknown", "error": str(e)}
+    
+    async def list_workspaces(self) -> List[Dict[str, Any]]:
+        """
+        List all workspaces in the organization.
+        
+        Returns:
+            List of workspace information
+        """
+        try:
+            if not self.organization:
+                raise CloudServiceError(
+                    "Organization name required for workspace listing",
+                    CloudProvider.AWS,
+                    "MISSING_ORGANIZATION"
+                )
+            
+            session = await self._get_session()
+            
+            url = f"{self.base_url}/organizations/{self.organization}/workspaces"
+            response = await session.get(url)
+            response.raise_for_status()
+            
+            data = response.json()
+            workspaces = []
+            
+            for workspace in data.get("data", []):
+                attributes = workspace.get("attributes", {})
+                workspaces.append({
+                    "id": workspace.get("id"),
+                    "name": attributes.get("name"),
+                    "description": attributes.get("description"),
+                    "terraform_version": attributes.get("terraform-version"),
+                    "working_directory": attributes.get("working-directory"),
+                    "auto_apply": attributes.get("auto-apply"),
+                    "locked": attributes.get("locked"),
+                    "created_at": attributes.get("created-at"),
+                    "updated_at": attributes.get("updated-at"),
+                    "resource_count": attributes.get("resource-count", 0),
+                    "latest_change_at": attributes.get("latest-change-at")
+                })
+            
+            return workspaces
+            
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                raise AuthenticationError(
+                    "Invalid Terraform Cloud API token",
+                    CloudProvider.AWS,
+                    "INVALID_TOKEN"
+                )
+            else:
+                raise CloudServiceError(
+                    f"Terraform Cloud API error: {e.response.status_code} - {e.response.text}",
+                    CloudProvider.AWS,
+                    "API_ERROR"
+                )
+        except Exception as e:
+            raise CloudServiceError(
+                f"Unexpected error listing workspaces: {str(e)}",
+                CloudProvider.AWS,
+                "UNEXPECTED_ERROR"
+            )
+    
+    async def delete_workspace(self, workspace_id: str) -> bool:
+        """
+        Delete a workspace (for cleanup in development/testing).
+        
+        Args:
+            workspace_id: Terraform Cloud workspace ID
+            
+        Returns:
+            True if deletion was successful
+        """
+        try:
+            session = await self._get_session()
+            
+            url = f"{self.base_url}/workspaces/{workspace_id}"
+            response = await session.delete(url)
+            response.raise_for_status()
+            
+            return True
+            
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                raise AuthenticationError(
+                    "Invalid Terraform Cloud API token",
+                    CloudProvider.AWS,
+                    "INVALID_TOKEN"
+                )
+            elif e.response.status_code == 404:
+                logger.warning(f"Workspace {workspace_id} not found for deletion")
+                return True  # Already deleted
+            else:
+                raise CloudServiceError(
+                    f"Terraform Cloud API error: {e.response.status_code} - {e.response.text}",
+                    CloudProvider.AWS,
+                    "API_ERROR"
+                )
+        except Exception as e:
+            raise CloudServiceError(
+                f"Unexpected error deleting workspace: {str(e)}",
                 CloudProvider.AWS,
                 "UNEXPECTED_ERROR"
             )
@@ -487,15 +752,16 @@ class TerraformRegistryClient:
         
         return self.session
     
-    async def get_providers(self, namespace: Optional[str] = None) -> Dict[str, Any]:
+    async def get_providers(self, namespace: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
         """
         Get Terraform providers from registry.
         
         Args:
             namespace: Provider namespace (e.g., 'hashicorp', 'aws')
+            limit: Maximum number of providers to return
             
         Returns:
-            Provider information
+            Provider information with version details
         """
         try:
             session = await self._get_session()
@@ -504,39 +770,31 @@ class TerraformRegistryClient:
                 url = f"{self.base_url}/providers/{namespace}"
             else:
                 url = f"{self.base_url}/providers"
+                if limit:
+                    url += f"?limit={limit}"
             
             response = await session.get(url)
             response.raise_for_status()
             
             data = response.json()
             
-            # Process provider data
+            # Process provider data - API returns providers directly
             providers = []
-            if namespace:
-                # Single namespace response
-                provider_data = data.get("data", {})
+            
+            # Both namespace and general queries return providers in the same format
+            for provider in data.get("providers", []):
                 providers.append({
-                    "namespace": provider_data.get("attributes", {}).get("namespace"),
-                    "name": provider_data.get("attributes", {}).get("name"),
-                    "full_name": provider_data.get("attributes", {}).get("full-name"),
-                    "description": provider_data.get("attributes", {}).get("description"),
-                    "source": provider_data.get("attributes", {}).get("source"),
-                    "downloads": provider_data.get("attributes", {}).get("downloads"),
-                    "published_at": provider_data.get("attributes", {}).get("published-at")
+                    "namespace": provider.get("namespace"),
+                    "name": provider.get("name"),
+                    "full_name": f"{provider.get('namespace')}/{provider.get('name')}",
+                    "description": provider.get("description"),
+                    "source": provider.get("source"),
+                    "downloads": provider.get("downloads", 0),
+                    "published_at": provider.get("published_at"),
+                    "tier": provider.get("tier", "community"),
+                    "featured": provider.get("featured", False),
+                    "version": provider.get("version")
                 })
-            else:
-                # Multiple providers response
-                for provider in data.get("data", []):
-                    attributes = provider.get("attributes", {})
-                    providers.append({
-                        "namespace": attributes.get("namespace"),
-                        "name": attributes.get("name"),
-                        "full_name": attributes.get("full-name"),
-                        "description": attributes.get("description"),
-                        "source": attributes.get("source"),
-                        "downloads": attributes.get("downloads"),
-                        "published_at": attributes.get("published-at")
-                    })
             
             return {
                 "providers": providers,
@@ -565,16 +823,83 @@ class TerraformRegistryClient:
                 "UNEXPECTED_ERROR"
             )
     
-    async def get_modules(self, namespace: Optional[str] = None, provider: Optional[str] = None) -> Dict[str, Any]:
+    async def _get_provider_details(self, namespace: str, provider_name: str) -> Dict[str, Any]:
         """
-        Get Terraform modules from registry.
+        Get detailed information about a specific provider including versions.
+        
+        Args:
+            namespace: Provider namespace
+            provider_name: Provider name
+            
+        Returns:
+            Detailed provider information
+        """
+        try:
+            session = await self._get_session()
+            
+            # Get provider versions
+            versions_url = f"{self.base_url}/providers/{namespace}/{provider_name}/versions"
+            versions_response = await session.get(versions_url)
+            
+            versions = []
+            if versions_response.status_code == 200:
+                versions_data = versions_response.json()
+                for version in versions_data.get("data", []):
+                    version_attrs = version.get("attributes", {})
+                    versions.append({
+                        "version": version_attrs.get("version"),
+                        "published_at": version_attrs.get("published-at"),
+                        "protocols": version_attrs.get("protocols", []),
+                        "platforms": version_attrs.get("shasums-url", "").split("/")[-2:] if version_attrs.get("shasums-url") else []
+                    })
+            
+            # Get basic provider info
+            provider_url = f"{self.base_url}/providers/{namespace}/{provider_name}"
+            provider_response = await session.get(provider_url)
+            provider_response.raise_for_status()
+            
+            provider_data = provider_response.json()
+            attributes = provider_data.get("data", {}).get("attributes", {})
+            
+            return {
+                "namespace": namespace,
+                "name": provider_name,
+                "full_name": attributes.get("full-name"),
+                "description": attributes.get("description"),
+                "source": attributes.get("source"),
+                "downloads": attributes.get("downloads"),
+                "published_at": attributes.get("published-at"),
+                "tier": attributes.get("tier", "community"),
+                "featured": attributes.get("featured", False),
+                "versions": versions[:10],  # Latest 10 versions
+                "latest_version": versions[0]["version"] if versions else None
+            }
+            
+        except Exception as e:
+            logger.warning(f"Could not get provider details for {namespace}/{provider_name}: {e}")
+            return {
+                "namespace": namespace,
+                "name": provider_name,
+                "full_name": f"{namespace}/{provider_name}",
+                "description": "Provider details unavailable",
+                "versions": [],
+                "latest_version": None
+            }
+    
+    async def get_modules(self, namespace: Optional[str] = None, provider: Optional[str] = None, 
+                         search: Optional[str] = None, limit: int = 50, verified_only: bool = False) -> Dict[str, Any]:
+        """
+        Get Terraform modules from registry with enhanced filtering.
         
         Args:
             namespace: Module namespace
             provider: Provider name (e.g., 'aws', 'azure', 'google')
+            search: Search term for module names/descriptions
+            limit: Maximum number of modules to return
+            verified_only: Only return verified modules
             
         Returns:
-            Module information
+            Module information with enhanced metadata
         """
         try:
             session = await self._get_session()
@@ -587,31 +912,64 @@ class TerraformRegistryClient:
             else:
                 url = f"{self.base_url}/modules"
             
+            # Add query parameters
+            params = []
+            if limit:
+                params.append(f"limit={limit}")
+            if search:
+                params.append(f"q={search}")
+            if verified_only:
+                params.append("verified=true")
+            # Add provider filter if not already in URL path
+            if provider and not namespace:
+                params.append(f"provider={provider}")
+            
+            if params:
+                url += "?" + "&".join(params)
+            
+            logger.debug(f"Modules API URL: {url}")
+            
             response = await session.get(url)
             response.raise_for_status()
             
             data = response.json()
             
-            # Process module data
+            # Process module data with enhanced information
             modules = []
             for module in data.get("modules", []):
-                modules.append({
+                module_info = {
                     "namespace": module.get("namespace"),
                     "name": module.get("name"),
                     "provider": module.get("provider"),
                     "description": module.get("description"),
                     "source": module.get("source"),
-                    "downloads": module.get("downloads"),
+                    "downloads": module.get("downloads", 0),
                     "published_at": module.get("published_at"),
                     "verified": module.get("verified", False),
-                    "version": module.get("version")
-                })
+                    "version": module.get("version"),
+                    "full_name": f"{module.get('namespace', '')}/{module.get('name', '')}/{module.get('provider', '')}",
+                    "registry_url": f"https://registry.terraform.io/modules/{module.get('namespace', '')}/{module.get('name', '')}/{module.get('provider', '')}"
+                }
+                
+                # Add category classification based on module name and description
+                module_info["category"] = self._classify_module_category(module_info)
+                
+                # Add popularity score based on downloads and verification
+                module_info["popularity_score"] = self._calculate_popularity_score(module_info)
+                
+                modules.append(module_info)
+            
+            # Sort by popularity score if no specific ordering requested
+            if not namespace or not provider:
+                modules.sort(key=lambda x: x["popularity_score"], reverse=True)
             
             return {
                 "modules": modules,
                 "total_count": len(modules),
                 "namespace": namespace,
                 "provider": provider,
+                "search": search,
+                "verified_only": verified_only,
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
             
@@ -634,6 +992,67 @@ class TerraformRegistryClient:
                 CloudProvider.AWS,
                 "UNEXPECTED_ERROR"
             )
+    
+    def _classify_module_category(self, module_info: Dict[str, Any]) -> str:
+        """
+        Classify a module into a category based on its name and description.
+        
+        Args:
+            module_info: Module information dictionary
+            
+        Returns:
+            Category string
+        """
+        name = module_info.get("name", "").lower()
+        description = module_info.get("description", "").lower()
+        text = f"{name} {description}"
+        
+        # Define category keywords
+        categories = {
+            "compute": ["ec2", "instance", "vm", "compute", "server", "autoscaling", "ecs", "fargate", "lambda"],
+            "storage": ["s3", "storage", "bucket", "disk", "volume", "blob", "file", "backup"],
+            "database": ["rds", "database", "db", "sql", "mysql", "postgres", "mongodb", "dynamodb", "cosmos"],
+            "networking": ["vpc", "network", "subnet", "route", "gateway", "load", "balancer", "cdn", "dns"],
+            "security": ["iam", "security", "auth", "certificate", "ssl", "tls", "firewall", "waf", "vault"],
+            "monitoring": ["cloudwatch", "monitor", "log", "metric", "alert", "dashboard", "observability"],
+            "ai_ml": ["sagemaker", "ml", "ai", "machine", "learning", "cognitive", "vertex", "automl"],
+            "container": ["kubernetes", "k8s", "docker", "container", "aks", "eks", "gke", "registry"],
+            "devops": ["ci", "cd", "pipeline", "build", "deploy", "terraform", "ansible", "jenkins"]
+        }
+        
+        for category, keywords in categories.items():
+            if any(keyword in text for keyword in keywords):
+                return category
+        
+        return "other"
+    
+    def _calculate_popularity_score(self, module_info: Dict[str, Any]) -> float:
+        """
+        Calculate a popularity score for a module.
+        
+        Args:
+            module_info: Module information dictionary
+            
+        Returns:
+            Popularity score (higher is more popular)
+        """
+        downloads = module_info.get("downloads", 0)
+        verified = module_info.get("verified", False)
+        
+        # Base score from downloads (log scale to prevent extreme values)
+        import math
+        score = math.log10(max(downloads, 1))
+        
+        # Bonus for verified modules
+        if verified:
+            score *= 1.5
+        
+        # Bonus for official/popular namespaces
+        namespace = module_info.get("namespace", "").lower()
+        if namespace in ["terraform-aws-modules", "azure", "terraform-google-modules", "hashicorp"]:
+            score *= 1.3
+        
+        return round(score, 2)
     
     async def get_compute_modules(self) -> CloudServiceResponse:
         """Get compute-related Terraform modules."""

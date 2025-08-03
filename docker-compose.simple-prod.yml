@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  # MongoDB database with production security
+  mongodb:
+    image: mongo:7.0
+    container_name: infra_mind_mongodb_prod
+    restart: always
+    ports:
+      - "127.0.0.1:27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: secure-mongo-password-123
+      MONGO_INITDB_DATABASE: infra_mind
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - infra_mind_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis cache with production security
+  redis:
+    image: redis:7.2-alpine
+    container_name: infra_mind_redis_prod
+    restart: always
+    ports:
+      - "127.0.0.1:6379:6379"
+    command: redis-server --requirepass secure-redis-password-123 --maxmemory 1gb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - infra_mind_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "secure-redis-password-123", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  infra_mind_network:
+    driver: bridge

@@ -25,6 +25,107 @@ from ...schemas.base import AssessmentStatus, Priority
 router = APIRouter()
 
 
+async def start_assessment_workflow(assessment: Assessment):
+    """
+    Start the assessment workflow to generate recommendations and reports.
+    
+    This function runs the complete workflow asynchronously to generate
+    recommendations and reports for the assessment.
+    """
+    logger.info(f"DEBUG: start_assessment_workflow called for assessment {assessment.id}")
+    try:
+        from ...workflows.assessment_workflow import AssessmentWorkflow
+        from ...workflows.base import workflow_manager
+        
+        workflow = AssessmentWorkflow()
+        workflow_manager.register_workflow(workflow)
+        
+        # Execute the workflow using the workflow manager
+        result = await workflow_manager.execute_workflow(
+            workflow_id="assessment_workflow",
+            assessment=assessment
+        )
+        
+        # Update assessment with final results
+        assessment.status = AssessmentStatus.COMPLETED
+        assessment.completion_percentage = 100.0
+        assessment.completed_at = datetime.utcnow()
+        assessment.recommendations_generated = True
+        assessment.reports_generated = True
+        assessment.progress = {
+            "current_step": "completed", 
+            "completed_steps": ["created", "analysis", "synthesis", "report_generation"], 
+            "total_steps": 5, 
+            "progress_percentage": 100.0
+        }
+        assessment.workflow_id = result.workflow_id
+        
+        await assessment.save()
+        
+        logger.info(f"Assessment workflow completed for {assessment.id}")
+        
+    except Exception as e:
+        logger.error(f"Assessment workflow failed for {assessment.id}: {e}")
+        
+        # Update assessment to show failure
+        assessment.status = AssessmentStatus.FAILED
+        assessment.progress = {
+            "current_step": "failed", 
+            "completed_steps": ["created"], 
+            "total_steps": 5, 
+            "progress_percentage": 20.0,
+            "error": str(e)
+        }
+        await assessment.save()
+
+
+
+@router.post("/simple", status_code=status.HTTP_201_CREATED)
+async def create_simple_assessment(data: dict):
+    """
+    Create a simple assessment for testing.
+    """
+    try:
+        current_time = datetime.utcnow()
+        
+        # Create and save Assessment document with simple data
+        assessment = Assessment(
+            user_id="anonymous_user",
+            title=data.get("title", "Test Assessment"),
+            description=data.get("description", "Test Description"),
+            business_requirements=data.get("business_requirements", {}),
+            technical_requirements=data.get("technical_requirements", {}),
+            status=AssessmentStatus.DRAFT,
+            priority=Priority.MEDIUM,
+            completion_percentage=0.0,
+            metadata={
+                "source": "api_test", 
+                "version": "1.0", 
+                "tags": []
+            },
+            created_at=current_time,
+            updated_at=current_time
+        )
+        
+        await assessment.insert()
+        logger.info(f"Created simple assessment: {assessment.id}")
+        
+        return {
+            "id": str(assessment.id),
+            "title": assessment.title,
+            "description": assessment.description,
+            "status": assessment.status,
+            "created_at": assessment.created_at
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to create simple assessment: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create assessment: {str(e)}"
+        )
+
+
 @router.post("/", response_model=AssessmentResponse, status_code=status.HTTP_201_CREATED)
 async def create_assessment(assessment_data: AssessmentCreate):
     """
@@ -34,33 +135,84 @@ async def create_assessment(assessment_data: AssessmentCreate):
     The assessment will be in DRAFT status and ready for AI agent analysis.
     """
     try:
-        # Generate a mock ID for development mode
-        mock_id = str(uuid.uuid4())
         current_time = datetime.utcnow()
         
-        # In development mode without database, create a mock assessment
-        # TODO: When database is available, create and save Assessment document
-        logger.info(f"Created assessment: {mock_id}")
+        # Create and save Assessment document
+        assessment = Assessment(
+            user_id="anonymous_user",  # For now, use anonymous user since no auth required
+            title=assessment_data.title,
+            description=assessment_data.description,
+            business_requirements=assessment_data.business_requirements.model_dump(),
+            technical_requirements=assessment_data.technical_requirements.model_dump(),
+            status=AssessmentStatus.DRAFT,
+            priority=assessment_data.priority,
+            completion_percentage=0.0,
+            source=getattr(assessment_data, 'source', 'web_form'),
+            tags=getattr(assessment_data, 'tags', []),
+            metadata={
+                "source": getattr(assessment_data, 'source', 'web_form'), 
+                "version": "1.0", 
+                "tags": getattr(assessment_data, 'tags', [])
+            },
+            created_at=current_time,
+            updated_at=current_time
+        )
+        
+        # Save to database using insert to avoid revision tracking issues
+        await assessment.insert()
+        logger.info(f"Created assessment: {assessment.id}")
+        
+        # Automatically start the workflow to generate recommendations and reports
+        logger.info(f"DEBUG: About to start workflow for assessment: {assessment.id}")
+        try:
+            logger.info(f"DEBUG: Importing workflow modules...")
+            from ...workflows.assessment_workflow import AssessmentWorkflow
+            logger.info(f"DEBUG: Creating AssessmentWorkflow instance...")
+            workflow = AssessmentWorkflow()
+            
+            logger.info(f"DEBUG: Starting workflow task...")
+            # Start workflow asynchronously (fire and forget)
+            import asyncio
+            asyncio.create_task(start_assessment_workflow(assessment))
+            
+            logger.info(f"DEBUG: Updating assessment status...")
+            # Update assessment status to indicate workflow started
+            assessment.status = AssessmentStatus.IN_PROGRESS
+            assessment.started_at = current_time
+            assessment.progress = {
+                "current_step": "initializing_workflow", 
+                "completed_steps": ["created"], 
+                "total_steps": 5, 
+                "progress_percentage": 10.0
+            }
+            await assessment.save()
+            
+            logger.info(f"Started workflow for assessment: {assessment.id}")
+        except Exception as workflow_error:
+            logger.error(f"Failed to start workflow for assessment {assessment.id}: {workflow_error}")
+            import traceback
+            logger.error(f"Workflow error traceback: {traceback.format_exc()}")
+            # Don't fail assessment creation if workflow fails to start
         
         # Return response
         return AssessmentResponse(
-            id=mock_id,
-            title=assessment_data.title,
-            description=assessment_data.description,
+            id=str(assessment.id),
+            title=assessment.title,
+            description=assessment.description,
             business_requirements=assessment_data.business_requirements,
             technical_requirements=assessment_data.technical_requirements,
-            status=AssessmentStatus.DRAFT,
-            priority=assessment_data.priority,
-            progress={"current_step": "created", "completed_steps": [], "total_steps": 5, "progress_percentage": 0.0},
-            workflow_id=None,
+            status=assessment.status,
+            priority=assessment.priority,
+            progress=assessment.progress,
+            workflow_id=assessment.workflow_id,
             agent_states={},
-            recommendations_generated=False,
-            reports_generated=False,
-            metadata={"source": assessment_data.source, "version": "1.0", "tags": assessment_data.tags},
-            created_at=current_time,
-            updated_at=current_time,
-            started_at=None,
-            completed_at=None
+            recommendations_generated=assessment.recommendations_generated,
+            reports_generated=assessment.reports_generated,
+            metadata=assessment.metadata,
+            created_at=assessment.created_at,
+            updated_at=assessment.updated_at,
+            started_at=assessment.started_at,
+            completed_at=assessment.completed_at
         )
         
     except Exception as e:
@@ -82,15 +234,54 @@ async def get_assessment(assessment_id: str):
     progress, and any generated recommendations or reports.
     """
     try:
-        # TODO: Retrieve from database
-        # assessment = await Assessment.get(assessment_id)
-        # if not assessment:
-        #     raise HTTPException(status_code=404, detail="Assessment not found")
+        # Retrieve from database
+        assessment = await Assessment.get(assessment_id)
+        if not assessment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, 
+                detail=f"Assessment {assessment_id} not found"
+            )
         
-        # Mock response for now
         logger.info(f"Retrieved assessment: {assessment_id}")
         
-        # Return mock assessment
+        # Return the actual assessment data
+        return AssessmentResponse(
+            id=assessment.id,
+            title=assessment.title,
+            description=assessment.description,
+            business_requirements=assessment.business_requirements,
+            technical_requirements=assessment.technical_requirements,
+            status=assessment.status,
+            priority=assessment.priority,
+            progress=assessment.progress,
+            workflow_id=assessment.workflow_id,
+            agent_states=assessment.agent_states,
+            recommendations_generated=assessment.recommendations_generated,
+            reports_generated=assessment.reports_generated,
+            metadata=assessment.metadata,
+            created_at=assessment.created_at,
+            updated_at=assessment.updated_at,
+            started_at=assessment.started_at,
+            completed_at=assessment.completed_at
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get assessment: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve assessment: {str(e)}"
+        )
+
+
+@router.get("/{assessment_id}/mock", response_model=AssessmentResponse)
+async def get_assessment_mock(assessment_id: str):
+    """
+    Get a mock assessment response for testing.
+    """
+    try:
+        # Return mock assessment for testing
         from ...schemas.business import BusinessRequirements, BusinessGoal, GrowthProjection, BudgetConstraints, TeamStructure
         from ...schemas.technical import TechnicalRequirements, PerformanceRequirement, ScalabilityRequirement, SecurityRequirement, IntegrationRequirement
         from ...schemas.base import CompanySize, Industry, BudgetRange, ComplianceRequirement, WorkloadType, Priority
@@ -227,58 +418,57 @@ async def list_assessments(
     Includes summary information for each assessment.
     """
     try:
-        # TODO: Implement database query with filters and pagination
-        # query = Assessment.find({"user_id": current_user_id})
-        # if status_filter:
-        #     query = query.find({"status": status_filter})
-        # if priority_filter:
-        #     query = query.find({"priority": priority_filter})
-        # 
-        # total = await query.count()
-        # assessments = await query.skip((page - 1) * limit).limit(limit).to_list()
+        # Build query with filters
+        query_filter = {}
+        if status_filter:
+            query_filter["status"] = status_filter
+        if priority_filter:
+            query_filter["priority"] = priority_filter
         
-        # Mock response for now
-        logger.info(f"Listed assessments - page: {page}, limit: {limit}")
+        # Get total count and paginated results
+        total = await Assessment.find(query_filter).count()
+        assessments = await Assessment.find(query_filter).skip((page - 1) * limit).limit(limit).to_list()
         
-        # Create mock assessment summaries
-        mock_assessments = [
-            AssessmentSummary(
-                id=str(uuid.uuid4()),
-                title="E-commerce Platform Assessment",
-                status=AssessmentStatus.COMPLETED,
-                priority=Priority.HIGH,
-                progress_percentage=100.0,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
-                company_size="medium",
-                industry="retail",
-                budget_range="100k_500k",
-                workload_types=["web_application", "data_processing"],
-                recommendations_generated=True,
-                reports_generated=True
-            ),
-            AssessmentSummary(
-                id=str(uuid.uuid4()),
-                title="Healthcare AI Platform",
-                status=AssessmentStatus.IN_PROGRESS,
-                priority=Priority.HIGH,
-                progress_percentage=65.0,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
-                company_size="large",
-                industry="healthcare",
-                budget_range="500k_1m",
-                workload_types=["machine_learning", "data_processing"],
-                recommendations_generated=True,
-                reports_generated=False
-            )
-        ]
+        logger.info(f"Listed {len(assessments)} assessments - page: {page}, limit: {limit}, total: {total}")
         
-        total = len(mock_assessments)
+        # Convert assessments to summaries
+        assessment_summaries = []
+        for assessment in assessments:
+            # Extract basic info from business requirements if available
+            company_size = "unknown"
+            industry = "unknown"
+            budget_range = "unknown"
+            workload_types = []
+            
+            if assessment.business_requirements:
+                company_size = assessment.business_requirements.company_size.value if assessment.business_requirements.company_size else "unknown"
+                industry = assessment.business_requirements.industry.value if assessment.business_requirements.industry else "unknown"
+                if assessment.business_requirements.budget_constraints:
+                    budget_range = assessment.business_requirements.budget_constraints.total_budget_range.value if assessment.business_requirements.budget_constraints.total_budget_range else "unknown"
+            
+            if assessment.technical_requirements and assessment.technical_requirements.workload_types:
+                workload_types = [wt.value for wt in assessment.technical_requirements.workload_types]
+            
+            assessment_summaries.append(AssessmentSummary(
+                id=assessment.id,
+                title=assessment.title,
+                status=assessment.status,
+                priority=assessment.priority,
+                progress_percentage=assessment.progress.get("progress_percentage", 0.0) if assessment.progress else 0.0,
+                created_at=assessment.created_at,
+                updated_at=assessment.updated_at,
+                company_size=company_size,
+                industry=industry,
+                budget_range=budget_range,
+                workload_types=workload_types,
+                recommendations_generated=assessment.recommendations_generated,
+                reports_generated=assessment.reports_generated
+            ))
+        
         pages = (total + limit - 1) // limit
         
         return AssessmentListResponse(
-            assessments=mock_assessments,
+            assessments=assessment_summaries,
             total=total,
             page=page,
             limit=limit,

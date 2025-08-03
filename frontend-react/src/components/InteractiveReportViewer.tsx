@@ -54,12 +54,12 @@ import {
 } from '@mui/icons-material';
 
 interface DrillDownData {
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 interface ChartConfig {
     type: 'bar' | 'pie' | 'line' | 'area';
-    data: any[];
+    data: Record<string, unknown>[];
     title: string;
     description?: string;
 }
@@ -75,12 +75,19 @@ interface ReportSection {
     chartsConfig?: ChartConfig[];
 }
 
+interface BrandingConfig {
+    logoUrl?: string;
+    primaryColor?: string;
+    secondaryColor?: string;
+    fontFamily?: string;
+}
+
 interface InteractiveReportData {
     report: {
         id: string;
         title: string;
         version: string;
-        brandingConfig: any;
+        brandingConfig: BrandingConfig;
         customCss?: string;
     };
     sections: ReportSection[];
@@ -120,7 +127,7 @@ const InteractiveReportViewer: React.FC<InteractiveReportViewerProps> = ({
     const [bookmarkedSections, setBookmarkedSections] = useState<Set<string>>(new Set());
     const [drillDownDialog, setDrillDownDialog] = useState<{
         open: boolean;
-        data: any;
+        data: unknown;
         title: string;
     }>({ open: false, data: null, title: '' });
 
@@ -143,7 +150,7 @@ const InteractiveReportViewer: React.FC<InteractiveReportViewerProps> = ({
         setCurrentSectionId(sectionId);
     };
 
-    const handleDrillDown = (data: any, title: string) => {
+    const handleDrillDown = (data: unknown, title: string) => {
         setDrillDownDialog({
             open: true,
             data,
@@ -450,9 +457,9 @@ const InteractiveReportViewer: React.FC<InteractiveReportViewerProps> = ({
                 </DialogTitle>
                 <DialogContent>
                     <Box sx={{ minHeight: 400, p: 2 }}>
-                        {drillDownDialog.data && (
+                        {(drillDownDialog.data as { [key: string]: unknown }) && (
                             <pre style={{ whiteSpace: 'pre-wrap', fontSize: '14px' }}>
-                                {JSON.stringify(drillDownDialog.data, null, 2)}
+                                {JSON.stringify(drillDownDialog.data as string, null, 2)}
                             </pre>
                         )}
                     </Box>

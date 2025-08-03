@@ -50,7 +50,7 @@ export const useWebSocket = (config: WebSocketConfig) => {
     const shouldReconnectRef = useRef(true);
 
     // Get auth token from Redux store
-    const authToken = useSelector((state: RootState) => state.auth?.token);
+    const authToken = useSelector((state: RootState) => state.auth.token);
 
     const connect = useCallback(() => {
         if (state.isConnecting || state.isConnected) {
@@ -196,7 +196,7 @@ export const useWebSocket = (config: WebSocketConfig) => {
         return false;
     }, [state.socket, state.isConnected]);
 
-    const sendTypedMessage = useCallback((type: string, data: any) => {
+    const sendTypedMessage = useCallback((type: string, data: unknown) => {
         return sendMessage({
             type,
             data,
@@ -244,7 +244,7 @@ export const useWebSocket = (config: WebSocketConfig) => {
 
 // Specialized hook for assessment-specific WebSocket connections
 export const useAssessmentWebSocket = (assessmentId: string) => {
-    const baseUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:8000';
+    const baseUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
     const url = `${baseUrl}/ws/${assessmentId}`;
 
     return useWebSocket({ url });
@@ -252,7 +252,7 @@ export const useAssessmentWebSocket = (assessmentId: string) => {
 
 // Specialized hook for general system WebSocket connections
 export const useSystemWebSocket = () => {
-    const baseUrl = process.env.REACT_APP_WS_URL || 'ws://localhost:8000';
+    const baseUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
     const url = `${baseUrl}/ws`;
 
     return useWebSocket({ url });

@@ -1,19 +1,24 @@
 """
-Data encryption utilities for Infra Mind.
+Production-grade data encryption utilities for Infra Mind.
 
-Provides AES-256 encryption for sensitive data at rest and utilities
-for secure data handling.
+Provides AES-256-GCM encryption for sensitive data at rest, key management,
+and comprehensive security utilities for production environments.
 """
 
 import os
 import base64
 import secrets
-from datetime import datetime
-from typing import Optional, Union
+import hashlib
+import hmac
+from datetime import datetime, timezone
+from typing import Optional, Union, Dict, Any, List
+from enum import Enum
 from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from cryptography.hazmat.primitives.kdf.scrypt import Scrypt
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
+from cryptography.hazmat.primitives.asymmetric import rsa, padding
 from cryptography.hazmat.backends import default_backend
 import logging
 
@@ -23,6 +28,19 @@ logger = logging.getLogger(__name__)
 class EncryptionError(Exception):
     """Custom encryption error."""
     pass
+
+
+class KeyManagementError(Exception):
+    """Key management error."""
+    pass
+
+
+class DataClassification(str, Enum):
+    """Data classification levels for encryption."""
+    PUBLIC = "public"           # No encryption needed
+    INTERNAL = "internal"       # Basic encryption
+    CONFIDENTIAL = "confidential"  # Strong encryption
+    RESTRICTED = "restricted"   # Strongest encryption + additional controls
 
 
 class DataEncryption:

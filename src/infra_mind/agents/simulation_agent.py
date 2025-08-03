@@ -10,6 +10,8 @@ import math
 import random
 import statistics
 import numpy as np
+import json
+import asyncio
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass
@@ -17,7 +19,9 @@ from enum import Enum
 
 from .base import BaseAgent, AgentConfig, AgentRole
 from .tools import ToolResult
+from .web_search import WebSearchClient, get_web_search_client
 from ..models.assessment import Assessment
+from ..core.llm_client import get_llm_client
 
 logger = logging.getLogger(__name__)
 
@@ -161,6 +165,10 @@ class SimulationAgent(BaseAgent):
             "skill_shortage": {"probability": 0.35, "impact_multiplier": 1.6}
         }
         
+        # Initialize web search for real performance data
+        self.web_search_client = None
+        self.llm_client = None
+        
         logger.info("Simulation Agent initialized with scenario modeling capabilities")
     
     async def _execute_main_logic(self) -> Dict[str, Any]:
@@ -173,40 +181,59 @@ class SimulationAgent(BaseAgent):
         logger.info("Simulation Agent starting scenario modeling and projections")
         
         try:
-            # Step 1: Analyze requirements and determine simulation scenarios
-            scenario_analysis = await self._analyze_simulation_requirements()
+            # Initialize clients for real data collection
+            if not self.web_search_client:
+                self.web_search_client = await get_web_search_client()
+            if not self.llm_client:
+                self.llm_client = await get_llm_client()
             
-            # Step 2: Perform cost projection simulations
-            cost_projections = await self._perform_cost_projection_simulations(scenario_analysis)
+            # Step 1: Collect real-time performance benchmarks and data
+            performance_benchmarks = await self._collect_performance_benchmarks()
             
-            # Step 3: Execute capacity planning simulations
-            capacity_simulations = await self._execute_capacity_planning_simulations(scenario_analysis)
+            # Step 2: Analyze requirements with real market data
+            scenario_analysis = await self._analyze_simulation_requirements_with_benchmarks(performance_benchmarks)
             
-            # Step 4: Run scaling scenario simulations
-            scaling_simulations = await self._run_scaling_scenario_simulations(scenario_analysis)
-            
-            # Step 5: Perform performance modeling
-            performance_modeling = await self._perform_performance_modeling(scenario_analysis)
-            
-            # Step 6: Execute resource optimization simulations
-            optimization_simulations = await self._execute_resource_optimization_simulations(
-                scenario_analysis, cost_projections, capacity_simulations
+            # Step 3: Perform cost projection simulations with real pricing data
+            cost_projections = await self._perform_cost_projection_simulations_with_real_data(
+                scenario_analysis, performance_benchmarks
             )
             
-            # Step 7: Conduct risk assessment and sensitivity analysis
-            risk_analysis = await self._conduct_risk_assessment(
-                cost_projections, capacity_simulations, scaling_simulations
+            # Step 4: Execute capacity planning simulations with industry benchmarks
+            capacity_simulations = await self._execute_capacity_planning_simulations_with_benchmarks(
+                scenario_analysis, performance_benchmarks
             )
             
-            # Step 8: Generate simulation recommendations
-            simulation_recommendations = await self._generate_simulation_recommendations(
+            # Step 5: Run scaling scenario simulations with real performance data
+            scaling_simulations = await self._run_scaling_scenario_simulations_with_real_data(
+                scenario_analysis, performance_benchmarks
+            )
+            
+            # Step 6: Perform performance modeling with real-world metrics
+            performance_modeling = await self._perform_performance_modeling_with_real_metrics(
+                scenario_analysis, performance_benchmarks
+            )
+            
+            # Step 7: Execute resource optimization simulations with market data
+            optimization_simulations = await self._execute_resource_optimization_simulations_with_market_data(
+                scenario_analysis, cost_projections, capacity_simulations, performance_benchmarks
+            )
+            
+            # Step 8: Conduct risk assessment with real market data
+            risk_analysis = await self._conduct_risk_assessment_with_market_data(
+                cost_projections, capacity_simulations, scaling_simulations, performance_benchmarks
+            )
+            
+            # Step 9: Generate simulation recommendations with real-world validation
+            simulation_recommendations = await self._generate_simulation_recommendations_with_validation(
                 scenario_analysis, cost_projections, capacity_simulations,
-                scaling_simulations, performance_modeling, optimization_simulations, risk_analysis
+                scaling_simulations, performance_modeling, optimization_simulations, 
+                risk_analysis, performance_benchmarks
             )
             
             result = {
                 "recommendations": simulation_recommendations,
                 "data": {
+                    "performance_benchmarks": performance_benchmarks,
                     "scenario_analysis": scenario_analysis,
                     "cost_projections": cost_projections,
                     "capacity_simulations": capacity_simulations,
@@ -218,7 +245,9 @@ class SimulationAgent(BaseAgent):
                         "simulation_timestamp": datetime.now(timezone.utc).isoformat(),
                         "confidence_level": 0.95,
                         "monte_carlo_iterations": 1000,
-                        "time_horizons": [6, 12, 24, 36]
+                        "time_horizons": [6, 12, 24, 36],
+                        "benchmark_data_sources": len(performance_benchmarks.get("all_sources", [])),
+                        "real_data_integration": True
                     }
                 }
             }
@@ -1870,3 +1899,118 @@ class SimulationAgent(BaseAgent):
         
         total_risk = sum(risk["probability"] * risk["impact_multiplier"] for risk in identified_risks)
         return min(1.0, total_risk / len(identified_risks))
+    
+    # Enhanced methods with real performance data integration
+    
+    async def _collect_performance_benchmarks(self) -> Dict[str, Any]:
+        """Collect real-time performance benchmarks and industry data."""
+        logger.debug("Collecting performance benchmarks and industry data")
+        
+        performance_benchmarks = {
+            "cloud_performance": [],
+            "scaling_patterns": [],
+            "cost_optimization": [],
+            "capacity_planning": [],
+            "infrastructure_metrics": [],
+            "industry_benchmarks": []
+        }
+        
+        try:
+            # Search for cloud performance benchmarks
+            performance_search = await self.web_search_client.search(
+                "cloud infrastructure performance benchmarks 2024 2025 AWS Azure GCP capacity planning",
+                num_results=5
+            )
+            performance_benchmarks["cloud_performance"] = performance_search.get("results", [])
+            
+            # Search for scaling patterns and best practices
+            scaling_search = await self.web_search_client.search(
+                "cloud infrastructure scaling patterns auto-scaling enterprise best practices 2024",
+                num_results=5
+            )
+            performance_benchmarks["scaling_patterns"] = scaling_search.get("results", [])
+            
+            # Search for cost optimization data
+            cost_search = await self.web_search_client.search(
+                "cloud cost optimization strategies enterprise infrastructure spending 2024 2025",
+                num_results=5
+            )
+            performance_benchmarks["cost_optimization"] = cost_search.get("results", [])
+            
+            # Search for capacity planning methodologies
+            capacity_search = await self.web_search_client.search(
+                "infrastructure capacity planning methodologies enterprise cloud resources 2024",
+                num_results=5
+            )
+            performance_benchmarks["capacity_planning"] = capacity_search.get("results", [])
+            
+            # Search for infrastructure performance metrics
+            metrics_search = await self.web_search_client.search(
+                "infrastructure performance metrics KPIs enterprise monitoring benchmarks 2024",
+                num_results=5
+            )
+            performance_benchmarks["infrastructure_metrics"] = metrics_search.get("results", [])
+            
+            # Search for industry benchmarks
+            industry_search = await self.web_search_client.search(
+                "enterprise infrastructure industry benchmarks performance standards 2024 2025",
+                num_results=3
+            )
+            performance_benchmarks["industry_benchmarks"] = industry_search.get("results", [])
+            
+            # Aggregate all sources for metadata
+            all_sources = []
+            for category_results in performance_benchmarks.values():
+                all_sources.extend(category_results)
+            performance_benchmarks["all_sources"] = all_sources
+            
+            logger.info(f"Collected performance benchmarks: {len(all_sources)} sources")
+            
+        except Exception as e:
+            logger.warning(f"Failed to collect some performance benchmarks: {str(e)}")
+        
+        return performance_benchmarks
+    
+    def _prepare_benchmark_context(self, performance_benchmarks: Dict[str, Any]) -> str:
+        """Prepare performance benchmark context for LLM analysis."""
+        context_parts = []
+        
+        # Focus on most relevant categories for simulation
+        relevant_categories = ["cloud_performance", "scaling_patterns", "capacity_planning", "infrastructure_metrics"]
+        
+        for category in relevant_categories:
+            sources = performance_benchmarks.get(category, [])
+            if sources:
+                context_parts.append(f"{category.replace('_', ' ').title()}:")
+                for source in sources[:3]:  # Limit to top 3 per category
+                    title = source.get("title", "")
+                    snippet = source.get("snippet", "")
+                    context_parts.append(f"- {title}: {snippet[:200]}...")
+        
+        return "\n".join(context_parts)
+    
+    def _parse_llm_response(self, response: str) -> Dict[str, Any]:
+        """Parse LLM response, handling both JSON and text formats."""
+        try:
+            # Try to parse as JSON first
+            return json.loads(response)
+        except json.JSONDecodeError:
+            # Fallback to extracting structured information from text
+            return self._extract_structured_data_from_text(response)
+    
+    def _extract_structured_data_from_text(self, text: str) -> Dict[str, Any]:
+        """Extract structured data from text when JSON parsing fails."""
+        # Simple extraction logic for common patterns
+        result = {
+            "analysis": text,
+            "extracted_points": []
+        }
+        
+        # Extract numbered points
+        lines = text.split('\n')
+        for line in lines:
+            line = line.strip()
+            if line and (line.startswith(('1.', '2.', '3.', '4.', '5.', '-', '•'))):
+                result["extracted_points"].append(line)
+        
+        return result

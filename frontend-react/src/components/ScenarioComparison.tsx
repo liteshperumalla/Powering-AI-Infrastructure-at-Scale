@@ -114,7 +114,7 @@ export default function ScenarioComparison({ open, onClose }: ScenarioComparison
         if (comparisonScenarios.length < 2) return [];
 
         return comparisonScenarios[0].result?.projections.map((_, index) => {
-            const dataPoint: any = { month: index + 1 };
+            const dataPoint: { [key: string]: number | string } = { month: index + 1 };
             comparisonScenarios.forEach((scenario, scenarioIndex) => {
                 if (scenario.result?.projections[index]) {
                     dataPoint[`cost_${scenarioIndex}`] = scenario.result.projections[index].cost;
@@ -130,7 +130,7 @@ export default function ScenarioComparison({ open, onClose }: ScenarioComparison
         const metrics = ['Cost Efficiency', 'Performance', 'Scalability', 'Compliance', 'Reliability'];
 
         return metrics.map(metric => {
-            const dataPoint: any = { metric };
+            const dataPoint: { [key: string]: string | number } = { metric };
             comparisonScenarios.forEach((scenario, index) => {
                 // Simulate metric scores based on scenario results
                 let score = 0;
@@ -405,7 +405,7 @@ export default function ScenarioComparison({ open, onClose }: ScenarioComparison
                                                 <CartesianGrid strokeDasharray="3 3" />
                                                 <XAxis dataKey="month" />
                                                 <YAxis />
-                                                <RechartsTooltip formatter={(value: any) => formatCurrency(value)} />
+                                                <RechartsTooltip formatter={(value: number) => formatCurrency(value)} />
                                                 <Legend />
                                                 {comparisonScenarios.map((scenario, index) => (
                                                     <Line

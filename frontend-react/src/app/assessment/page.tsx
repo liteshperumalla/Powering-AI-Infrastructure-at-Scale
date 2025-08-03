@@ -104,10 +104,15 @@ export default function AssessmentPage() {
     };
 
     const handleInputChange = (field: keyof AssessmentFormData, value: string | string[]) => {
-        setFormData(prev => ({
-            ...prev,
-            [field]: value,
-        }));
+        console.log('handleInputChange called:', field, value);
+        setFormData(prev => {
+            const newData = {
+                ...prev,
+                [field]: value,
+            };
+            console.log('Updated form data:', newData);
+            return newData;
+        });
         // Clear error when user starts typing
         if (errors[field]) {
             setErrors(prev => ({
@@ -129,8 +134,11 @@ export default function AssessmentPage() {
     const validateStep = (step: number): boolean => {
         const newErrors: Record<string, string> = {};
 
+        console.log('Validating step:', step, 'Form data:', formData);
+
         switch (step) {
             case 0: // Business Information
+                console.log('Checking companyName:', formData.companyName, 'Type:', typeof formData.companyName);
                 if (!formData.companyName) newErrors.companyName = 'Company name is required';
                 if (!formData.industry) newErrors.industry = 'Industry is required';
                 if (!formData.companySize) newErrors.companySize = 'Company size is required';
@@ -156,14 +164,180 @@ export default function AssessmentPage() {
 
     const handleSubmit = async () => {
         if (validateStep(activeStep)) {
-            // TODO: Submit form data to backend
-            console.log('Submitting form data:', formData);
+            try {
+                console.log('Submitting form data:', formData);
 
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 1000));
+                // Transform form data to match backend API schema exactly
+                const assessmentData = {
+                    title: `${formData.companyName} Infrastructure Assessment`,
+                    description: `AI infrastructure assessment for ${formData.companyName} in the ${formData.industry} industry`,
+                    business_requirements: {
+                        company_size: formData.companySize,
+                        industry: formData.industry,
+                        business_goals: [
+                            {
+                                goal: formData.aiUseCases.join(', ') || "Improve AI infrastructure",
+                                priority: "high",
+                                timeline_months: parseInt(formData.scalingTimeline.replace(' months', '')) || 6,
+                                success_metrics: ["Performance improvement", "Cost optimization"]
+                            }
+                        ],
+                        growth_projection: {
+                            current_users: 1000,
+                            projected_users_6m: 2000,
+                            projected_users_12m: 5000,
+                            current_revenue: "500000",
+                            projected_revenue_12m: "1000000"
+                        },
+                        budget_constraints: {
+                            total_budget_range: (() => {
+                                const budgetMap: Record<string, string> = {
+                                    'under-1k': 'under_10k',
+                                    '1k-5k': '10k_50k', 
+                                    '5k-25k': '10k_50k',
+                                    '25k-100k': '50k_100k',
+                                    'over-100k': '100k_500k'
+                                };
+                                return budgetMap[formData.monthlyBudget] || '10k_50k';
+                            })(),
+                            monthly_budget_limit: "25000",
+                            compute_percentage: 40,
+                            storage_percentage: 20,
+                            networking_percentage: 20,
+                            security_percentage: 20,
+                            cost_optimization_priority: "high"
+                        },
+                        team_structure: {
+                            total_developers: parseInt(formData.technicalTeamSize) || 5,
+                            senior_developers: Math.ceil((parseInt(formData.technicalTeamSize) || 5) * 0.4),
+                            devops_engineers: 1,
+                            data_engineers: 1,
+                            cloud_expertise_level: 3,
+                            kubernetes_expertise: 2,
+                            database_expertise: 3,
+                            preferred_technologies: ["Python", "JavaScript"]
+                        },
+                        compliance_requirements: formData.complianceRequirements.length > 0 
+                            ? formData.complianceRequirements.map(req => {
+                                const complianceMap: Record<string, string> = {
+                                    'GDPR': 'gdpr',
+                                    'HIPAA': 'hipaa', 
+                                    'SOC 2': 'soc2',
+                                    'ISO 27001': 'iso27001',
+                                    'PCI DSS': 'pci_dss',
+                                    'CCPA': 'ccpa'
+                                };
+                                return complianceMap[req] || 'none';
+                            })
+                            : ["none"],
+                        project_timeline_months: parseInt(formData.scalingTimeline.replace(' months', '')) || 6,
+                        urgency_level: "medium",
+                        current_pain_points: ["Scalability challenges"],
+                        success_criteria: ["Improved performance", "Cost reduction"],
+                        multi_cloud_acceptable: true
+                    },
+                    technical_requirements: {
+                        workload_types: ["web_application", "api_service"],
+                        performance_requirements: {
+                            api_response_time_ms: 200,
+                            requests_per_second: 1000,
+                            concurrent_users: 500,
+                            uptime_percentage: "99.9",
+                            real_time_processing_required: false
+                        },
+                        scalability_requirements: {
+                            current_data_size_gb: parseInt(formData.expectedDataVolume.replace(/[^0-9]/g, '')) || 100,
+                            current_daily_transactions: 10000,
+                            expected_data_growth_rate: "20% monthly",
+                            peak_load_multiplier: "3.0",
+                            auto_scaling_required: true,
+                            global_distribution_required: false,
+                            cdn_required: true,
+                            planned_regions: ["us-east-1"]
+                        },
+                        security_requirements: {
+                            encryption_at_rest_required: true,
+                            encryption_in_transit_required: true,
+                            multi_factor_auth_required: formData.securityLevel === "high",
+                            single_sign_on_required: false,
+                            role_based_access_control: true,
+                            vpc_isolation_required: true,
+                            firewall_required: true,
+                            ddos_protection_required: formData.securityLevel === "high",
+                            security_monitoring_required: true,
+                            audit_logging_required: formData.complianceRequirements.length > 0,
+                            vulnerability_scanning_required: formData.securityLevel === "high",
+                            data_loss_prevention_required: false,
+                            backup_encryption_required: true
+                        },
+                        integration_requirements: {
+                            existing_databases: [],
+                            existing_apis: [],
+                            legacy_systems: [],
+                            payment_processors: [],
+                            analytics_platforms: [],
+                            marketing_tools: [],
+                            rest_api_required: true,
+                            graphql_api_required: false,
+                            websocket_support_required: false,
+                            real_time_sync_required: false,
+                            batch_sync_acceptable: true
+                        },
+                        preferred_programming_languages: ["Python", "JavaScript"],
+                        monitoring_requirements: ["Performance monitoring", "Error tracking"],
+                        backup_requirements: ["Daily backups", "Point-in-time recovery"],
+                        ci_cd_requirements: ["Automated deployment", "Testing pipeline"]
+                    },
+                    priority: "medium",
+                    tags: [formData.industry, formData.companySize],
+                    source: "web_form"
+                };
 
-            // Redirect to results or dashboard
-            router.push('/dashboard');
+                // Make API call to create assessment
+                const response = await fetch('http://localhost:8000/api/v1/v1/assessments/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(assessmentData),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    console.error('API Error Response:', errorData);
+                    
+                    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                    
+                    if (errorData.detail) {
+                        if (typeof errorData.detail === 'string') {
+                            errorMessage = errorData.detail;
+                        } else if (Array.isArray(errorData.detail)) {
+                            // Handle validation errors array
+                            const validationErrors = errorData.detail.map((err: any) => {
+                                if (typeof err === 'object' && err.msg) {
+                                    return `${err.loc?.join('.')}: ${err.msg}`;
+                                }
+                                return JSON.stringify(err);
+                            }).join('; ');
+                            errorMessage = `Validation errors: ${validationErrors}`;
+                        } else {
+                            errorMessage = JSON.stringify(errorData.detail);
+                        }
+                    }
+                    
+                    throw new Error(errorMessage);
+                }
+
+                const createdAssessment = await response.json();
+                console.log('Assessment created successfully:', createdAssessment);
+
+                // Redirect to dashboard or results page
+                router.push(`/dashboard?assessment_id=${createdAssessment.id}`);
+            } catch (error) {
+                console.error('Error submitting assessment:', error);
+                // You could add a toast notification here to show the error to the user
+                alert(`Failed to submit assessment: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            }
         }
     };
 
@@ -663,8 +837,11 @@ export default function AssessmentPage() {
             <Container maxWidth="md" sx={{ py: 4 }}>
                 <Paper sx={{ p: 4 }}>
                     <ProgressIndicator
-                        steps={steps}
-                        activeStep={activeStep}
+                        title="Assessment Progress"
+                        steps={steps.map((label, index) => ({
+                            label,
+                            status: index === activeStep ? 'active' : index < activeStep ? 'completed' : 'pending',
+                        }))}
                         variant="stepper"
                     />
 

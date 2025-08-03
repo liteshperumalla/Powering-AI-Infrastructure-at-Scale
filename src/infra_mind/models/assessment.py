@@ -66,6 +66,10 @@ class Assessment(Document):
         default_factory=dict,
         description="Overall workflow progress and step tracking"
     )
+    progress: Dict[str, Any] = Field(
+        default_factory=lambda: {"current_step": "created", "completed_steps": [], "total_steps": 5, "progress_percentage": 0.0},
+        description="Current progress state"
+    )
     
     # Results tracking
     recommendations_generated: bool = Field(
@@ -78,6 +82,10 @@ class Assessment(Document):
     )
     
     # Metadata
+    metadata: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Assessment metadata including source, version, tags"
+    )
     tags: list[str] = Field(
         default_factory=list, 
         description="Assessment tags for organization"
@@ -102,14 +110,7 @@ class Assessment(Document):
     class Settings:
         """Beanie document settings."""
         name = "assessments"
-        indexes = [
-            [("user_id", 1), ("status", 1)],  # Query by user and status
-            [("created_at", -1)],  # Sort by creation date
-            [("status", 1), ("priority", 1)],  # Query by status and priority
-            [("business_requirements.company_size", 1)],  # Query by company size
-            [("business_requirements.industry", 1)],  # Query by industry
-            [("tags", 1)],  # Query by tags
-        ]
+        use_revision = False  # Disable revision tracking to avoid RevisionIdWasChanged errors
     
     def __str__(self) -> str:
         """String representation of the assessment."""

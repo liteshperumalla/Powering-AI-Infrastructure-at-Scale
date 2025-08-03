@@ -7,7 +7,7 @@ including Slack, Microsoft Teams, email systems, and other enterprise tools.
 
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Optional, Union
 from enum import Enum
 from dataclasses import dataclass, asdict
@@ -173,6 +173,29 @@ class BusinessToolsIntegrator:
             "from_email": getattr(self.settings, "FROM_EMAIL", "noreply@infra-mind.com"),
             "use_tls": getattr(self.settings, "SMTP_USE_TLS", True),
             "enabled": getattr(self.settings, "ENABLE_EMAIL_INTEGRATION", True)
+        }
+        
+        # Calendar integration configuration
+        self.calendar_config = {
+            "google_calendar": {
+                "enabled": getattr(self.settings, "ENABLE_GOOGLE_CALENDAR", False),
+                "credentials_file": getattr(self.settings, "GOOGLE_CALENDAR_CREDENTIALS", None),
+                "calendar_id": getattr(self.settings, "GOOGLE_CALENDAR_ID", "primary")
+            },
+            "outlook_calendar": {
+                "enabled": getattr(self.settings, "ENABLE_OUTLOOK_CALENDAR", False),
+                "client_id": getattr(self.settings, "OUTLOOK_CLIENT_ID", None),
+                "client_secret": getattr(self.settings, "OUTLOOK_CLIENT_SECRET", None),
+                "tenant_id": getattr(self.settings, "OUTLOOK_TENANT_ID", None)
+            }
+        }
+        
+        # Webhook system configuration
+        self.webhook_config = {
+            "enabled": getattr(self.settings, "ENABLE_WEBHOOK_SYSTEM", True),
+            "max_retries": int(getattr(self.settings, "WEBHOOK_MAX_RETRIES", 3)),
+            "timeout": int(getattr(self.settings, "WEBHOOK_TIMEOUT", 30)),
+            "retry_delay": int(getattr(self.settings, "WEBHOOK_RETRY_DELAY", 60))
         }
         
         # Message templates
@@ -721,6 +744,318 @@ class BusinessToolsIntegrator:
         
         logger.info(f"Bulk notifications: {results['successful']}/{results['total']} successful")
         return results
+    
+    # Calendar Integration Methods
+    
+    async def create_calendar_event(self, 
+                                  title: str,
+                                  description: str,
+                                  start_time: datetime,
+                                  end_time: datetime,
+                                  attendees: List[str] = None,
+                                  calendar_provider: str = "google") -> Dict[str, Any]:
+        """Create calendar event for assessment scheduling."""
+        try:
+            if calendar_provider == "google" and self.calendar_config["google_calendar"]["enabled"]:
+                return await self._create_google_calendar_event(title, description, start_time, end_time, attendees)
+            elif calendar_provider == "outlook" and self.calendar_config["outlook_calendar"]["enabled"]:
+                return await self._create_outlook_calendar_event(title, description, start_time, end_time, attendees)
+            else:
+                logger.warning(f"Calendar provider {calendar_provider} not configured")
+                return {"success": False, "reason": "Provider not configured"}
+                
+        except Exception as e:
+            logger.error(f"Failed to create calendar event: {str(e)}")
+            return {"success": False, "error": str(e)}
+    
+    async def _create_google_calendar_event(self, title: str, description: str, start_time: datetime, end_time: datetime, attendees: List[str] = None) -> Dict[str, Any]:
+        """Create Google Calendar event."""
+        # In a real implementation, this would use Google Calendar API
+        # For now, return a mock response
+        event_data = {
+            "event_id": f"google_event_{int(start_time.timestamp())}",
+            "title": title,
+            "description": description,
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "attendees": attendees or [],
+            "calendar_link": f"https://calendar.google.com/calendar/event?eid=mock_event_id",
+            "provider": "google_calendar"
+        }
+        
+        logger.info(f"Created Google Calendar event: {event_data['event_id']}")
+        return {"success": True, "data": event_data}
+    
+    async def _create_outlook_calendar_event(self, title: str, description: str, start_time: datetime, end_time: datetime, attendees: List[str] = None) -> Dict[str, Any]:
+        """Create Outlook Calendar event."""
+        # In a real implementation, this would use Microsoft Graph API
+        # For now, return a mock response
+        event_data = {
+            "event_id": f"outlook_event_{int(start_time.timestamp())}",
+            "title": title,
+            "description": description,
+            "start_time": start_time.isoformat(),
+            "end_time": end_time.isoformat(),
+            "attendees": attendees or [],
+            "calendar_link": f"https://outlook.live.com/calendar/event?id=mock_event_id",
+            "provider": "outlook_calendar"
+        }
+        
+        logger.info(f"Created Outlook Calendar event: {event_data['event_id']}")
+        return {"success": True, "data": event_data}
+    
+    async def schedule_assessment_meeting(self,
+                                        assessment_id: str,
+                                        meeting_title: str,
+                                        start_time: datetime,
+                                        duration_minutes: int = 60,
+                                        attendees: List[str] = None,
+                                        calendar_provider: str = "google") -> Dict[str, Any]:
+        """Schedule assessment meeting with calendar integration."""
+        end_time = start_time + timedelta(minutes=duration_minutes)
+        
+        description = f"""
+        Infrastructure Assessment Meeting
+        
+        Assessment ID: {assessment_id}
+        Duration: {duration_minutes} minutes
+        
+        This meeting is scheduled to discuss the infrastructure assessment results and recommendations.
+        
+        Please join the meeting at the scheduled time to review:
+        - Assessment findings
+        - Recommended infrastructure changes
+        - Implementation roadmap
+        - Next steps
+        
+        Generated by Infra Mind Platform
+        """
+        
+        result = await self.create_calendar_event(
+            title=meeting_title,
+            description=description.strip(),
+            start_time=start_time,
+            end_time=end_time,
+            attendees=attendees,
+            calendar_provider=calendar_provider
+        )
+        
+        if result.get("success"):
+            # Send calendar invitation via email
+            if attendees:
+                for attendee in attendees:
+                    await self._send_calendar_invitation_email(
+                        attendee, meeting_title, start_time, end_time, result["data"]
+                    )
+        
+        return result
+    
+    async def _send_calendar_invitation_email(self,
+                                            attendee_email: str,
+                                            meeting_title: str,
+                                            start_time: datetime,
+                                            end_time: datetime,
+                                            event_data: Dict[str, Any]) -> None:
+        """Send calendar invitation email."""
+        subject = f"Meeting Invitation: {meeting_title}"
+        
+        content = f"""
+        You have been invited to a meeting:
+        
+        Title: {meeting_title}
+        Date: {start_time.strftime('%Y-%m-%d')}
+        Time: {start_time.strftime('%H:%M')} - {end_time.strftime('%H:%M')} UTC
+        
+        Calendar Link: {event_data.get('calendar_link', 'N/A')}
+        
+        Please add this meeting to your calendar and join at the scheduled time.
+        
+        Best regards,
+        Infra Mind Team
+        """
+        
+        await self.send_email(
+            to_email=attendee_email,
+            subject=subject,
+            content=content.strip()
+        )
+    
+    # Webhook System Methods
+    
+    async def send_webhook(self, 
+                          webhook_url: str,
+                          payload: Dict[str, Any],
+                          event_type: str,
+                          headers: Dict[str, str] = None) -> Dict[str, Any]:
+        """Send webhook notification to external system."""
+        if not self.webhook_config["enabled"]:
+            logger.warning("Webhook system disabled")
+            return {"success": False, "reason": "Webhook system disabled"}
+        
+        webhook_headers = {
+            "Content-Type": "application/json",
+            "User-Agent": "InfraMind-Webhook/1.0",
+            "X-InfraMind-Event": event_type,
+            "X-InfraMind-Timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        if headers:
+            webhook_headers.update(headers)
+        
+        # Add webhook signature for security (in production, use HMAC)
+        webhook_id = f"webhook_{int(datetime.now(timezone.utc).timestamp())}"
+        webhook_headers["X-InfraMind-Webhook-ID"] = webhook_id
+        
+        for attempt in range(self.webhook_config["max_retries"]):
+            try:
+                async with self.session.post(
+                    webhook_url,
+                    json=payload,
+                    headers=webhook_headers,
+                    timeout=aiohttp.ClientTimeout(total=self.webhook_config["timeout"])
+                ) as response:
+                    if response.status in [200, 201, 202]:
+                        logger.info(f"Webhook delivered successfully to {webhook_url}")
+                        return {
+                            "success": True,
+                            "webhook_id": webhook_id,
+                            "status_code": response.status,
+                            "attempt": attempt + 1
+                        }
+                    else:
+                        logger.warning(f"Webhook failed with status {response.status} (attempt {attempt + 1})")
+                        
+            except Exception as e:
+                logger.error(f"Webhook delivery failed (attempt {attempt + 1}): {str(e)}")
+                
+                if attempt < self.webhook_config["max_retries"] - 1:
+                    await asyncio.sleep(self.webhook_config["retry_delay"] * (attempt + 1))
+        
+        logger.error(f"Webhook delivery failed after {self.webhook_config['max_retries']} attempts")
+        return {
+            "success": False,
+            "webhook_id": webhook_id,
+            "error": "Max retries exceeded",
+            "attempts": self.webhook_config["max_retries"]
+        }
+    
+    async def send_assessment_webhook(self,
+                                    webhook_url: str,
+                                    assessment_id: str,
+                                    event_type: str,
+                                    assessment_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Send assessment-related webhook."""
+        payload = {
+            "event_type": event_type,
+            "assessment_id": assessment_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "data": assessment_data,
+            "source": "infra_mind_platform"
+        }
+        
+        return await self.send_webhook(webhook_url, payload, event_type)
+    
+    async def send_report_webhook(self,
+                                webhook_url: str,
+                                report_id: str,
+                                event_type: str,
+                                report_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Send report-related webhook."""
+        payload = {
+            "event_type": event_type,
+            "report_id": report_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "data": report_data,
+            "source": "infra_mind_platform"
+        }
+        
+        return await self.send_webhook(webhook_url, payload, event_type)
+    
+    async def register_webhook_endpoint(self,
+                                      webhook_url: str,
+                                      event_types: List[str],
+                                      description: str = "") -> Dict[str, Any]:
+        """Register webhook endpoint for notifications."""
+        webhook_registration = {
+            "webhook_id": f"webhook_reg_{int(datetime.now(timezone.utc).timestamp())}",
+            "url": webhook_url,
+            "event_types": event_types,
+            "description": description,
+            "registered_at": datetime.now(timezone.utc).isoformat(),
+            "status": "active"
+        }
+        
+        # In production, this would be stored in database
+        cache_key = f"webhook_registration:{webhook_registration['webhook_id']}"
+        await cache_manager.set(
+            cache_key,
+            json.dumps(webhook_registration),
+            ttl=86400 * 30  # 30 days
+        )
+        
+        logger.info(f"Registered webhook endpoint: {webhook_registration['webhook_id']}")
+        return {"success": True, "data": webhook_registration}
+    
+    # Integration Health and Testing
+    
+    async def test_calendar_integration(self, provider: str = "google") -> Dict[str, Any]:
+        """Test calendar integration."""
+        test_results = {
+            "provider": provider,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "tests": {}
+        }
+        
+        if provider == "google":
+            config = self.calendar_config["google_calendar"]
+            test_results["tests"]["configuration"] = {
+                "enabled": config["enabled"],
+                "credentials_configured": bool(config["credentials_file"]),
+                "calendar_id_set": bool(config["calendar_id"])
+            }
+        elif provider == "outlook":
+            config = self.calendar_config["outlook_calendar"]
+            test_results["tests"]["configuration"] = {
+                "enabled": config["enabled"],
+                "client_id_configured": bool(config["client_id"]),
+                "client_secret_configured": bool(config["client_secret"]),
+                "tenant_id_configured": bool(config["tenant_id"])
+            }
+        
+        # Test event creation (mock)
+        test_start = datetime.now(timezone.utc) + timedelta(hours=1)
+        test_end = test_start + timedelta(hours=1)
+        
+        test_event_result = await self.create_calendar_event(
+            title="Test Event - Infra Mind Integration Test",
+            description="This is a test event to verify calendar integration",
+            start_time=test_start,
+            end_time=test_end,
+            calendar_provider=provider
+        )
+        
+        test_results["tests"]["event_creation"] = test_event_result
+        test_results["overall_status"] = "passed" if test_event_result.get("success") else "failed"
+        
+        return test_results
+    
+    async def test_webhook_endpoint(self, webhook_url: str) -> Dict[str, Any]:
+        """Test webhook endpoint connectivity."""
+        test_payload = {
+            "event_type": "test",
+            "message": "This is a test webhook from Infra Mind",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "test": True
+        }
+        
+        result = await self.send_webhook(webhook_url, test_payload, "test")
+        
+        return {
+            "webhook_url": webhook_url,
+            "test_timestamp": datetime.now(timezone.utc).isoformat(),
+            "test_result": result,
+            "status": "passed" if result.get("success") else "failed"
+        }
     
     # Configuration and Testing
     

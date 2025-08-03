@@ -64,7 +64,9 @@ export default function ProgressIndicator({
         }
     };
 
-    const getStatusColor = (status: ProgressStep['status']) => {
+    type ChipColor = 'success' | 'primary' | 'error' | 'default';
+
+    const getStatusColor = (status: ProgressStep['status']): ChipColor => {
         switch (status) {
             case 'completed':
                 return 'success';
@@ -101,7 +103,7 @@ export default function ProgressIndicator({
                             key={index}
                             label={step.label}
                             size="small"
-                            color={getStatusColor(step.status) as any}
+                            color={getStatusColor(step.status)}
                             variant={step.status === 'completed' ? 'filled' : 'outlined'}
                             icon={getStepIcon(step.status)}
                         />
@@ -161,7 +163,7 @@ export default function ProgressIndicator({
                                         <Chip
                                             label={step.status}
                                             size="small"
-                                            color={getStatusColor(step.status) as any}
+                                            color={getStatusColor(step.status)}
                                             variant="outlined"
                                         />
                                     </Box>

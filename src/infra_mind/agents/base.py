@@ -49,6 +49,7 @@ class AgentRole(str, Enum):
     AI_CONSULTANT = "ai_consultant"
     WEB_RESEARCH = "web_research"
     SIMULATION = "simulation"
+    CHATBOT = "chatbot"
 
 
 @dataclass
@@ -410,20 +411,56 @@ class BaseAgent(ABC):
     
     async def _call_llm(self, prompt: str, **kwargs) -> str:
         """
-        Call the language model.
+        Call the language model using the real LLM manager.
         
         Args:
             prompt: Input prompt
             **kwargs: Additional parameters
             
         Returns:
-            LLM response
+            LLM response content
         """
-        # This is a placeholder - in a real implementation, you would
-        # integrate with OpenAI, Anthropic, or other LLM providers
+        from ..llm.manager import LLMManager
+        from ..llm.interface import LLMRequest
         
-        # For now, return a mock response
-        return f"Mock LLM response for agent {self.name}: {prompt[:100]}..."
+        # Get or create LLM manager instance
+        if not hasattr(self, '_llm_manager'):
+            self._llm_manager = LLMManager()
+        
+        # Create LLM request
+        request = LLMRequest(
+            prompt=prompt,
+            model=kwargs.get('model', self.config.model_name),
+            temperature=kwargs.get('temperature', self.config.temperature),
+            max_tokens=kwargs.get('max_tokens', self.config.max_tokens),
+            system_prompt=kwargs.get('system_prompt'),
+            context=kwargs.get('context', {}),
+            agent_name=self.name
+        )
+        
+        try:
+            # Generate response using LLM manager
+            response = await self._llm_manager.generate_response(
+                request, 
+                validate_response=True,
+                agent_name=self.name
+            )
+            
+            # Log LLM usage for metrics
+            if self.metrics:
+                self.metrics.record_llm_usage(
+                    tokens_used=response.token_usage.total_tokens,
+                    cost=response.token_usage.estimated_cost,
+                    model=response.model,
+                    provider=response.provider.value
+                )
+            
+            return response.content
+            
+        except Exception as e:
+            logger.error(f"LLM call failed for agent {self.name}: {str(e)}")
+            # Return a fallback response to prevent complete failure
+            return f"I apologize, but I'm currently unable to process your request due to a technical issue. Please try again later."
     
     async def _use_tool(self, tool_name: str, **kwargs) -> ToolResult:
         """

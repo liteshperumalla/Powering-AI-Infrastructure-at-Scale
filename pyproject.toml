@@ -39,14 +39,30 @@ dependencies = [
     "langchain>=0.1.0",
     "langchain-openai>=0.0.5",
     "langgraph>=0.0.20",
+    "openai>=1.0.0",
+    "google-generativeai>=0.3.0",  # Google Gemini API
     
     # Cloud APIs
     "boto3>=1.34.0",  # AWS SDK
     "azure-mgmt-compute>=30.0.0",  # Azure Compute
     "azure-mgmt-sql>=3.0.0",  # Azure SQL
+    "azure-mgmt-resource>=23.0.0",  # Azure Resource Manager
+    "azure-mgmt-monitor>=6.0.0",  # Azure Monitor
+    "azure-mgmt-costmanagement>=4.0.0",  # Azure Cost Management
+    "azure-mgmt-containerservice>=29.0.0",  # Azure AKS
+    "azure-mgmt-machinelearningservices>=1.0.0",  # Azure ML
+    "azure-mgmt-recoveryservices>=2.4.0",  # Azure Backup
     "azure-identity>=1.15.0",  # Azure Auth
     "google-cloud-billing>=1.12.0",  # GCP Billing
     "google-cloud-compute>=1.15.0",  # GCP Compute
+    "cloud-sql-python-connector[pymysql]>=1.0.0",  # GCP Cloud SQL
+    "google-cloud-asset>=3.20.0",  # GCP Asset Inventory
+    "google-cloud-recommender>=2.11.0",  # GCP Recommender
+    "google-cloud-container>=2.17.0",  # GCP GKE
+    "google-cloud-aiplatform>=1.38.0",  # GCP Vertex AI
+    "google-auth>=2.23.0",  # GCP Authentication
+    "google-api-core>=2.11.0",  # GCP API Core
+    "tenacity>=8.2.0",  # Retry logic
     
     # Data Processing
     "pydantic[email]>=2.5.0",
@@ -65,6 +81,11 @@ dependencies = [
     "loguru>=0.7.0",
     "typer>=0.9.0",
     "psutil>=5.9.0",  # System monitoring
+    "watchdog>=2.2.0", # For log monitoring
+    "beautifulsoup4>=4.12.0", # For web scraping
+    "duckduckgo-search>=4.0.0", # For web search API
+    "google-search-results>=2.4.0", # For Google Search API (SerpAPI)
+    "tavily-python>=0.3.0", # For Tavily Search API
 ]
 
 [project.optional-dependencies]

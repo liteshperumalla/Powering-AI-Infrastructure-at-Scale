@@ -1,0 +1,317 @@
+# Monitoring and Alerting Workflow
+# Learning Note: Automated monitoring and alerting for production systems
+
+name: Monitoring and Alerting
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'  # Every 15 minutes
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to monitor'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+        - staging
+        - production
+      alert_threshold:
+        description: 'Alert threshold (1-10)'
+        required: true
+        default: '5'
+        type: string
+
+env:
+  ALERT_THRESHOLD: ${{ github.event.inputs.alert_threshold || '5' }}
+  ENVIRONMENT: ${{ github.event.inputs.environment || 'production' }}
+
+jobs:
+  health-monitoring:
+    name: Health Monitoring
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Configure kubectl
+      uses: azure/k8s-set-context@v3
+      with:
+        method: kubeconfig
+        kubeconfig: ${{ env.ENVIRONMENT == 'production' && secrets.KUBE_CONFIG_PRODUCTION || secrets.KUBE_CONFIG_STAGING }}
+    
+    - name: Check system health
+      id: health-check
+      run: |
+        NAMESPACE=${{ env.ENVIRONMENT == 'production' && 'infra-mind' || 'infra-mind-staging' }}
+        
+        echo "Checking health for environment: ${{ env.ENVIRONMENT }}"
+        echo "namespace=$NAMESPACE" >> $GITHUB_OUTPUT
+        
+        # Check pod health
+        UNHEALTHY_PODS=$(kubectl get pods -n $NAMESPACE --field-selector=status.phase!=Running --no-headers | wc -l)
+        echo "unhealthy_pods=$UNHEALTHY_PODS" >> $GITHUB_OUTPUT
+        
+        # Check deployment status
+        API_READY=$(kubectl get deployment infra-mind-api -n $NAMESPACE -o jsonpath='{.status.readyReplicas}' || echo "0")
+        API_DESIRED=$(kubectl get deployment infra-mind-api -n $NAMESPACE -o jsonpath='{.spec.replicas}' || echo "0")
+        FRONTEND_READY=$(kubectl get deployment infra-mind-frontend -n $NAMESPACE -o jsonpath='{.status.readyReplicas}' || echo "0")
+        FRONTEND_DESIRED=$(kubectl get deployment infra-mind-frontend -n $NAMESPACE -o jsonpath='{.spec.replicas}' || echo "0")
+        
+        echo "api_ready=$API_READY" >> $GITHUB_OUTPUT
+        echo "api_desired=$API_DESIRED" >> $GITHUB_OUTPUT
+        echo "frontend_ready=$FRONTEND_READY" >> $GITHUB_OUTPUT
+        echo "frontend_desired=$FRONTEND_DESIRED" >> $GITHUB_OUTPUT
+        
+        # Check resource usage
+        CPU_USAGE=$(kubectl top nodes --no-headers | awk '{sum+=$3} END {print sum}' || echo "0")
+        MEMORY_USAGE=$(kubectl top nodes --no-headers | awk '{sum+=$5} END {print sum}' || echo "0")
+        
+        echo "cpu_usage=$CPU_USAGE" >> $GITHUB_OUTPUT
+        echo "memory_usage=$MEMORY_USAGE" >> $GITHUB_OUTPUT
+        
+        # Calculate health score (1-10)
+        HEALTH_SCORE=10
+        
+        if [ "$UNHEALTHY_PODS" -gt 0 ]; then
+          HEALTH_SCORE=$((HEALTH_SCORE - 2))
+        fi
+        
+        if [ "$API_READY" != "$API_DESIRED" ]; then
+          HEALTH_SCORE=$((HEALTH_SCORE - 3))
+        fi
+        
+        if [ "$FRONTEND_READY" != "$FRONTEND_DESIRED" ]; then
+          HEALTH_SCORE=$((HEALTH_SCORE - 2))
+        fi
+        
+        if [ "$CPU_USAGE" -gt 80 ]; then
+          HEALTH_SCORE=$((HEALTH_SCORE - 1))
+        fi
+        
+        if [ "$MEMORY_USAGE" -gt 80 ]; then
+          HEALTH_SCORE=$((HEALTH_SCORE - 1))
+        fi
+        
+        echo "health_score=$HEALTH_SCORE" >> $GITHUB_OUTPUT
+        
+        echo "Health Score: $HEALTH_SCORE/10"
+        echo "Unhealthy Pods: $UNHEALTHY_PODS"
+        echo "API: $API_READY/$API_DESIRED ready"
+        echo "Frontend: $FRONTEND_READY/$FRONTEND_DESIRED ready"
+    
+    - name: Run application health checks
+      id: app-health
+      run: |
+        NAMESPACE=${{ steps.health-check.outputs.namespace }}
+        
+        # Test API health endpoint
+        API_HEALTH=$(kubectl run health-check-api --image=curlimages/curl:latest --rm -i --restart=Never -n $NAMESPACE -- \
+          curl -s -o /dev/null -w "%{http_code}" -m 10 http://infra-mind-api-service:8000/health || echo "000")
+        
+        # Test Frontend health endpoint
+        FRONTEND_HEALTH=$(kubectl run health-check-frontend --image=curlimages/curl:latest --rm -i --restart=Never -n $NAMESPACE -- \
+          curl -s -o /dev/null -w "%{http_code}" -m 10 http://infra-mind-frontend-service:3000/api/health || echo "000")
+        
+        # Test database connectivity
+        DB_HEALTH=$(kubectl run health-check-db --image=curlimages/curl:latest --rm -i --restart=Never -n $NAMESPACE -- \
+          curl -s -o /dev/null -w "%{http_code}" -m 10 http://infra-mind-api-service:8000/health/db || echo "000")
+        
+        echo "api_health=$API_HEALTH" >> $GITHUB_OUTPUT
+        echo "frontend_health=$FRONTEND_HEALTH" >> $GITHUB_OUTPUT
+        echo "db_health=$DB_HEALTH" >> $GITHUB_OUTPUT
+        
+        echo "API Health: $API_HEALTH"
+        echo "Frontend Health: $FRONTEND_HEALTH"
+        echo "Database Health: $DB_HEALTH"
+    
+    - name: Check external dependencies
+      id: external-deps
+      run: |
+        # Check external API connectivity
+        OPENAI_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 10 https://api.openai.com/v1/models || echo "000")
+        AWS_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 10 https://pricing.us-east-1.amazonaws.com || echo "000")
+        AZURE_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -m 10 https://prices.azure.com || echo "000")
+        
+        echo "openai_status=$OPENAI_STATUS" >> $GITHUB_OUTPUT
+        echo "aws_status=$AWS_STATUS" >> $GITHUB_OUTPUT
+        echo "azure_status=$AZURE_STATUS" >> $GITHUB_OUTPUT
+        
+        echo "OpenAI API: $OPENAI_STATUS"
+        echo "AWS Pricing API: $AWS_STATUS"
+        echo "Azure Pricing API: $AZURE_STATUS"
+    
+    - name: Generate monitoring report
+      run: |
+        cat > monitoring-report.md << EOF
+        # System Health Report - ${{ env.ENVIRONMENT }}
+        
+        **Generated:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")
+        **Environment:** ${{ env.ENVIRONMENT }}
+        **Health Score:** ${{ steps.health-check.outputs.health_score }}/10
+        
+        ## Infrastructure Status
+        - **Unhealthy Pods:** ${{ steps.health-check.outputs.unhealthy_pods }}
+        - **API Deployment:** ${{ steps.health-check.outputs.api_ready }}/${{ steps.health-check.outputs.api_desired }} ready
+        - **Frontend Deployment:** ${{ steps.health-check.outputs.frontend_ready }}/${{ steps.health-check.outputs.frontend_desired }} ready
+        - **CPU Usage:** ${{ steps.health-check.outputs.cpu_usage }}%
+        - **Memory Usage:** ${{ steps.health-check.outputs.memory_usage }}%
+        
+        ## Application Health
+        - **API Health:** ${{ steps.app-health.outputs.api_health == '200' && '✅ Healthy' || '❌ Unhealthy' }}
+        - **Frontend Health:** ${{ steps.app-health.outputs.frontend_health == '200' && '✅ Healthy' || '❌ Unhealthy' }}
+        - **Database Health:** ${{ steps.app-health.outputs.db_health == '200' && '✅ Healthy' || '❌ Unhealthy' }}
+        
+        ## External Dependencies
+        - **OpenAI API:** ${{ steps.external-deps.outputs.openai_status == '200' && '✅ Available' || '❌ Unavailable' }}
+        - **AWS Pricing API:** ${{ steps.external-deps.outputs.aws_status == '200' && '✅ Available' || '❌ Unavailable' }}
+        - **Azure Pricing API:** ${{ steps.external-deps.outputs.azure_status == '200' && '✅ Available' || '❌ Unavailable' }}
+        EOF
+        
+        cat monitoring-report.md
+    
+    - name: Upload monitoring report
+      uses: actions/upload-artifact@v3
+      with:
+        name: monitoring-report-${{ env.ENVIRONMENT }}-${{ github.run_number }}
+        path: monitoring-report.md
+    
+    - name: Send alert if health score is low
+      if: steps.health-check.outputs.health_score < env.ALERT_THRESHOLD
+      uses: 8398a7/action-slack@v3
+      with:
+        status: failure
+        text: |
+          🚨 **ALERT: System Health Degraded**
+          
+          **Environment:** ${{ env.ENVIRONMENT }}
+          **Health Score:** ${{ steps.health-check.outputs.health_score }}/10 (Threshold: ${{ env.ALERT_THRESHOLD }})
+          
+          **Issues Detected:**
+          • Unhealthy Pods: ${{ steps.health-check.outputs.unhealthy_pods }}
+          • API Status: ${{ steps.health-check.outputs.api_ready }}/${{ steps.health-check.outputs.api_desired }}
+          • Frontend Status: ${{ steps.health-check.outputs.frontend_ready }}/${{ steps.health-check.outputs.frontend_desired }}
+          
+          **Action Required:** Please investigate immediately
+        webhook_url: ${{ secrets.SLACK_WEBHOOK_ALERTS }}
+      env:
+        SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+    
+    - name: Create GitHub issue for critical alerts
+      if: steps.health-check.outputs.health_score < 3
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const title = `🚨 Critical System Alert - ${{ env.ENVIRONMENT }} (Health Score: ${{ steps.health-check.outputs.health_score }}/10)`;
+          const body = `
+          ## Critical System Health Alert
+          
+          **Environment:** ${{ env.ENVIRONMENT }}
+          **Health Score:** ${{ steps.health-check.outputs.health_score }}/10
+          **Timestamp:** ${new Date().toISOString()}
+          
+          ### Issues Detected
+          - Unhealthy Pods: ${{ steps.health-check.outputs.unhealthy_pods }}
+          - API Deployment: ${{ steps.health-check.outputs.api_ready }}/${{ steps.health-check.outputs.api_desired }} ready
+          - Frontend Deployment: ${{ steps.health-check.outputs.frontend_ready }}/${{ steps.health-check.outputs.frontend_desired }} ready
+          
+          ### Application Health
+          - API Health: ${{ steps.app-health.outputs.api_health }}
+          - Frontend Health: ${{ steps.app-health.outputs.frontend_health }}
+          - Database Health: ${{ steps.app-health.outputs.db_health }}
+          
+          ### Immediate Actions Required
+          1. Check pod logs: \`kubectl logs -n ${{ steps.health-check.outputs.namespace }} -l app=infra-mind-api\`
+          2. Check deployment status: \`kubectl get deployments -n ${{ steps.health-check.outputs.namespace }}\`
+          3. Check resource usage: \`kubectl top pods -n ${{ steps.health-check.outputs.namespace }}\`
+          
+          This issue was automatically created by the monitoring system.
+          `;
+          
+          await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: title,
+            body: body,
+            labels: ['critical', 'monitoring', 'alert', '${{ env.ENVIRONMENT }}']
+          });
+
+  performance-monitoring:
+    name: Performance Monitoring
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Run performance tests
+      run: |
+        # Install k6 for performance testing
+        sudo gpg -k
+        sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+        echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+        sudo apt-get update
+        sudo apt-get install k6
+        
+        # Create performance test script
+        cat > performance-test.js << 'EOF'
+        import http from 'k6/http';
+        import { check } from 'k6';
+        
+        export let options = {
+          stages: [
+            { duration: '1m', target: 10 },
+            { duration: '2m', target: 10 },
+            { duration: '1m', target: 0 },
+          ],
+          thresholds: {
+            http_req_duration: ['p(95)<1000'],
+            http_req_failed: ['rate<0.05'],
+          },
+        };
+        
+        const BASE_URL = '${{ env.ENVIRONMENT == 'production' && 'https://api.infra-mind.com' || 'https://api-staging.infra-mind.com' }}';
+        
+        export default function() {
+          let response = http.get(`${BASE_URL}/health`);
+          check(response, {
+            'status is 200': (r) => r.status === 200,
+            'response time < 1000ms': (r) => r.timings.duration < 1000,
+          });
+        }
+        EOF
+        
+        # Run performance test
+        k6 run --out json=performance-results.json performance-test.js || true
+    
+    - name: Analyze performance results
+      run: |
+        if [ -f performance-results.json ]; then
+          # Extract key metrics
+          AVG_RESPONSE_TIME=$(jq -r '.metrics.http_req_duration.values.avg' performance-results.json || echo "0")
+          P95_RESPONSE_TIME=$(jq -r '.metrics.http_req_duration.values["p(95)"]' performance-results.json || echo "0")
+          ERROR_RATE=$(jq -r '.metrics.http_req_failed.values.rate' performance-results.json || echo "0")
+          
+          echo "Average Response Time: ${AVG_RESPONSE_TIME}ms"
+          echo "95th Percentile Response Time: ${P95_RESPONSE_TIME}ms"
+          echo "Error Rate: ${ERROR_RATE}%"
+          
+          # Check if performance is degraded
+          if (( $(echo "$P95_RESPONSE_TIME > 2000" | bc -l) )); then
+            echo "::warning::Performance degraded - P95 response time is ${P95_RESPONSE_TIME}ms"
+          fi
+          
+          if (( $(echo "$ERROR_RATE > 0.05" | bc -l) )); then
+            echo "::error::High error rate detected - ${ERROR_RATE}%"
+          fi
+        fi
+    
+    - name: Upload performance results
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-results-${{ env.ENVIRONMENT }}
+        path: performance-results.json
+      if: always()

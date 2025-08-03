@@ -156,6 +156,9 @@ class WorkflowState:
         }
 
 
+# Alias for backward compatibility
+WorkflowOrchestrator = None  # Will be set after class definition
+
 class WorkflowEngine:
     """
     Workflow engine for coordinating multi-agent execution.
@@ -498,3 +501,7 @@ class WorkflowEngine:
             logger.info(f"Cleaned up {cleaned_count} old workflows")
         
         return cleaned_count
+
+
+# Set the alias for backward compatibility
+WorkflowOrchestrator = WorkflowEngine

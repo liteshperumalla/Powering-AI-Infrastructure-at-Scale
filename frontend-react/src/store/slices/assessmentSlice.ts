@@ -1,4 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+import { apiClient } from '../../services/api';
 
 export interface BusinessRequirements {
     companySize: string;
@@ -32,6 +33,9 @@ interface AssessmentState {
     currentAssessment: Assessment | null;
     loading: boolean;
     error: string | null;
+    workflowId: string | null;
+    recommendations: unknown[];
+    recommendationsLoading: boolean;
 }
 
 const initialState: AssessmentState = {
@@ -39,80 +43,86 @@ const initialState: AssessmentState = {
     currentAssessment: null,
     loading: false,
     error: null,
+    workflowId: null,
+    recommendations: [],
+    recommendationsLoading: false,
 };
 
-// Async thunks
+// Async thunks - Real API integration
 export const createAssessment = createAsyncThunk(
     'assessment/create',
-    async (assessmentData: Partial<Assessment>) => {
-        // Simulate API call
-        const response = await new Promise<Assessment>((resolve) => {
-            setTimeout(() => {
-                resolve({
-                    id: Date.now().toString(),
-                    businessRequirements: assessmentData.businessRequirements || {} as BusinessRequirements,
-                    technicalRequirements: assessmentData.technicalRequirements || {} as TechnicalRequirements,
-                    status: 'draft',
-                    progress: 0,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString(),
-                });
-            }, 1000);
-        });
-        return response;
+    async (assessmentData: {
+        title: string;
+        description?: string;
+        business_requirements: BusinessRequirements;
+        technical_requirements: TechnicalRequirements;
+    }, { rejectWithValue }) => {
+        try {
+            const response = await apiClient.createAssessment(assessmentData);
+            return response;
+        } catch (error: unknown) {
+            return rejectWithValue(error instanceof Error ? error.message : 'Failed to create assessment');
+        }
     }
 );
 
 export const updateAssessment = createAsyncThunk(
     'assessment/update',
-    async ({ id, updates }: { id: string; updates: Partial<Assessment> }) => {
-        // Simulate API call
-        const response = await new Promise<Assessment>((resolve) => {
-            setTimeout(() => {
-                resolve({
-                    id,
-                    ...updates,
-                    updatedAt: new Date().toISOString(),
-                } as Assessment);
-            }, 500);
-        });
-        return response;
+    async ({ id, updates }: { id: string; updates: Partial<Assessment> }, { rejectWithValue }) => {
+        try {
+            const response = await apiClient.updateAssessment(id, updates);
+            return response;
+        } catch (error) {
+            return rejectWithValue(error instanceof Error ? error.message : 'Failed to update assessment');
+        }
     }
 );
 
 export const fetchAssessments = createAsyncThunk(
     'assessment/fetchAll',
-    async () => {
-        // Simulate API call
-        const response = await new Promise<Assessment[]>((resolve) => {
-            setTimeout(() => {
-                resolve([
-                    {
-                        id: '1',
-                        businessRequirements: {
-                            companySize: 'mid-size',
-                            industry: 'healthcare',
-                            budgetRange: '100k-500k',
-                            timeline: '6-months',
-                            complianceNeeds: ['HIPAA', 'GDPR'],
-                            businessGoals: ['cost-optimization', 'scalability'],
-                        },
-                        technicalRequirements: {
-                            currentInfrastructure: { cloud: 'aws', containers: true },
-                            workloadCharacteristics: { type: 'ml', scale: 'medium' },
-                            performanceRequirements: { latency: 'low', throughput: 'high' },
-                            scalabilityNeeds: { horizontal: true, vertical: false },
-                            integrationRequirements: ['api', 'database'],
-                        },
-                        status: 'completed',
-                        progress: 100,
-                        createdAt: '2024-01-15T10:00:00Z',
-                        updatedAt: '2024-01-15T14:30:00Z',
-                    },
-                ]);
-            }, 1000);
-        });
-        return response;
+    async (_, { rejectWithValue }) => {
+        try {
+            const response = await apiClient.getAssessments();
+            return response;
+        } catch (error) {
+            return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch assessments');
+        }
+    }
+);
+
+export const fetchAssessment = createAsyncThunk(
+    'assessment/fetchOne',
+    async (id: string, { rejectWithValue }) => {
+        try {
+            const response = await apiClient.getAssessment(id);
+            return response;
+        } catch (error) {
+            return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch assessment');
+        }
+    }
+);
+
+export const deleteAssessment = createAsyncThunk(
+    'assessment/delete',
+    async (id: string, { rejectWithValue }) => {
+        try {
+            await apiClient.deleteAssessment(id);
+            return id;
+        } catch (error) {
+            return rejectWithValue(error instanceof Error ? error.message : 'Failed to delete assessment');
+        }
+    }
+);
+
+export const generateRecommendations = createAsyncThunk(
+    'assessment/generateRecommendations',
+    async (assessmentId: string, { rejectWithValue }) => {
+        try {
+            const response = await apiClient.generateRecommendations(assessmentId);
+            return response;
+        } catch (error: unknown) {
+            return rejectWithValue(error instanceof Error ? error.message : 'Failed to generate recommendations');
+        }
     }
 );
 
@@ -130,6 +140,12 @@ const assessmentSlice = createSlice({
         },
         clearError: (state) => {
             state.error = null;
+        },
+        setWorkflowId: (state, action: PayloadAction<string | null>) => {
+            state.workflowId = action.payload;
+        },
+        setRecommendations: (state, action: PayloadAction<unknown[]>) => {
+            state.recommendations = action.payload;
         },
     },
     extraReducers: (builder) => {
@@ -178,10 +194,65 @@ const assessmentSlice = createSlice({
             })
             .addCase(fetchAssessments.rejected, (state, action) => {
                 state.loading = false;
-                state.error = action.error.message || 'Failed to fetch assessments';
+                state.error = action.payload as string || 'Failed to fetch assessments';
+            })
+            // Fetch single assessment
+            .addCase(fetchAssessment.pending, (state) => {
+                state.loading = true;
+                state.error = null;
+            })
+            .addCase(fetchAssessment.fulfilled, (state, action) => {
+                state.loading = false;
+                state.currentAssessment = action.payload;
+                // Update in assessments array if exists
+                const index = state.assessments.findIndex(a => a.id === action.payload.id);
+                if (index !== -1) {
+                    state.assessments[index] = action.payload;
+                } else {
+                    state.assessments.push(action.payload);
+                }
+            })
+            .addCase(fetchAssessment.rejected, (state, action) => {
+                state.loading = false;
+                state.error = action.payload as string || 'Failed to fetch assessment';
+            })
+            // Delete assessment
+            .addCase(deleteAssessment.pending, (state) => {
+                state.loading = true;
+                state.error = null;
+            })
+            .addCase(deleteAssessment.fulfilled, (state, action) => {
+                state.loading = false;
+                state.assessments = state.assessments.filter(a => a.id !== action.payload);
+                if (state.currentAssessment?.id === action.payload) {
+                    state.currentAssessment = null;
+                }
+            })
+            .addCase(deleteAssessment.rejected, (state, action) => {
+                state.loading = false;
+                state.error = action.payload as string || 'Failed to delete assessment';
+            })
+            // Generate recommendations
+            .addCase(generateRecommendations.pending, (state) => {
+                state.recommendationsLoading = true;
+                state.error = null;
+            })
+            .addCase(generateRecommendations.fulfilled, (state, action) => {
+                state.recommendationsLoading = false;
+                state.workflowId = action.payload.workflow_id;
+            })
+            .addCase(generateRecommendations.rejected, (state, action) => {
+                state.recommendationsLoading = false;
+                state.error = action.payload as string || 'Failed to generate recommendations';
             });
     },
 });
 
-export const { setCurrentAssessment, updateCurrentAssessment, clearError } = assessmentSlice.actions;
+export const {
+    setCurrentAssessment,
+    updateCurrentAssessment,
+    clearError,
+    setWorkflowId,
+    setRecommendations
+} = assessmentSlice.actions;
 export default assessmentSlice.reducer;

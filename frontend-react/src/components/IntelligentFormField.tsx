@@ -5,6 +5,7 @@ import {
     TextField,
     FormControl,
     Select,
+    SelectChangeEvent,
     MenuItem,
     InputLabel,
     Autocomplete,
@@ -95,7 +96,7 @@ export default function IntelligentFormField({
     const [contextualHelp, setContextualHelp] = useState<ContextualHelp | null>(null);
     const [showSmartDefaults, setShowSmartDefaults] = useState(false);
     const [helpAnchorEl, setHelpAnchorEl] = useState<HTMLElement | null>(null);
-    const [inputValue, setInputValue] = useState('');
+    const [inputValue, setInputValue] = useState(value as string || '');
     const [showSuggestions, setShowSuggestions] = useState(false);
 
     // Load smart defaults when form context changes
@@ -111,6 +112,11 @@ export default function IntelligentFormField({
             loadContextualHelp();
         }
     }, [name, onGetContextualHelp]);
+
+    // Update input value when value prop changes
+    useEffect(() => {
+        setInputValue(value as string || '');
+    }, [value]);
 
     const loadSmartDefaults = useCallback(async () => {
         if (!onGetSmartDefaults) return;
@@ -152,9 +158,9 @@ export default function IntelligentFormField({
 
         // Load suggestions for text inputs
         if (type === 'text' || type === 'autocomplete') {
-            setInputValue(newValue);
-            if (newValue && newValue.length > 1) {
-                loadSuggestions(newValue);
+            setInputValue(newValue as string);
+            if (newValue && (newValue as string).length > 1) {
+                loadSuggestions(newValue as string);
                 setShowSuggestions(true);
             } else {
                 setShowSuggestions(false);
@@ -203,7 +209,7 @@ export default function IntelligentFormField({
                                 title={`${defaultValue.reason} (${Math.round(defaultValue.confidence * 100)}% confidence)`}
                             >
                                 <Chip
-                                    label={defaultValue.value}
+                                    label={defaultValue.value as string}
                                     onClick={() => applySmartDefault(defaultValue)}
                                     color="primary"
                                     variant="outlined"
@@ -295,7 +301,7 @@ export default function IntelligentFormField({
             fullWidth: true,
             label,
             value: value || '',
-            onChange: (e: any) => handleInputChange(e.target.value),
+            onChange: (e: React.ChangeEvent<HTMLInputElement>) => handleInputChange(e.target.value),
             error: Boolean(error),
             helperText: error,
             required,
@@ -318,7 +324,7 @@ export default function IntelligentFormField({
                         <InputLabel>{label}</InputLabel>
                         <Select
                             value={value || ''}
-                            onChange={(e) => handleInputChange(e.target.value)}
+                            onChange={(e: SelectChangeEvent<unknown>) => handleInputChange(e.target.value)}
                             label={label}
                         >
                             {options.map((option) => (
@@ -337,7 +343,7 @@ export default function IntelligentFormField({
                         <Select
                             multiple
                             value={value || []}
-                            onChange={(e) => handleInputChange(e.target.value)}
+                            onChange={(e: SelectChangeEvent<unknown>) => handleInputChange(e.target.value)}
                             label={label}
                             renderValue={(selected) => (
                                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
@@ -367,15 +373,15 @@ export default function IntelligentFormField({
                 return (
                     <Autocomplete
                         options={suggestions}
-                        getOptionLabel={(option) => typeof option === 'string' ? option : option.label}
+                        getOptionLabel={(option) => typeof option === 'string' ? option : (option as Suggestion).label}
                         renderOption={(props, option) => (
                             <Box component="li" {...props}>
                                 <Box>
                                     <Typography variant="body2">
-                                        {option.label}
+                                        {(option as Suggestion).label}
                                     </Typography>
                                     <Typography variant="caption" color="text.secondary">
-                                        {option.description}
+                                        {(option as Suggestion).description}
                                     </Typography>
                                 </Box>
                             </Box>
@@ -390,10 +396,18 @@ export default function IntelligentFormField({
                             />
                         )}
                         value={value || null}
-                        onChange={(_, newValue) => handleInputChange((newValue as { value?: string })?.value || newValue)}
+                        onChange={(_, newValue) => {
+                            // Handle both string values (freeSolo) and object values (suggestions)
+                            const finalValue = typeof newValue === 'string' 
+                                ? newValue 
+                                : (newValue as { value?: string })?.value || newValue;
+                            handleInputChange(finalValue);
+                        }}
                         inputValue={inputValue}
                         onInputChange={(_, newInputValue) => {
                             setInputValue(newInputValue);
+                            // Update the form value immediately when typing (for freeSolo mode)
+                            handleInputChange(newInputValue);
                             if (newInputValue && newInputValue.length > 1) {
                                 loadSuggestions(newInputValue);
                             }

@@ -12,6 +12,7 @@ import math
 
 from .base import BaseAgent, AgentConfig, AgentRole
 from .tools import ToolResult
+from .web_search import get_web_search_client
 from ..models.assessment import Assessment
 
 logger = logging.getLogger(__name__)
@@ -114,6 +115,220 @@ class InfrastructureAgent(BaseAgent):
         
         logger.info("Infrastructure Agent initialized with compute resource planning capabilities")
     
+    async def _collect_real_cloud_resource_data(self, infrastructure_analysis: Dict[str, Any]) -> Dict[str, Any]:
+        """Collect real cloud resource data from multiple providers."""
+        logger.info("Collecting real cloud resource data for infrastructure planning")
+        
+        cloud_data = {
+            "providers": {},
+            "compute_options": {},
+            "pricing_data": {},
+            "performance_benchmarks": {},
+            "availability_zones": {},
+            "collection_timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        try:
+            # Determine which cloud providers to analyze
+            workload_types = infrastructure_analysis.get("workload_types", [])
+            preferred_providers = infrastructure_analysis.get("preferred_providers", ["aws", "azure", "gcp"])
+            
+            # Collect compute resource data from each provider
+            for provider in preferred_providers:
+                try:
+                    provider_data = await self._collect_provider_resource_data(provider, workload_types)
+                    cloud_data["providers"][provider] = provider_data
+                except Exception as e:
+                    logger.warning(f"Failed to collect data from {provider}: {e}")
+                    cloud_data["providers"][provider] = {"error": str(e)}
+            
+            # Research latest compute technologies and trends
+            compute_trends = await self._research_compute_trends(workload_types)
+            cloud_data["compute_trends"] = compute_trends
+            
+            # Collect real-time performance benchmarks
+            performance_data = await self._collect_performance_benchmarks(workload_types)
+            cloud_data["performance_benchmarks"] = performance_data
+            
+            logger.info(f"Collected cloud resource data from {len(cloud_data['providers'])} providers")
+            
+        except Exception as e:
+            logger.error(f"Cloud resource data collection failed: {e}")
+            cloud_data["collection_error"] = str(e)
+        
+        return cloud_data
+    
+    async def _collect_provider_resource_data(self, provider: str, workload_types: List[str]) -> Dict[str, Any]:
+        """Collect resource data from a specific cloud provider using real APIs."""
+        provider_data = {
+            "compute_services": {},
+            "pricing_data": {},
+            "regions": [],
+            "service_limits": {},
+            "collection_method": "real_api"
+        }
+        
+        try:
+            # Use cloud API tool to get real compute service information
+            compute_result = await self._use_tool(
+                "cloud_api",
+                provider=provider,
+                service="compute",
+                operation="list_services"
+            )
+            
+            if compute_result.is_success:
+                provider_data["compute_services"] = compute_result.data
+            
+            # Get pricing information for compute services
+            pricing_result = await self._use_tool(
+                "cloud_api", 
+                provider=provider,
+                service="pricing",
+                operation="get_compute_pricing",
+                workload_types=workload_types
+            )
+            
+            if pricing_result.is_success:
+                provider_data["pricing_data"] = pricing_result.data
+            
+            # Get available regions/zones
+            regions_result = await self._use_tool(
+                "cloud_api",
+                provider=provider,
+                service="compute", 
+                operation="list_regions"
+            )
+            
+            if regions_result.is_success:
+                provider_data["regions"] = regions_result.data.get("regions", [])
+            
+        except Exception as e:
+            logger.warning(f"Provider {provider} data collection failed: {e}")
+            provider_data["error"] = str(e)
+            provider_data["collection_method"] = "failed"
+        
+        return provider_data
+    
+    async def _research_compute_trends(self, workload_types: List[str]) -> Dict[str, Any]:
+        """Research latest compute technology trends using web search."""
+        trends_data = {
+            "emerging_technologies": [],
+            "performance_innovations": [],
+            "cost_optimization_trends": [],
+            "research_timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        try:
+            search_client = await get_web_search_client()
+            
+            # Research topics based on workload types
+            research_topics = []
+            for workload in workload_types:
+                research_topics.extend([
+                    f"{workload} cloud computing performance 2024",
+                    f"{workload} infrastructure optimization trends"
+                ])
+            
+            research_topics.extend([
+                "cloud compute performance benchmarks 2024",
+                "serverless vs containers performance comparison",
+                "cloud cost optimization strategies 2024",
+                "GPU cloud computing trends",
+                "edge computing infrastructure"
+            ])
+            
+            # Perform searches for compute trends
+            for topic in research_topics[:4]:  # Limit to avoid too many API calls
+                try:
+                    search_result = await search_client.search(
+                        query=topic,
+                        max_results=3,
+                        search_type="technical"
+                    )
+                    
+                    if search_result.get("results"):
+                        for result in search_result["results"]:
+                            trends_data["emerging_technologies"].append({
+                                "topic": topic,
+                                "title": result.get("title", ""),
+                                "summary": result.get("snippet", "")[:150],
+                                "source": result.get("url", ""),
+                                "relevance_score": result.get("relevance_score", 0.5)
+                            })
+                except Exception as e:
+                    logger.warning(f"Failed to research topic '{topic}': {e}")
+            
+        except Exception as e:
+            logger.warning(f"Compute trends research failed: {e}")
+            trends_data["research_error"] = str(e)
+        
+        return trends_data
+    
+    async def _collect_performance_benchmarks(self, workload_types: List[str]) -> Dict[str, Any]:
+        """Collect real-world performance benchmarks for different workload types."""
+        benchmarks = {
+            "workload_benchmarks": {},
+            "instance_comparisons": {},
+            "regional_performance": {},
+            "collection_timestamp": datetime.now(timezone.utc).isoformat()
+        }
+        
+        try:
+            search_client = await get_web_search_client()
+            
+            # Search for performance benchmarks
+            for workload in workload_types[:3]:  # Limit to top 3 workloads
+                try:
+                    benchmark_query = f"{workload} cloud performance benchmarks comparison AWS Azure GCP"
+                    search_result = await search_client.search(
+                        query=benchmark_query,
+                        max_results=3,
+                        search_type="technical"
+                    )
+                    
+                    if search_result.get("results"):
+                        benchmarks["workload_benchmarks"][workload] = []
+                        for result in search_result["results"]:
+                            benchmarks["workload_benchmarks"][workload].append({
+                                "title": result.get("title", ""),
+                                "summary": result.get("snippet", "")[:200],
+                                "source": result.get("url", ""),
+                                "published_date": result.get("published_date", "")
+                            })
+                
+                except Exception as e:
+                    logger.warning(f"Failed to collect benchmarks for {workload}: {e}")
+            
+            # General cloud performance comparisons
+            try:
+                comparison_query = "cloud provider performance comparison 2024 compute benchmarks"
+                comparison_result = await search_client.search(
+                    query=comparison_query,
+                    max_results=4,
+                    search_type="technical"
+                )
+                
+                if comparison_result.get("results"):
+                    benchmarks["instance_comparisons"] = [
+                        {
+                            "title": result.get("title", ""),
+                            "summary": result.get("snippet", "")[:200],
+                            "source": result.get("url", ""),
+                            "relevance_score": result.get("relevance_score", 0.5)
+                        }
+                        for result in comparison_result["results"]
+                    ]
+            
+            except Exception as e:
+                logger.warning(f"Failed to collect performance comparisons: {e}")
+        
+        except Exception as e:
+            logger.error(f"Performance benchmark collection failed: {e}")
+            benchmarks["collection_error"] = str(e)
+        
+        return benchmarks
+    
     async def _execute_main_logic(self) -> Dict[str, Any]:
         """
         Execute Infrastructure agent's main resource planning logic.
@@ -124,20 +339,23 @@ class InfrastructureAgent(BaseAgent):
         logger.info("Infrastructure Agent starting compute resource analysis")
         
         try:
-            # Step 1: Analyze current infrastructure requirements
+            # Step 1: Analyze current infrastructure requirements with real data
             infrastructure_analysis = await self._analyze_infrastructure_requirements()
             
-            # Step 2: Perform capacity planning analysis
-            capacity_analysis = await self._perform_capacity_planning(infrastructure_analysis)
+            # Step 2: Collect real cloud resource data
+            cloud_resource_data = await self._collect_real_cloud_resource_data(infrastructure_analysis)
             
-            # Step 3: Design scaling strategies
+            # Step 3: Perform capacity planning analysis with real market data
+            capacity_analysis = await self._perform_capacity_planning(infrastructure_analysis, cloud_resource_data)
+            
+            # Step 4: Design scaling strategies with real cloud capabilities
             scaling_strategies = await self._design_scaling_strategies(
-                infrastructure_analysis, capacity_analysis
+                infrastructure_analysis, capacity_analysis, cloud_resource_data
             )
             
-            # Step 4: Optimize resource allocation
+            # Step 5: Optimize resource allocation with real pricing data
             resource_optimization = await self._optimize_resource_allocation(
-                infrastructure_analysis, capacity_analysis
+                infrastructure_analysis, capacity_analysis, cloud_resource_data
             )
             
             # Step 5: Create performance benchmarking plan

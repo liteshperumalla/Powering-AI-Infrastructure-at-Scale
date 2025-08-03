@@ -93,72 +93,45 @@ async def get_reports(assessment_id: str):
     including their status, metadata, and download information.
     """
     try:
-        # TODO: Query database for reports
-        # reports = await Report.find({"assessment_id": assessment_id}).to_list()
+        # Query database for actual reports
+        reports = await Report.find({"assessment_id": assessment_id}).to_list()
         
-        logger.info(f"Retrieved reports for assessment: {assessment_id}")
+        logger.info(f"Retrieved {len(reports)} reports for assessment: {assessment_id}")
         
-        # Mock reports for now
-        mock_reports = [
-            ReportResponse(
-                id=str(uuid.uuid4()),
-                assessment_id=assessment_id,
-                user_id="current_user",
-                title="Executive Summary Report",
-                description="High-level strategic recommendations for executives",
-                report_type=ReportType.EXECUTIVE_SUMMARY,
-                format=ReportFormat.PDF,
-                status=ReportStatus.COMPLETED,
-                progress_percentage=100.0,
-                sections=["executive_summary", "key_recommendations", "cost_analysis"],
-                total_pages=8,
-                word_count=2500,
-                file_path="/reports/exec_summary_123.pdf",
-                file_size_bytes=1024000,
-                generated_by=["cto_agent", "report_generator_agent"],
-                generation_time_seconds=45.2,
-                completeness_score=0.95,
-                confidence_score=0.88,
-                priority=Priority.HIGH,
-                tags=["executive", "summary", "strategic"],
-                error_message=None,
-                retry_count=0,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
-                completed_at=datetime.utcnow()
-            ),
-            ReportResponse(
-                id=str(uuid.uuid4()),
-                assessment_id=assessment_id,
-                user_id="current_user",
-                title="Technical Implementation Roadmap",
-                description="Detailed technical implementation guide",
-                report_type=ReportType.TECHNICAL_ROADMAP,
-                format=ReportFormat.PDF,
-                status=ReportStatus.GENERATING,
-                progress_percentage=65.0,
-                sections=["architecture", "implementation_steps", "timeline"],
-                total_pages=None,
-                word_count=None,
-                file_path=None,
-                file_size_bytes=None,
-                generated_by=["cloud_engineer_agent", "report_generator_agent"],
-                generation_time_seconds=None,
-                completeness_score=None,
-                confidence_score=None,
-                priority=Priority.MEDIUM,
-                tags=["technical", "roadmap", "implementation"],
-                error_message=None,
-                retry_count=0,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
-                completed_at=None
-            )
-        ]
+        # Convert to response models
+        report_responses = []
+        for report in reports:
+            report_responses.append(ReportResponse(
+                id=str(report.id),
+                assessment_id=report.assessment_id,
+                user_id=report.user_id,
+                title=report.title,
+                description=report.description,
+                report_type=report.report_type,
+                format=report.format,
+                status=report.status,
+                progress_percentage=report.progress_percentage,
+                sections=report.sections,
+                total_pages=report.total_pages,
+                word_count=report.word_count,
+                file_path=report.file_path,
+                file_size_bytes=report.file_size_bytes,
+                generated_by=report.generated_by,
+                generation_time_seconds=report.generation_time_seconds,
+                completeness_score=report.completeness_score,
+                confidence_score=report.confidence_score,
+                priority=report.priority,
+                tags=report.tags,
+                error_message=report.error_message,
+                retry_count=report.retry_count,
+                created_at=report.created_at,
+                updated_at=report.updated_at,
+                completed_at=report.completed_at
+            ))
         
         return ReportListResponse(
-            reports=mock_reports,
-            total=len(mock_reports),
+            reports=report_responses,
+            total=len(report_responses),
             assessment_id=assessment_id
         )
         

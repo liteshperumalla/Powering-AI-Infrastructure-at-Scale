@@ -6,12 +6,16 @@ security best practices, and data residency recommendations.
 """
 
 import logging
+import json
+import asyncio
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 
 from .base import BaseAgent, AgentConfig, AgentRole
 from .tools import ToolResult
+from .web_search import WebSearchClient, get_web_search_client
 from ..models.assessment import Assessment
+from ..core.llm_client import get_llm_client
 
 logger = logging.getLogger(__name__)
 
@@ -135,6 +139,10 @@ class ComplianceAgent(BaseAgent):
             }
         }
         
+        # Initialize web search for real-time regulatory updates
+        self.web_search_client = None
+        self.llm_client = None
+        
         logger.info("Compliance Agent initialized with regulatory expertise")
     
     async def _execute_main_logic(self) -> Dict[str, Any]:
@@ -147,34 +155,44 @@ class ComplianceAgent(BaseAgent):
         logger.info("Compliance Agent starting regulatory analysis")
         
         try:
-            # Step 1: Identify applicable regulations
-            applicable_regulations = await self._identify_applicable_regulations()
+            # Initialize clients for real data collection
+            if not self.web_search_client:
+                self.web_search_client = await get_web_search_client()
+            if not self.llm_client:
+                self.llm_client = await get_llm_client()
             
-            # Step 2: Assess current compliance posture
-            compliance_assessment = await self._assess_compliance_posture(applicable_regulations)
+            # Step 1: Collect real-time regulatory updates
+            regulatory_updates = await self._collect_regulatory_updates()
             
-            # Step 3: Analyze data residency requirements
+            # Step 2: Identify applicable regulations with real data
+            applicable_regulations = await self._identify_applicable_regulations_with_research(regulatory_updates)
+            
+            # Step 3: Assess current compliance posture with real data
+            compliance_assessment = await self._assess_compliance_posture_with_real_data(applicable_regulations)
+            
+            # Step 4: Analyze data residency requirements with current regulations
             data_residency_analysis = await self._analyze_data_residency_requirements(applicable_regulations)
             
-            # Step 4: Evaluate security controls
-            security_controls_assessment = await self._assess_security_controls()
+            # Step 5: Evaluate security controls with real benchmarks
+            security_controls_assessment = await self._assess_security_controls_with_benchmarks()
             
-            # Step 5: Identify compliance gaps and risks
-            compliance_gaps = await self._identify_compliance_gaps(
-                applicable_regulations, compliance_assessment, security_controls_assessment
+            # Step 6: Identify compliance gaps using real compliance data
+            compliance_gaps = await self._identify_compliance_gaps_with_real_data(
+                applicable_regulations, compliance_assessment, security_controls_assessment, regulatory_updates
             )
             
-            # Step 6: Generate compliance recommendations
-            compliance_recommendations = await self._generate_compliance_recommendations(
-                applicable_regulations, compliance_gaps, data_residency_analysis
+            # Step 7: Generate compliance recommendations with real market data
+            compliance_recommendations = await self._generate_compliance_recommendations_with_research(
+                applicable_regulations, compliance_gaps, data_residency_analysis, regulatory_updates
             )
             
-            # Step 7: Create compliance roadmap
-            compliance_roadmap = await self._create_compliance_roadmap(compliance_recommendations)
+            # Step 8: Create compliance roadmap with real-world timelines
+            compliance_roadmap = await self._create_compliance_roadmap_with_real_data(compliance_recommendations)
             
             result = {
                 "recommendations": compliance_recommendations,
                 "data": {
+                    "regulatory_updates": regulatory_updates,
                     "applicable_regulations": applicable_regulations,
                     "compliance_assessment": compliance_assessment,
                     "data_residency_analysis": data_residency_analysis,
@@ -873,3 +891,125 @@ class ComplianceAgent(BaseAgent):
             return "medium"
         else:
             return "low"
+    
+    # Enhanced methods with real data integration
+    
+    async def _collect_regulatory_updates(self) -> Dict[str, Any]:
+        """Collect real-time regulatory updates and compliance news."""
+        logger.debug("Collecting real-time regulatory updates")
+        
+        regulatory_updates = {
+            "gdpr_updates": [],
+            "hipaa_updates": [],
+            "ccpa_updates": [],
+            "general_compliance_news": [],
+            "security_advisories": [],
+            "data_breach_incidents": []
+        }
+        
+        try:
+            # Search for recent GDPR updates
+            gdpr_search = await self.web_search_client.search(
+                "GDPR General Data Protection Regulation updates 2024 2025 compliance requirements",
+                num_results=5
+            )
+            regulatory_updates["gdpr_updates"] = gdpr_search.get("results", [])
+            
+            # Search for HIPAA updates
+            hipaa_search = await self.web_search_client.search(
+                "HIPAA Health Insurance Portability Accountability Act updates 2024 2025 compliance",
+                num_results=5
+            )
+            regulatory_updates["hipaa_updates"] = hipaa_search.get("results", [])
+            
+            # Search for CCPA updates
+            ccpa_search = await self.web_search_client.search(
+                "CCPA California Consumer Privacy Act updates 2024 2025 compliance requirements",
+                num_results=5
+            )
+            regulatory_updates["ccpa_updates"] = ccpa_search.get("results", [])
+            
+            # Search for general compliance news
+            compliance_search = await self.web_search_client.search(
+                "data privacy compliance regulations 2024 2025 enterprise security requirements",
+                num_results=5
+            )
+            regulatory_updates["general_compliance_news"] = compliance_search.get("results", [])
+            
+            # Search for security advisories
+            security_search = await self.web_search_client.search(
+                "cybersecurity advisories data breach compliance 2024 2025 enterprise security",
+                num_results=5
+            )
+            regulatory_updates["security_advisories"] = security_search.get("results", [])
+            
+            # Search for recent data breach incidents for learning
+            breach_search = await self.web_search_client.search(
+                "data breach incidents 2024 2025 compliance lessons learned enterprise security",
+                num_results=3
+            )
+            regulatory_updates["data_breach_incidents"] = breach_search.get("results", [])
+            
+            logger.info(f"Collected regulatory updates: {sum(len(v) for v in regulatory_updates.values())} articles")
+            
+        except Exception as e:
+            logger.warning(f"Failed to collect some regulatory updates: {str(e)}")
+        
+        return regulatory_updates
+    
+    def _prepare_regulatory_context(self, regulatory_updates: Dict[str, Any]) -> str:
+        """Prepare regulatory context for LLM analysis."""
+        context_parts = []
+        
+        for category, updates in regulatory_updates.items():
+            if updates:
+                context_parts.append(f"{category.replace('_', ' ').title()}:")
+                for update in updates[:3]:  # Limit to top 3 per category
+                    title = update.get("title", "")
+                    snippet = update.get("snippet", "")
+                    context_parts.append(f"- {title}: {snippet[:200]}...")
+        
+        return "\n".join(context_parts)
+    
+    def _summarize_regulatory_updates(self, regulatory_updates: Dict[str, Any]) -> Dict[str, Any]:
+        """Summarize regulatory updates for analysis."""
+        summary = {
+            "total_updates": sum(len(v) for v in regulatory_updates.values()),
+            "categories": list(regulatory_updates.keys()),
+            "key_topics": []
+        }
+        
+        # Extract key topics from titles
+        for updates in regulatory_updates.values():
+            for update in updates:
+                title = update.get("title", "")
+                if title:
+                    summary["key_topics"].append(title)
+        
+        return summary
+    
+    def _parse_llm_response(self, response: str) -> Dict[str, Any]:
+        """Parse LLM response, handling both JSON and text formats."""
+        try:
+            # Try to parse as JSON first
+            return json.loads(response)
+        except json.JSONDecodeError:
+            # Fallback to extracting structured information from text
+            return self._extract_structured_data_from_text(response)
+    
+    def _extract_structured_data_from_text(self, text: str) -> Dict[str, Any]:
+        """Extract structured data from text when JSON parsing fails."""
+        # Simple extraction logic for common patterns
+        result = {
+            "analysis": text,
+            "extracted_points": []
+        }
+        
+        # Extract numbered points
+        lines = text.split('\n')
+        for line in lines:
+            line = line.strip()
+            if line and (line.startswith(('1.', '2.', '3.', '4.', '5.', '-', '•'))):
+                result["extracted_points"].append(line)
+        
+        return result

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Container,
     Paper,
@@ -24,9 +24,14 @@ import {
     Business,
 } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { register, clearError } from '@/store/slices/authSlice';
 
 export default function RegisterPage() {
     const router = useRouter();
+    const dispatch = useAppDispatch();
+    const { loading, error, isAuthenticated } = useAppSelector(state => state.auth);
+
     const [formData, setFormData] = useState({
         fullName: '',
         email: '',
@@ -37,8 +42,19 @@ export default function RegisterPage() {
     });
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
+    const [validationError, setValidationError] = useState('');
+
+    // Redirect if already authenticated
+    useEffect(() => {
+        if (isAuthenticated) {
+            router.push('/dashboard');
+        }
+    }, [isAuthenticated, router]);
+
+    // Clear error when component mounts
+    useEffect(() => {
+        dispatch(clearError());
+    }, [dispatch]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value, checked, type } = e.target;
@@ -46,7 +62,10 @@ export default function RegisterPage() {
             ...formData,
             [name]: type === 'checkbox' ? checked : value,
         });
-        setError('');
+        setValidationError('');
+        if (error) {
+            dispatch(clearError());
+        }
     };
 
     const validateForm = () => {
@@ -59,6 +78,18 @@ export default function RegisterPage() {
         if (formData.password.length < 8) {
             return 'Password must be at least 8 characters long';
         }
+        if (!/(?=.*[a-z])/.test(formData.password)) {
+            return 'Password must contain at least one lowercase letter';
+        }
+        if (!/(?=.*[A-Z])/.test(formData.password)) {
+            return 'Password must contain at least one uppercase letter';
+        }
+        if (!/(?=.*\d)/.test(formData.password)) {
+            return 'Password must contain at least one number';
+        }
+        if (!/(?=.*[!@#$%^&*()_+\-=\[\]{}|;:,.<>?])/.test(formData.password)) {
+            return 'Password must contain at least one special character';
+        }
         if (!formData.agreeToTerms) {
             return 'Please agree to the terms and conditions';
         }
@@ -67,27 +98,26 @@ export default function RegisterPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        setLoading(true);
-        setError('');
 
-        const validationError = validateForm();
-        if (validationError) {
-            setError(validationError);
-            setLoading(false);
+        const validationErr = validateForm();
+        if (validationErr) {
+            setValidationError(validationErr);
             return;
         }
 
         try {
-            // TODO: Implement actual registration logic
-            // For now, simulate registration
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            const result = await dispatch(register({
+                email: formData.email,
+                password: formData.password,
+                full_name: formData.fullName,
+                company: formData.company || undefined,
+            })).unwrap();
 
-            // Simulate successful registration
-            router.push('/auth/login');
-        } catch {
-            setError('Registration failed. Please try again.');
-        } finally {
-            setLoading(false);
+            // Registration successful, redirect to dashboard
+            router.push('/dashboard');
+        } catch (error) {
+            // Error is handled by Redux state
+            console.error('Registration failed:', error);
         }
     };
 
@@ -118,9 +148,9 @@ export default function RegisterPage() {
                         Create your account
                     </Typography>
 
-                    {error && (
+                    {(error || validationError) && (
                         <Alert severity="error" sx={{ width: '100%', mb: 2 }}>
-                            {error}
+                            {error || validationError}
                         </Alert>
                     )}
 
@@ -136,14 +166,12 @@ export default function RegisterPage() {
                             autoFocus
                             value={formData.fullName}
                             onChange={handleChange}
-                            slotProps={{
-                                input: {
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <Person />
-                                        </InputAdornment>
-                                    ),
-                                },
+                            InputProps={{
+                                startAdornment: (
+                                    <InputAdornment position="start">
+                                        <Person />
+                                    </InputAdornment>
+                                ),
                             }}
                         />
                         <TextField
@@ -156,14 +184,12 @@ export default function RegisterPage() {
                             autoComplete="email"
                             value={formData.email}
                             onChange={handleChange}
-                            slotProps={{
-                                input: {
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <Email />
-                                        </InputAdornment>
-                                    ),
-                                },
+                            InputProps={{
+                                startAdornment: (
+                                    <InputAdornment position="start">
+                                        <Email />
+                                    </InputAdornment>
+                                ),
                             }}
                         />
                         <TextField
@@ -175,14 +201,12 @@ export default function RegisterPage() {
                             autoComplete="organization"
                             value={formData.company}
                             onChange={handleChange}
-                            slotProps={{
-                                input: {
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <Business />
-                                        </InputAdornment>
-                                    ),
-                                },
+                            InputProps={{
+                                startAdornment: (
+                                    <InputAdornment position="start">
+                                        <Business />
+                                    </InputAdornment>
+                                ),
                             }}
                         />
                         <TextField
@@ -196,25 +220,23 @@ export default function RegisterPage() {
                             autoComplete="new-password"
                             value={formData.password}
                             onChange={handleChange}
-                            slotProps={{
-                                input: {
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <Lock />
-                                        </InputAdornment>
-                                    ),
-                                    endAdornment: (
-                                        <InputAdornment position="end">
-                                            <IconButton
-                                                aria-label="toggle password visibility"
-                                                onClick={() => setShowPassword(!showPassword)}
-                                                edge="end"
-                                            >
-                                                {showPassword ? <VisibilityOff /> : <Visibility />}
-                                            </IconButton>
-                                        </InputAdornment>
-                                    ),
-                                },
+                            InputProps={{
+                                startAdornment: (
+                                    <InputAdornment position="start">
+                                        <Lock />
+                                    </InputAdornment>
+                                ),
+                                endAdornment: (
+                                    <InputAdornment position="end">
+                                        <IconButton
+                                            aria-label="toggle password visibility"
+                                            onClick={() => setShowPassword(!showPassword)}
+                                            edge="end"
+                                        >
+                                            {showPassword ? <VisibilityOff /> : <Visibility />}
+                                        </IconButton>
+                                    </InputAdornment>
+                                ),
                             }}
                         />
                         <TextField
@@ -227,25 +249,23 @@ export default function RegisterPage() {
                             id="confirmPassword"
                             value={formData.confirmPassword}
                             onChange={handleChange}
-                            slotProps={{
-                                input: {
-                                    startAdornment: (
-                                        <InputAdornment position="start">
-                                            <Lock />
-                                        </InputAdornment>
-                                    ),
-                                    endAdornment: (
-                                        <InputAdornment position="end">
-                                            <IconButton
-                                                aria-label="toggle password visibility"
-                                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                                                edge="end"
-                                            >
-                                                {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
-                                            </IconButton>
-                                        </InputAdornment>
-                                    ),
-                                },
+                            InputProps={{
+                                startAdornment: (
+                                    <InputAdornment position="start">
+                                        <Lock />
+                                    </InputAdornment>
+                                ),
+                                endAdornment: (
+                                    <InputAdornment position="end">
+                                        <IconButton
+                                            aria-label="toggle password visibility"
+                                            onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                                            edge="end"
+                                        >
+                                            {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
+                                        </IconButton>
+                                    </InputAdornment>
+                                ),
                             }}
                         />
                         <FormControlLabel

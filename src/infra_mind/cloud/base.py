@@ -199,85 +199,190 @@ class BaseCloudClient(ABC):
                                    fetch_func, params: Optional[Dict[str, Any]] = None,
                                    cache_ttl: int = 3600) -> Any:
         """
-        Get data from cache or fetch from API with advanced resilience patterns.
+        Get data from cache or fetch from API with unified cloud caching and resilience patterns.
         
         Args:
             service: Service name for caching
             region: Cloud region
             fetch_func: Function to fetch data from API
             params: Additional parameters for caching key
-            cache_ttl: Cache TTL in seconds
+            cache_ttl: Cache TTL in seconds (deprecated, now determined by service type)
             
         Returns:
             Data from cache or API with resilience metadata
         """
-        from ..core.cache import cache_manager
+        from ..core.unified_cloud_cache import get_unified_cache_manager, ServiceType
         from ..core.resilience import resilience_manager
         from ..core.advanced_rate_limiter import advanced_rate_limiter, RateLimitExceeded
         
         if not self.cache_enabled:
             return await fetch_func()
         
+        # Get unified cache manager
+        unified_cache = await get_unified_cache_manager()
+        if not unified_cache:
+            # Fallback to direct API call if cache not available
+            logger.warning("Unified cache manager not available, calling API directly")
+            return await fetch_func()
+        
+        # Map service names to ServiceType enum
+        service_type_mapping = {
+            "pricing": ServiceType.PRICING,
+            "compute": ServiceType.COMPUTE,
+            "storage": ServiceType.STORAGE,
+            "database": ServiceType.DATABASE,
+            "ai": ServiceType.AI_ML,
+            "ai_services": ServiceType.AI_ML,
+            "ml": ServiceType.AI_ML,
+            "cost_estimation": ServiceType.COST_ESTIMATION,
+            "compliance": ServiceType.COMPLIANCE,
+            "regions": ServiceType.REGIONS,
+            "compute_modules": ServiceType.TERRAFORM_MODULES,
+            "storage_modules": ServiceType.TERRAFORM_MODULES,
+            "database_modules": ServiceType.TERRAFORM_MODULES,
+            "ai_modules": ServiceType.TERRAFORM_MODULES,
+            "modules": ServiceType.TERRAFORM_MODULES,
+            "providers": ServiceType.TERRAFORM_PROVIDERS,
+        }
+        
+        service_type = service_type_mapping.get(service, ServiceType.COMPUTE)
+        
         # Generate service name for resilience patterns
         service_name = f"{self.provider.value}_{service}"
         fallback_key = f"{self.provider.value}:{service}:{region}"
         
-        # Use resilience manager for comprehensive error handling
-        async with resilience_manager.resilient_call(
-            service_name=service_name,
-            fallback_key=fallback_key,
-            cache_manager=cache_manager
-        ) as resilient_execute:
+        # Try to get from unified cache first
+        try:
+            cached_data = await unified_cache.get_cached_data(
+                provider=self.provider.value,
+                service_type=service_type,
+                region=region,
+                params=params,
+                allow_stale=False
+            )
             
-            async def fetch_with_rate_limiting():
-                """Fetch data with rate limiting check."""
-                # Check advanced rate limits if available
-                if advanced_rate_limiter:
-                    try:
-                        await advanced_rate_limiter.check_rate_limit(service_name)
-                    except RateLimitExceeded as e:
-                        logger.warning(f"Advanced rate limit exceeded: {e}")
-                        
-                        # Try to get stale cached data
-                        stale_data = await cache_manager.get_stale_data(
-                            self.provider.value, service, region, params
-                        )
-                        
-                        if stale_data:
-                            stale_data["rate_limited"] = True
-                            stale_data["retry_after"] = e.retry_after
-                            return stale_data
-                        
-                        raise
+            if cached_data:
+                logger.debug(f"Cache hit for {self.provider.value}:{service}:{region}")
+                # Add provider metadata
+                cached_data["provider"] = self.provider.value
+                cached_data["service"] = service
+                cached_data["region"] = region
+                cached_data["cache_source"] = "unified_cache"
+                return cached_data
+        
+        except Exception as e:
+            logger.warning(f"Error accessing unified cache: {e}")
+        
+        # Use resilience manager for comprehensive error handling
+        try:
+            from ..core.resilience import resilience_manager
+            
+            async with resilience_manager.resilient_call(
+                service_name=service_name,
+                fallback_key=fallback_key,
+                cache_manager=unified_cache.cache_manager if unified_cache else None
+            ) as resilient_execute:
                 
-                # Fetch fresh data from API
-                logger.info(f"Fetching fresh data for {self.provider.value}:{service}:{region}")
+                async def fetch_with_rate_limiting():
+                    """Fetch data with rate limiting check."""
+                    # Check advanced rate limits if available
+                    if advanced_rate_limiter:
+                        try:
+                            await advanced_rate_limiter.check_rate_limit(service_name)
+                        except RateLimitExceeded as e:
+                            logger.warning(f"Advanced rate limit exceeded: {e}")
+                            
+                            # Try to get stale cached data from unified cache
+                            if unified_cache:
+                                stale_data = await unified_cache.get_cached_data(
+                                    provider=self.provider.value,
+                                    service_type=service_type,
+                                    region=region,
+                                    params=params,
+                                    allow_stale=True
+                                )
+                                
+                                if stale_data:
+                                    stale_data["rate_limited"] = True
+                                    stale_data["retry_after"] = e.retry_after
+                                    return stale_data
+                            
+                            raise
+                    
+                    # Fetch fresh data from API
+                    logger.info(f"Fetching fresh data for {self.provider.value}:{service}:{region}")
+                    fresh_data = await fetch_func()
+                    
+                    # Cache the fresh data using unified cache
+                    if unified_cache:
+                        await unified_cache.set_cached_data(
+                            provider=self.provider.value,
+                            service_type=service_type,
+                            region=region,
+                            data=fresh_data,
+                            params=params,
+                            tags=[f"api_call:{datetime.now(timezone.utc).isoformat()}"]
+                        )
+                    
+                    self._increment_api_calls()
+                    return fresh_data
+                
+                # Execute with full resilience patterns
+                result = await resilient_execute(fetch_with_rate_limiting)
+                
+                # Add provider metadata to result
+                if isinstance(result.get("data"), dict):
+                    result["data"]["provider"] = self.provider.value
+                    result["data"]["service"] = service
+                    result["data"]["region"] = region
+                    result["data"]["resilience_metadata"] = {
+                        "source": result["source"],
+                        "fallback_used": result["fallback_used"],
+                        "degraded_mode": result["degraded_mode"],
+                        "warnings": result["warnings"]
+                    }
+                
+                return result["data"]
+        
+        except ImportError:
+            # Fallback if resilience manager not available
+            logger.warning("Resilience manager not available, using simple caching")
+            
+            # Simple fetch and cache
+            try:
                 fresh_data = await fetch_func()
                 
-                # Cache the fresh data
-                await cache_manager.set(
-                    self.provider.value, service, region, fresh_data, cache_ttl, params
-                )
+                if unified_cache:
+                    await unified_cache.set_cached_data(
+                        provider=self.provider.value,
+                        service_type=service_type,
+                        region=region,
+                        data=fresh_data,
+                        params=params
+                    )
                 
                 self._increment_api_calls()
                 return fresh_data
-            
-            # Execute with full resilience patterns
-            result = await resilient_execute(fetch_with_rate_limiting)
-            
-            # Add provider metadata to result
-            if isinstance(result.get("data"), dict):
-                result["data"]["provider"] = self.provider.value
-                result["data"]["service"] = service
-                result["data"]["region"] = region
-                result["data"]["resilience_metadata"] = {
-                    "source": result["source"],
-                    "fallback_used": result["fallback_used"],
-                    "degraded_mode": result["degraded_mode"],
-                    "warnings": result["warnings"]
-                }
-            
-            return result["data"]
+                
+            except Exception as e:
+                logger.error(f"Error fetching data: {e}")
+                
+                # Try to get stale data as last resort
+                if unified_cache:
+                    stale_data = await unified_cache.get_cached_data(
+                        provider=self.provider.value,
+                        service_type=service_type,
+                        region=region,
+                        params=params,
+                        allow_stale=True
+                    )
+                    
+                    if stale_data:
+                        stale_data["error_fallback"] = True
+                        stale_data["error"] = str(e)
+                        return stale_data
+                
+                raise
 
 
 class CloudServiceError(Exception):

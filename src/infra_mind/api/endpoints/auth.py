@@ -12,6 +12,9 @@ from loguru import logger
 from datetime import datetime, timedelta
 import uuid
 
+from ...models.user import User
+from ...core.auth import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
+
 router = APIRouter()
 security = HTTPBearer()
 
@@ -71,38 +74,40 @@ async def register(user_data: UserRegister):
     Creates a new user account and returns a JWT token for immediate login.
     """
     try:
-        # TODO: Check if user already exists
-        # existing_user = await User.find_one({"email": user_data.email})
-        # if existing_user:
-        #     raise HTTPException(status_code=400, detail="Email already registered")
+        # Check if user already exists
+        existing_user = await User.find_one(User.email == user_data.email)
+        if existing_user:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="Email already registered"
+            )
         
-        # TODO: Hash password and create user
-        # hashed_password = hash_password(user_data.password)
-        # user = User(
-        #     id=str(uuid.uuid4()),
-        #     email=user_data.email,
-        #     hashed_password=hashed_password,
-        #     full_name=user_data.full_name,
-        #     company=user_data.company,
-        #     role="user",
-        #     is_active=True,
-        #     created_at=datetime.utcnow()
-        # )
-        # await user.save()
+        # Hash password and create user
+        hashed_password = hash_password(user_data.password)
+        user = User(
+            email=user_data.email,
+            hashed_password=hashed_password,
+            full_name=user_data.full_name,
+            company_name=user_data.company,
+            role="user",
+            is_active=True,
+            created_at=datetime.utcnow()
+        )
+        await user.insert()
         
-        # TODO: Generate JWT token
-        # access_token = create_access_token(user.id)
+        # Generate JWT token
+        access_token = await create_access_token(str(user.id))
         
         logger.info(f"User registered: {user_data.email}")
         
-        # Mock response
+        # Real response
         return TokenResponse(
-            access_token="mock_jwt_token_12345",
+            access_token=access_token,
             token_type="bearer",
             expires_in=3600,
-            user_id=str(uuid.uuid4()),
-            email=user_data.email,
-            full_name=user_data.full_name
+            user_id=str(user.id),
+            email=user.email,
+            full_name=user.full_name
         )
         
     except HTTPException:
@@ -123,32 +128,45 @@ async def login(credentials: UserLogin):
     Authenticates user credentials and returns a JWT token.
     """
     try:
-        # TODO: Find user by email
-        # user = await User.find_one({"email": credentials.email})
-        # if not user:
-        #     raise HTTPException(status_code=401, detail="Invalid credentials")
+        # Find user by email
+        user = await User.find_one(User.email == credentials.email)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Invalid credentials"
+            )
         
-        # TODO: Verify password
-        # if not verify_password(credentials.password, user.hashed_password):
-        #     raise HTTPException(status_code=401, detail="Invalid credentials")
+        # Verify password
+        if not verify_password(credentials.password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Invalid credentials"
+            )
         
-        # TODO: Check if user is active
-        # if not user.is_active:
-        #     raise HTTPException(status_code=401, detail="Account disabled")
+        # Check if user is active
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Account disabled"
+            )
         
-        # TODO: Generate JWT token
-        # access_token = create_access_token(user.id)
+        # Generate JWT token
+        access_token = await create_access_token(str(user.id))
+        
+        # Update last login
+        user.last_login = datetime.utcnow()
+        await user.save()
         
         logger.info(f"User logged in: {credentials.email}")
         
-        # Mock response
+        # Real response
         return TokenResponse(
-            access_token="mock_jwt_token_67890",
+            access_token=access_token,
             token_type="bearer",
             expires_in=3600,
-            user_id=str(uuid.uuid4()),
-            email=credentials.email,
-            full_name="Mock User"
+            user_id=str(user.id),
+            email=user.email,
+            full_name=user.full_name
         )
         
     except HTTPException:
@@ -192,23 +210,32 @@ async def get_profile(credentials: HTTPAuthorizationCredentials = Depends(securi
     Returns the profile information for the authenticated user.
     """
     try:
-        # TODO: Decode JWT token and get user
-        # user_id = decode_token(credentials.credentials)
-        # user = await User.get(user_id)
-        # if not user:
-        #     raise HTTPException(status_code=401, detail="Invalid token")
+        # Decode JWT token and get user
+        user_id = await decode_token(credentials.credentials)
+        user = await User.get(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Invalid token"
+            )
         
-        logger.info("Retrieved user profile")
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Account disabled"
+            )
         
-        # Mock response
+        logger.info(f"Retrieved user profile: {user.email}")
+        
+        # Real response
         return UserProfile(
-            id=str(uuid.uuid4()),
-            email="user@example.com",
-            full_name="Mock User",
-            company="Example Corp",
-            role="user",
-            is_active=True,
-            created_at=datetime.utcnow()
+            id=str(user.id),
+            email=user.email,
+            full_name=user.full_name,
+            company=user.company_name,
+            role=user.role,
+            is_active=user.is_active,
+            created_at=user.created_at
         )
         
     except HTTPException:
@@ -259,22 +286,34 @@ async def change_password(
     Changes the password for the authenticated user.
     """
     try:
-        # TODO: Decode token and get user
-        # user_id = decode_token(credentials.credentials)
-        # user = await User.get(user_id)
-        # if not user:
-        #     raise HTTPException(status_code=401, detail="Invalid token")
+        # Decode token and get user
+        user_id = await decode_token(credentials.credentials)
+        user = await User.get(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Invalid token"
+            )
         
-        # TODO: Verify current password
-        # if not verify_password(request.current_password, user.hashed_password):
-        #     raise HTTPException(status_code=400, detail="Current password is incorrect")
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Account disabled"
+            )
         
-        # TODO: Update password
-        # user.hashed_password = hash_password(request.new_password)
-        # user.updated_at = datetime.utcnow()
-        # await user.save()
+        # Verify current password
+        if not verify_password(request.current_password, user.hashed_password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, 
+                detail="Current password is incorrect"
+            )
         
-        logger.info("Password changed successfully")
+        # Update password
+        user.hashed_password = hash_password(request.new_password)
+        user.updated_at = datetime.utcnow()
+        await user.save()
+        
+        logger.info(f"Password changed successfully for user: {user.email}")
         
         return {"message": "Password changed successfully"}
         
@@ -296,17 +335,21 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
     Checks if the provided JWT token is valid and not expired.
     """
     try:
-        # TODO: Decode and validate token
-        # user_id = decode_token(credentials.credentials)
-        # user = await User.get(user_id)
-        # if not user or not user.is_active:
-        #     raise HTTPException(status_code=401, detail="Invalid token")
+        # Decode and validate token
+        user_id = await decode_token(credentials.credentials)
+        user = await User.get(user_id)
+        if not user or not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Invalid token"
+            )
         
-        logger.info("Token verified successfully")
+        logger.info(f"Token verified successfully for user: {user.email}")
         
         return {
             "valid": True,
-            "user_id": str(uuid.uuid4()),
+            "user_id": str(user.id),
+            "email": user.email,
             "expires_at": datetime.utcnow() + timedelta(hours=1)
         }
         

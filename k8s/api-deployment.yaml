@@ -6,38 +6,90 @@ metadata:
   labels:
     app: infra-mind-api
     component: backend
+    version: v1.0.0
+    tier: production
+  annotations:
+    deployment.kubernetes.io/revision: "1"
+    kubernetes.io/change-cause: "Production deployment with enhanced security"
 spec:
   replicas: 3
   strategy:
     type: RollingUpdate
     rollingUpdate:
-      maxSurge: 1
-      maxUnavailable: 1
+      maxSurge: 25%
+      maxUnavailable: 25%
   selector:
     matchLabels:
       app: infra-mind-api
+      version: v1.0.0
   template:
     metadata:
       labels:
         app: infra-mind-api
         component: backend
+        version: v1.0.0
+        tier: production
       annotations:
         prometheus.io/scrape: "true"
         prometheus.io/port: "8000"
         prometheus.io/path: "/metrics"
+        cluster-autoscaler.kubernetes.io/safe-to-evict: "true"
+        config.linkerd.io/proxy-cpu-request: "0.1"
+        config.linkerd.io/proxy-memory-request: "20Mi"
     spec:
       serviceAccountName: infra-mind-api
+      automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        seccompProfile:
+          type: RuntimeDefault
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - infra-mind-api
+              topologyKey: kubernetes.io/hostname
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: node-type
+                operator: In
+                values:
+                - compute
+      tolerations:
+      - key: "compute-node"
+        operator: "Equal"
+        value: "true"
+        effect: "NoSchedule"
       containers:
       - name: api
-        image: infra-mind/api:latest
-        imagePullPolicy: Always
+        image: infra-mind/api:v1.0.0
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
           name: http
+          protocol: TCP
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+          runAsUser: 1001
+          runAsGroup: 1001
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
         env:
         # Configuration from ConfigMap
         - name: INFRA_MIND_ENVIRONMENT
@@ -158,52 +210,92 @@ spec:
         volumeMounts:
         - name: logs
           mountPath: /app/logs
+          readOnly: false
+        - name: tmp
+          mountPath: /tmp
+          readOnly: false
+        - name: cache
+          mountPath: /app/cache
+          readOnly: false
         - name: gcp-service-account
-          mountPath: /app/secrets
+          mountPath: /app/secrets/gcp
+          readOnly: true
+        - name: ssl-certs
+          mountPath: /app/secrets/ssl
           readOnly: true
         
         resources:
           requests:
             memory: "1Gi"
             cpu: "500m"
+            ephemeral-storage: "1Gi"
           limits:
             memory: "4Gi"
             cpu: "2000m"
+            ephemeral-storage: "5Gi"
         
         livenessProbe:
           httpGet:
             path: /health
             port: 8000
+            scheme: HTTP
+            httpHeaders:
+            - name: User-Agent
+              value: "k8s-liveness-probe"
           initialDelaySeconds: 60
           periodSeconds: 30
           timeoutSeconds: 10
           failureThreshold: 3
+          successThreshold: 1
         
         readinessProbe:
           httpGet:
-            path: /health
+            path: /ready
             port: 8000
+            scheme: HTTP
+            httpHeaders:
+            - name: User-Agent
+              value: "k8s-readiness-probe"
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3
+          successThreshold: 1
         
         startupProbe:
           httpGet:
-            path: /health
+            path: /startup
             port: 8000
+            scheme: HTTP
+            httpHeaders:
+            - name: User-Agent
+              value: "k8s-startup-probe"
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 30
+          successThreshold: 1
       
       volumes:
       - name: logs
-        emptyDir: {}
+        emptyDir:
+          sizeLimit: 1Gi
+      - name: tmp
+        emptyDir:
+          sizeLimit: 500Mi
+      - name: cache
+        emptyDir:
+          sizeLimit: 2Gi
       - name: gcp-service-account
         secret:
           secretName: gcp-service-account
           optional: true
+          defaultMode: 0400
+      - name: ssl-certs
+        secret:
+          secretName: infra-mind-ssl-certs
+          optional: true
+          defaultMode: 0400
       
       initContainers:
       - name: wait-for-mongodb
