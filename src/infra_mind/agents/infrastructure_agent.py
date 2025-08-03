@@ -14,6 +14,7 @@ from .base import BaseAgent, AgentConfig, AgentRole
 from .tools import ToolResult
 from .web_search import get_web_search_client
 from ..models.assessment import Assessment
+from ..core.llm_client import get_llm_client
 
 logger = logging.getLogger(__name__)
 
@@ -339,8 +340,14 @@ class InfrastructureAgent(BaseAgent):
         logger.info("Infrastructure Agent starting compute resource analysis")
         
         try:
-            # Step 1: Analyze current infrastructure requirements with real data
-            infrastructure_analysis = await self._analyze_infrastructure_requirements()
+            # Initialize clients for real data collection
+            if not self.web_search_client:
+                self.web_search_client = await get_web_search_client()
+            if not self.llm_client:
+                self.llm_client = await get_llm_client()
+            
+            # Step 1: Analyze current infrastructure requirements with LLM enhancement
+            infrastructure_analysis = await self._analyze_infrastructure_requirements_with_llm()
             
             # Step 2: Collect real cloud resource data
             cloud_resource_data = await self._collect_real_cloud_resource_data(infrastructure_analysis)
@@ -1241,3 +1248,114 @@ class InfrastructureAgent(BaseAgent):
     
     def _create_cost_optimization_timeline(self, cost_opportunities: List[Dict[str, Any]]) -> Dict[str, Any]:
         return {"timeline": "3_months", "phases": ["assessment", "implementation", "optimization"]}
+    
+    async def _analyze_infrastructure_requirements_with_llm(self) -> Dict[str, Any]:
+        """
+        Analyze infrastructure requirements using LLM analysis and real cloud research.
+        
+        Returns:
+            Dictionary containing enhanced infrastructure analysis
+        """
+        try:
+            # Get base analysis first
+            base_analysis = await self._analyze_infrastructure_requirements()
+            
+            assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+            technical_req = assessment_data.get("technical_requirements", {})
+            business_req = assessment_data.get("business_requirements", {})
+            
+            # Research latest infrastructure trends
+            infra_trends = await self.web_search_client.search(
+                "cloud infrastructure trends 2024 2025 compute optimization scaling best practices",
+                num_results=5
+            )
+            
+            # Prepare context for LLM analysis
+            infrastructure_context = f"""
+            BUSINESS CONTEXT:
+            - Industry: {business_req.get('industry', 'Not specified')}
+            - Expected Users: {technical_req.get('expected_users', 'Not specified')}
+            - Workload Types: {technical_req.get('workload_types', [])}
+            - Performance Requirements: {technical_req.get('performance_requirements', {})}
+            - Budget Constraints: {business_req.get('budget_range', 'Not specified')}
+            - Geographic Presence: {business_req.get('target_markets', [])}
+            
+            CURRENT INFRASTRUCTURE TRENDS (2024-2025):
+            """
+            
+            for result in infra_trends.get("results", [])[:3]:
+                infrastructure_context += f"- {result.get('title', '')}: {result.get('snippet', '')[:200]}...\n"
+            
+            analysis_prompt = f"""
+            Analyze infrastructure requirements and provide comprehensive recommendations:
+            
+            {infrastructure_context}
+            
+            Based on this information, provide detailed analysis:
+            1. Optimal compute architecture recommendations
+            2. Scaling strategy alignment with business growth
+            3. Performance optimization opportunities
+            4. Cost-effective resource allocation strategies
+            5. Technology stack recommendations for workload types
+            6. Regional deployment strategies
+            7. Disaster recovery and high availability considerations
+            8. Security and compliance infrastructure requirements
+            
+            Consider modern cloud-native approaches, containerization, serverless where appropriate, and edge computing for global applications.
+            
+            Return in JSON format with: compute_architecture, scaling_strategy, performance_optimization, cost_optimization, technology_stack, regional_strategy, reliability_strategy, security_requirements.
+            """
+            
+            llm_response = await self.llm_client.generate_text(
+                prompt=analysis_prompt,
+                system_prompt="You are an infrastructure architect with expertise in cloud-native design, performance optimization, and cost-effective scaling strategies.",
+                temperature=0.1,
+                max_tokens=2500
+            )
+            
+            llm_analysis = self._parse_llm_response(llm_response)
+            
+            # Enhance base analysis with LLM insights
+            enhanced_analysis = {
+                **base_analysis,
+                "compute_architecture": llm_analysis.get("compute_architecture", {}),
+                "scaling_strategy": llm_analysis.get("scaling_strategy", {}),
+                "performance_optimization": llm_analysis.get("performance_optimization", {}),
+                "cost_optimization": llm_analysis.get("cost_optimization", {}),
+                "technology_stack": llm_analysis.get("technology_stack", {}),
+                "regional_strategy": llm_analysis.get("regional_strategy", {}),
+                "reliability_strategy": llm_analysis.get("reliability_strategy", {}),
+                "security_requirements": llm_analysis.get("security_requirements", {}),
+                "infrastructure_trends": infra_trends.get("results", []),
+                "llm_insights": llm_analysis.get("analysis", ""),
+                "analysis_timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            
+            return enhanced_analysis
+            
+        except Exception as e:
+            logger.warning(f"LLM-enhanced infrastructure analysis failed: {str(e)}")
+            return await self._analyze_infrastructure_requirements()
+    
+    def _parse_llm_response(self, response: str) -> Dict[str, Any]:
+        """Parse LLM response, handling both JSON and text formats."""
+        import json
+        try:
+            # Try to parse as JSON first
+            return json.loads(response)
+        except json.JSONDecodeError:
+            # Fallback to extracting structured information from text
+            return {
+                "analysis": response,
+                "extracted_points": self._extract_key_points_from_text(response)
+            }
+    
+    def _extract_key_points_from_text(self, text: str) -> List[str]:
+        """Extract key points from text when JSON parsing fails."""
+        points = []
+        lines = text.split('\n')
+        for line in lines:
+            line = line.strip()
+            if line and (line.startswith(('1.', '2.', '3.', '4.', '5.', '-', '•', '*'))):
+                points.append(line)
+        return points

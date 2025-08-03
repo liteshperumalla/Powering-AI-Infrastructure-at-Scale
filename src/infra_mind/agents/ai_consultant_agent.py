@@ -1269,3 +1269,283 @@ class AIConsultantAgent(BaseAgent):
                 result["extracted_points"].append(line)
         
         return result
+    
+    async def _analyze_business_processes_with_market_data(self, market_intelligence: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Analyze business processes with real market data and trends.
+        
+        Args:
+            market_intelligence: Current AI market intelligence data
+            
+        Returns:
+            Dictionary containing enhanced business process analysis
+        """
+        try:
+            # Get base business process analysis
+            base_analysis = await self._analyze_business_processes()
+            
+            assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+            business_req = assessment_data.get("business_requirements", {})
+            
+            # Prepare market context for analysis
+            market_context = self._prepare_market_context(market_intelligence)
+            
+            analysis_prompt = f"""
+            Analyze business processes and identify AI transformation opportunities based on current market trends:
+            
+            BUSINESS CONTEXT:
+            - Industry: {business_req.get('industry', 'Not specified')}
+            - Company Size: {business_req.get('company_size', 'Not specified')}
+            - Current Processes: {business_req.get('current_processes', [])}
+            - Pain Points: {business_req.get('pain_points', [])}
+            - Goals: {business_req.get('goals', [])}
+            
+            CURRENT AI MARKET INTELLIGENCE:
+            {market_context}
+            
+            Based on this information, analyze:
+            1. Current process efficiency and bottlenecks
+            2. AI-ready processes for immediate transformation
+            3. High-impact automation opportunities
+            4. Data availability and quality for AI initiatives
+            5. Process standardization requirements
+            6. Change management considerations
+            7. ROI potential for each process area
+            8. Implementation complexity and timeline
+            
+            Return in JSON format with: process_efficiency, ai_ready_processes, automation_opportunities, data_readiness, standardization_needs, change_management, roi_analysis, implementation_timeline.
+            """
+            
+            llm_response = await self.llm_client.generate_text(
+                prompt=analysis_prompt,
+                system_prompt="You are a business process analyst and AI transformation consultant with expertise in identifying AI opportunities across various industries.",
+                temperature=0.2,
+                max_tokens=2500
+            )
+            
+            llm_analysis = self._parse_llm_response(llm_response)
+            
+            # Enhance base analysis with market insights
+            enhanced_analysis = {
+                **base_analysis,
+                "process_efficiency": llm_analysis.get("process_efficiency", {}),
+                "ai_ready_processes": llm_analysis.get("ai_ready_processes", []),
+                "automation_opportunities": llm_analysis.get("automation_opportunities", []),
+                "data_readiness": llm_analysis.get("data_readiness", {}),
+                "standardization_needs": llm_analysis.get("standardization_needs", []),
+                "change_management": llm_analysis.get("change_management", {}),
+                "roi_analysis": llm_analysis.get("roi_analysis", {}),
+                "implementation_timeline": llm_analysis.get("implementation_timeline", {}),
+                "market_insights": llm_analysis.get("analysis", ""),
+                "analysis_timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            
+            return enhanced_analysis
+            
+        except Exception as e:
+            logger.warning(f"Enhanced business process analysis failed: {str(e)}")
+            return await self._analyze_business_processes()
+    
+    async def _identify_ai_opportunities_with_trends(self, market_intelligence: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Identify AI opportunities using current market trends and success stories.
+        
+        Args:
+            market_intelligence: Current AI market intelligence data
+            
+        Returns:
+            Dictionary containing AI opportunities with market validation
+        """
+        try:
+            assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+            business_req = assessment_data.get("business_requirements", {})
+            
+            # Prepare market context
+            market_context = self._prepare_market_context(market_intelligence)
+            
+            opportunities_prompt = f"""
+            Identify AI opportunities based on business context and current market trends:
+            
+            BUSINESS PROFILE:
+            - Industry: {business_req.get('industry', 'Not specified')}
+            - Company Size: {business_req.get('company_size', 'Not specified')}
+            - Budget Range: {business_req.get('budget_range', 'Not specified')}
+            - Technical Maturity: {business_req.get('technical_maturity', 'Not specified')}
+            - Goals: {business_req.get('goals', [])}
+            - Current Challenges: {business_req.get('pain_points', [])}
+            
+            CURRENT AI MARKET TRENDS:
+            {market_context}
+            
+            Identify specific AI opportunities:
+            1. High-impact, low-complexity quick wins
+            2. Strategic long-term AI initiatives
+            3. Industry-specific AI applications
+            4. Competitive advantage opportunities
+            5. Cost reduction potential
+            6. Revenue generation possibilities
+            7. Customer experience improvements
+            8. Operational efficiency gains
+            
+            For each opportunity, include:
+            - Business value proposition
+            - Implementation complexity
+            - Resource requirements
+            - Success metrics
+            - Market validation examples
+            
+            Return in JSON format with: quick_wins, strategic_initiatives, industry_specific, competitive_advantage, cost_reduction, revenue_generation, customer_experience, operational_efficiency.
+            """
+            
+            llm_response = await self.llm_client.generate_text(
+                prompt=opportunities_prompt,
+                system_prompt="You are an AI strategy consultant with expertise in identifying high-value AI opportunities across various industries and business models.",
+                temperature=0.2,
+                max_tokens=2500
+            )
+            
+            opportunities_analysis = self._parse_llm_response(llm_response)
+            
+            return {
+                "quick_wins": opportunities_analysis.get("quick_wins", []),
+                "strategic_initiatives": opportunities_analysis.get("strategic_initiatives", []),
+                "industry_specific": opportunities_analysis.get("industry_specific", []),
+                "competitive_advantage": opportunities_analysis.get("competitive_advantage", []),
+                "cost_reduction": opportunities_analysis.get("cost_reduction", []),
+                "revenue_generation": opportunities_analysis.get("revenue_generation", []),
+                "customer_experience": opportunities_analysis.get("customer_experience", []),
+                "operational_efficiency": opportunities_analysis.get("operational_efficiency", []),
+                "market_validation": market_intelligence.get("success_stories", []),
+                "trends_context": market_intelligence.get("trends", []),
+                "opportunities_insights": opportunities_analysis.get("analysis", ""),
+                "analysis_timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            
+        except Exception as e:
+            logger.warning(f"AI opportunities identification failed: {str(e)}")
+            return {
+                "quick_wins": ["Chatbot implementation", "Process automation"],
+                "strategic_initiatives": ["Predictive analytics platform"],
+                "error": str(e),
+                "analysis_timestamp": datetime.now(timezone.utc).isoformat()
+            }
+    
+    async def _assess_ai_readiness_with_benchmarks(self, market_intelligence: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Assess AI readiness using industry benchmarks and market data.
+        
+        Args:
+            market_intelligence: Current AI market intelligence data
+            
+        Returns:
+            Dictionary containing AI readiness assessment with benchmarks
+        """
+        try:
+            assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+            business_req = assessment_data.get("business_requirements", {})
+            technical_req = assessment_data.get("technical_requirements", {})
+            
+            # Prepare benchmark context
+            benchmark_context = self._prepare_benchmark_context(market_intelligence)
+            
+            readiness_prompt = f"""
+            Assess AI readiness against industry benchmarks and best practices:
+            
+            CURRENT STATE:
+            - Industry: {business_req.get('industry', 'Not specified')}
+            - Company Size: {business_req.get('company_size', 'Not specified')}
+            - Technical Infrastructure: {technical_req.get('existing_infrastructure', 'Not specified')}
+            - Data Maturity: {business_req.get('data_maturity', 'Not specified')}
+            - Team Skills: {business_req.get('technical_expertise', 'Not specified')}
+            - Budget Allocation: {business_req.get('budget_range', 'Not specified')}
+            
+            INDUSTRY BENCHMARKS:
+            {benchmark_context}
+            
+            Assess readiness across dimensions:
+            1. Data Infrastructure and Quality (0-100 score)
+            2. Technical Infrastructure and Platform (0-100 score)
+            3. Team Skills and Capabilities (0-100 score)
+            4. Organizational Culture and Change Management (0-100 score)
+            5. Governance and Ethics Framework (0-100 score)
+            6. Budget and Resource Allocation (0-100 score)
+            7. Leadership Support and Vision (0-100 score)
+            
+            Provide specific gap analysis and improvement recommendations for each dimension.
+            
+            Return in JSON format with: data_readiness, technical_readiness, team_readiness, culture_readiness, governance_readiness, budget_readiness, leadership_readiness, overall_score, gap_analysis, improvement_plan.
+            """
+            
+            llm_response = await self.llm_client.generate_text(
+                prompt=readiness_prompt,
+                system_prompt="You are an AI transformation consultant expert at assessing organizational readiness for AI initiatives using industry benchmarks.",
+                temperature=0.1,
+                max_tokens=2500
+            )
+            
+            readiness_analysis = self._parse_llm_response(llm_response)
+            
+            return {
+                "data_readiness": readiness_analysis.get("data_readiness", {}),
+                "technical_readiness": readiness_analysis.get("technical_readiness", {}),
+                "team_readiness": readiness_analysis.get("team_readiness", {}),
+                "culture_readiness": readiness_analysis.get("culture_readiness", {}),
+                "governance_readiness": readiness_analysis.get("governance_readiness", {}),
+                "budget_readiness": readiness_analysis.get("budget_readiness", {}),
+                "leadership_readiness": readiness_analysis.get("leadership_readiness", {}),
+                "overall_score": readiness_analysis.get("overall_score", 0),
+                "gap_analysis": readiness_analysis.get("gap_analysis", {}),
+                "improvement_plan": readiness_analysis.get("improvement_plan", []),
+                "benchmark_data": market_intelligence.get("benchmarks", {}),
+                "readiness_insights": readiness_analysis.get("analysis", ""),
+                "assessment_timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            
+        except Exception as e:
+            logger.warning(f"AI readiness assessment failed: {str(e)}")
+            return {
+                "overall_score": 0,
+                "gap_analysis": {"error": "Assessment unavailable"},
+                "improvement_plan": ["Conduct manual readiness assessment"],
+                "error": str(e),
+                "assessment_timestamp": datetime.now(timezone.utc).isoformat()
+            }
+    
+    def _prepare_market_context(self, market_intelligence: Dict[str, Any]) -> str:
+        """Prepare market context for LLM analysis."""
+        context_parts = []
+        
+        # Add AI trends
+        trends = market_intelligence.get("ai_trends", [])
+        if trends:
+            context_parts.append("Current AI Trends:")
+            for trend in trends[:5]:  # Limit to top 5
+                title = trend.get("title", "")
+                snippet = trend.get("snippet", "")
+                context_parts.append(f"- {title}: {snippet[:150]}...")
+        
+        # Add success stories
+        success_stories = market_intelligence.get("success_stories", [])
+        if success_stories:
+            context_parts.append("\nAI Success Stories:")
+            for story in success_stories[:3]:  # Limit to top 3
+                title = story.get("title", "")
+                snippet = story.get("snippet", "")
+                context_parts.append(f"- {title}: {snippet[:150]}...")
+        
+        return "\n".join(context_parts)
+    
+    def _prepare_benchmark_context(self, market_intelligence: Dict[str, Any]) -> str:
+        """Prepare benchmark context for LLM analysis."""
+        context_parts = []
+        
+        # Add industry benchmarks
+        benchmarks = market_intelligence.get("industry_benchmarks", [])
+        if benchmarks:
+            context_parts.append("Industry AI Benchmarks:")
+            for benchmark in benchmarks[:3]:
+                title = benchmark.get("title", "")
+                snippet = benchmark.get("snippet", "")
+                context_parts.append(f"- {title}: {snippet[:150]}...")
+        
+        return "\n".join(context_parts)

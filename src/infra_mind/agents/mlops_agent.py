@@ -11,7 +11,9 @@ from datetime import datetime, timezone
 
 from .base import BaseAgent, AgentConfig, AgentRole
 from .tools import ToolResult
+from .web_search import get_web_search_client
 from ..models.assessment import Assessment
+from ..core.llm_client import get_llm_client
 
 logger = logging.getLogger(__name__)
 
@@ -104,8 +106,14 @@ class MLOpsAgent(BaseAgent):
         logger.info("MLOps Agent starting ML pipeline analysis")
         
         try:
-            # Step 1: Analyze ML workload requirements
-            ml_analysis = await self._analyze_ml_requirements()
+            # Initialize clients for real data collection
+            if not self.web_search_client:
+                self.web_search_client = await get_web_search_client()
+            if not self.llm_client:
+                self.llm_client = await get_llm_client()
+            
+            # Step 1: Analyze ML workload requirements with LLM enhancement
+            ml_analysis = await self._analyze_ml_requirements_with_llm()
             
             # Step 2: Assess current ML maturity and gaps
             maturity_assessment = await self._assess_ml_maturity()
@@ -1298,3 +1306,126 @@ class MLOpsAgent(BaseAgent):
             return "100MB - 1GB"
         else:
             return "< 100MB"
+    
+    async def _analyze_ml_requirements_with_llm(self) -> Dict[str, Any]:
+        """
+        Analyze ML requirements using LLM analysis and real MLOps research.
+        
+        Returns:
+            Dictionary containing enhanced ML analysis
+        """
+        try:
+            # Get base analysis first
+            base_analysis = await self._analyze_ml_requirements()
+            
+            assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+            technical_req = assessment_data.get("technical_requirements", {})
+            business_req = assessment_data.get("business_requirements", {})
+            
+            # Research latest MLOps trends and tools
+            mlops_trends = await self.web_search_client.search(
+                "MLOps trends 2024 2025 machine learning operations best practices tools platforms",
+                num_results=5
+            )
+            
+            # Prepare context for LLM analysis
+            mlops_context = f"""
+            BUSINESS AND ML CONTEXT:
+            - Industry: {business_req.get('industry', 'Not specified')}
+            - Data Types: {technical_req.get('data_types', [])}
+            - Workload Types: {technical_req.get('workload_types', [])}
+            - Expected Users: {technical_req.get('expected_users', 'Not specified')}
+            - Performance Requirements: {technical_req.get('performance_requirements', {})}
+            - Budget Constraints: {business_req.get('budget_range', 'Not specified')}
+            - Existing Infrastructure: {technical_req.get('existing_infrastructure', 'None specified')}
+            - Team Size: {business_req.get('team_size', 'Not specified')}
+            
+            CURRENT MLOPS TRENDS (2024-2025):
+            """
+            
+            for result in mlops_trends.get("results", [])[:3]:
+                mlops_context += f"- {result.get('title', '')}: {result.get('snippet', '')[:200]}...\n"
+            
+            analysis_prompt = f"""
+            Analyze ML/AI requirements and provide comprehensive MLOps recommendations:
+            
+            {mlops_context}
+            
+            Based on this information, provide detailed analysis:
+            1. ML workload classification and requirements
+            2. Recommended MLOps platform architecture
+            3. CI/CD pipeline design for ML workflows
+            4. Model deployment and serving strategies
+            5. Data pipeline and feature store requirements  
+            6. Model monitoring and observability needs
+            7. Team workflow and collaboration tools
+            8. Scalability and performance optimization
+            9. Cost optimization strategies for ML infrastructure
+            10. Risk mitigation and ML governance
+            
+            Consider modern MLOps practices including:
+            - Model versioning and experiment tracking
+            - Automated testing for ML pipelines
+            - Feature stores and data versioning
+            - Model drift detection and retraining
+            - A/B testing for models
+            - Explainability and compliance
+            
+            Return in JSON format with: workload_classification, platform_architecture, cicd_design, deployment_strategy, data_pipeline, monitoring_strategy, collaboration_tools, scalability_plan, cost_optimization, governance_framework.
+            """
+            
+            llm_response = await self.llm_client.generate_text(
+                prompt=analysis_prompt,
+                system_prompt="You are an MLOps expert with deep knowledge of machine learning operations, data engineering, and ML infrastructure at scale.",
+                temperature=0.1,
+                max_tokens=2500
+            )
+            
+            llm_analysis = self._parse_llm_response(llm_response)
+            
+            # Enhance base analysis with LLM insights
+            enhanced_analysis = {
+                **base_analysis,
+                "workload_classification": llm_analysis.get("workload_classification", {}),
+                "platform_architecture": llm_analysis.get("platform_architecture", {}),
+                "cicd_design": llm_analysis.get("cicd_design", {}),
+                "deployment_strategy": llm_analysis.get("deployment_strategy", {}),
+                "data_pipeline": llm_analysis.get("data_pipeline", {}),
+                "monitoring_strategy": llm_analysis.get("monitoring_strategy", {}),
+                "collaboration_tools": llm_analysis.get("collaboration_tools", {}),
+                "scalability_plan": llm_analysis.get("scalability_plan", {}),
+                "cost_optimization": llm_analysis.get("cost_optimization", {}),
+                "governance_framework": llm_analysis.get("governance_framework", {}),
+                "mlops_trends": mlops_trends.get("results", []),
+                "llm_insights": llm_analysis.get("analysis", ""),
+                "analysis_timestamp": datetime.now(timezone.utc).isoformat()
+            }
+            
+            return enhanced_analysis
+            
+        except Exception as e:
+            logger.warning(f"LLM-enhanced ML requirements analysis failed: {str(e)}")
+            return await self._analyze_ml_requirements()
+    
+    def _parse_llm_response(self, response: str) -> Dict[str, Any]:
+        """Parse LLM response, handling both JSON and text formats."""
+        import json
+        try:
+            # Try to parse as JSON first
+            return json.loads(response)
+        except json.JSONDecodeError:
+            # Fallback to extracting structured information from text
+            return {
+                "analysis": response,
+                "extracted_points": self._extract_key_points_from_text(response)
+            }
+    
+    def _extract_key_points_from_text(self, text: str) -> List[str]:
+        """Extract key points from text when JSON parsing fails."""
+        points = []
+        lines = text.split('\n')
+        for line in lines:
+            line = line.strip()
+            if line and (line.startswith(('1.', '2.', '3.', '4.', '5.', '-', '•', '*'))):
+                points.append(line)
+        return points

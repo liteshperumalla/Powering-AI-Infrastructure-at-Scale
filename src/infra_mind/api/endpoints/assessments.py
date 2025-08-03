@@ -441,13 +441,24 @@ async def list_assessments(
             workload_types = []
             
             if assessment.business_requirements:
-                company_size = assessment.business_requirements.company_size.value if assessment.business_requirements.company_size else "unknown"
-                industry = assessment.business_requirements.industry.value if assessment.business_requirements.industry else "unknown"
-                if assessment.business_requirements.budget_constraints:
-                    budget_range = assessment.business_requirements.budget_constraints.total_budget_range.value if assessment.business_requirements.budget_constraints.total_budget_range else "unknown"
+                # Handle business_requirements as a dictionary
+                company_size = assessment.business_requirements.get("company_size", "unknown")
+                industry = assessment.business_requirements.get("industry", "unknown")
+                
+                # Handle budget constraints within the dictionary
+                budget_constraints = assessment.business_requirements.get("budget_constraints", {})
+                if isinstance(budget_constraints, dict):
+                    budget_range = budget_constraints.get("total_budget_range", "unknown")
+                else:
+                    budget_range = "unknown"
             
-            if assessment.technical_requirements and assessment.technical_requirements.workload_types:
-                workload_types = [wt.value for wt in assessment.technical_requirements.workload_types]
+            if assessment.technical_requirements:
+                # Handle technical_requirements as a dictionary
+                tech_workload_types = assessment.technical_requirements.get("workload_types", [])
+                if isinstance(tech_workload_types, list):
+                    workload_types = tech_workload_types
+                else:
+                    workload_types = []
             
             assessment_summaries.append(AssessmentSummary(
                 id=assessment.id,

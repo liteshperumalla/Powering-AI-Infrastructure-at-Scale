@@ -294,7 +294,7 @@ export default function AssessmentPage() {
                 };
 
                 // Make API call to create assessment
-                const response = await fetch('http://localhost:8000/api/v1/v1/assessments/', {
+                const response = await fetch('http://localhost:8000/api/v1/assessments/', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',

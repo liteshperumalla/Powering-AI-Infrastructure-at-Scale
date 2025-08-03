@@ -1013,3 +1013,559 @@ class ComplianceAgent(BaseAgent):
                 result["extracted_points"].append(line)
         
         return result
+    
+    async def _identify_applicable_regulations_with_research(self, regulatory_updates: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Identify applicable regulations using LLM analysis and real regulatory data.
+        
+        Args:
+            regulatory_updates: Current regulatory updates from web search
+            
+        Returns:
+            Dictionary containing applicable regulations with research backing
+        """
+        try:
+            assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+            business_req = assessment_data.get("business_requirements", {})
+            
+            # Prepare context for LLM analysis
+            regulatory_context = self._prepare_regulatory_context(regulatory_updates)
+            
+            analysis_prompt = f"""
+            Analyze the following business requirements and determine applicable regulations based on current regulatory landscape:
+            
+            BUSINESS CONTEXT:
+            - Industry: {business_req.get('industry', 'Not specified')}
+            - Company Location: {business_req.get('company_location', 'Not specified')}
+            - Target Markets: {business_req.get('target_markets', [])}
+            - Data Types: {business_req.get('data_types', [])}
+            - Company Size: {business_req.get('company_size', 'Not specified')}
+            - Annual Revenue: {business_req.get('annual_revenue', 'Not specified')}
+            
+            CURRENT REGULATORY LANDSCAPE:
+            {regulatory_context}
+            
+            Based on this information, identify:
+            1. All applicable regulations (GDPR, HIPAA, CCPA, SOX, PCI_DSS, ISO_27001, SOC_2)
+            2. Priority level for each regulation (Critical, High, Medium, Low)
+            3. Specific requirements that apply
+            4. Risk of non-compliance
+            5. Implementation timeline recommendations
+            
+            Return response in JSON format with: applicable_regulations, priority_mapping, specific_requirements, compliance_risks, implementation_timeline.
+            """
+            
+            llm_response = await self.llm_client.generate_text(
+                prompt=analysis_prompt,
+                system_prompt="You are a compliance expert with deep knowledge of global data protection and industry regulations.",
+                temperature=0.1,
+                max_tokens=2000
+            )
+            
+            analysis_result = self._parse_llm_response(llm_response)
+            
+            # Enhance with existing logic for validation
+            base_analysis = await self._identify_applicable_regulations()
+            
+            # Merge LLM insights with base analysis
+            enhanced_result = {
+                "applicable_regulations": analysis_result.get("applicable_regulations", base_analysis["applicable_regulations"]),
+                "priority_mapping": analysis_result.get("priority_mapping", {}),
+                "specific_requirements": analysis_result.get("specific_requirements", {}),
+                "compliance_risks": analysis_result.get("compliance_risks", {}),
+                "implementation_timeline": analysis_result.get("implementation_timeline", {}),
+                "regulation_details": base_analysis["regulation_details"],
+                "applicability_reasons": base_analysis["applicability_reasons"],
+                "llm_analysis": analysis_result.get("analysis", ""),
+                "regulatory_update_summary": self._summarize_regulatory_updates(regulatory_updates)
+            }
+            
+            return enhanced_result
+            
+        except Exception as e:
+            logger.warning(f"LLM-enhanced regulation identification failed, using fallback: {str(e)}")
+            return await self._identify_applicable_regulations()
+    
+    async def _assess_compliance_posture_with_real_data(self, applicable_regulations: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Assess compliance posture using LLM analysis and real compliance benchmarks.
+        
+        Args:
+            applicable_regulations: Result from regulation identification
+            
+        Returns:
+            Dictionary containing detailed compliance assessment
+        """
+        try:
+            assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+            technical_req = assessment_data.get("technical_requirements", {})
+            
+            # Prepare technical context for analysis
+            tech_context = f"""
+            Current Technical Configuration:
+            - Cloud Provider: {technical_req.get('cloud_provider', 'Not specified')}
+            - Data Processing: {technical_req.get('data_processing_requirements', [])}
+            - Security Requirements: {technical_req.get('security_requirements', [])}
+            - Encryption: {technical_req.get('encryption_requirements', 'Not specified')}
+            - Access Control: {technical_req.get('access_control', 'Not specified')}
+            - Data Backup: {technical_req.get('backup_requirements', 'Not specified')}
+            - Monitoring: {technical_req.get('monitoring_requirements', [])}
+            """
+            
+            regulations_list = applicable_regulations.get("applicable_regulations", [])
+            
+            assessment_prompt = f"""
+            Assess the current compliance posture for the following regulations based on technical configuration:
+            
+            APPLICABLE REGULATIONS: {', '.join(regulations_list)}
+            
+            {tech_context}
+            
+            For each regulation, assess:
+            1. Current compliance level (0-100%)
+            2. Critical gaps in current setup
+            3. Security control adequacy
+            4. Data handling compliance
+            5. Documentation and audit trail status
+            6. Risk exposure level
+            7. Immediate action items
+            
+            Provide specific, actionable insights based on current technical requirements.
+            Return in JSON format with regulation_scores, critical_gaps, security_adequacy, data_handling_compliance, documentation_status, risk_levels, action_items.
+            """
+            
+            llm_response = await self.llm_client.generate_text(
+                prompt=assessment_prompt,
+                system_prompt="You are a compliance auditor with expertise in technical compliance assessment across multiple regulatory frameworks.",
+                temperature=0.1,
+                max_tokens=2500
+            )
+            
+            llm_analysis = self._parse_llm_response(llm_response)
+            
+            # Enhance with base assessment
+            base_assessment = await self._assess_compliance_posture(applicable_regulations)
+            
+            # Create comprehensive assessment
+            enhanced_assessment = {
+                "regulation_scores": llm_analysis.get("regulation_scores", base_assessment.get("compliance_scores", {})),
+                "compliance_status": base_assessment.get("compliance_status", {}),
+                "critical_gaps": llm_analysis.get("critical_gaps", {}),
+                "security_adequacy": llm_analysis.get("security_adequacy", {}),
+                "data_handling_compliance": llm_analysis.get("data_handling_compliance", {}),
+                "documentation_status": llm_analysis.get("documentation_status", {}),
+                "risk_levels": llm_analysis.get("risk_levels", {}),
+                "action_items": llm_analysis.get("action_items", {}),
+                "overall_compliance_score": self._calculate_overall_compliance_score(llm_analysis.get("regulation_scores", {})),
+                "assessment_timestamp": datetime.now(timezone.utc).isoformat(),
+                "llm_insights": llm_analysis.get("analysis", "")
+            }
+            
+            return enhanced_assessment
+            
+        except Exception as e:
+            logger.warning(f"Enhanced compliance assessment failed, using fallback: {str(e)}")
+            return await self._assess_compliance_posture(applicable_regulations)
+    
+    async def _assess_security_controls_with_benchmarks(self) -> Dict[str, Any]:
+        """
+        Assess security controls against industry benchmarks using real data.
+        
+        Returns:
+            Dictionary containing security controls assessment
+        """
+        try:
+            # Search for current security benchmarks and standards
+            security_research = await self.web_search_client.search(
+                "enterprise security controls benchmarks 2024 2025 NIST CIS OWASP best practices",
+                num_results=5
+            )
+            
+            assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+            technical_req = assessment_data.get("technical_requirements", {})
+            
+            security_context = f"""
+            Current Security Setup:
+            - Security Requirements: {technical_req.get('security_requirements', [])}
+            - Encryption: {technical_req.get('encryption_requirements', 'Not specified')}
+            - Access Control: {technical_req.get('access_control', 'Not specified')}
+            - Network Security: {technical_req.get('network_security', 'Not specified')}
+            - Monitoring: {technical_req.get('monitoring_requirements', [])}
+            
+            Current Security Benchmarks (2024-2025):
+            """
+            
+            for result in security_research.get("results", [])[:3]:
+                security_context += f"- {result.get('title', '')}: {result.get('snippet', '')[:200]}...\n"
+            
+            security_prompt = f"""
+            Assess security controls against current industry benchmarks and standards:
+            
+            {security_context}
+            
+            Evaluate against major frameworks:
+            1. NIST Cybersecurity Framework
+            2. CIS Controls
+            3. OWASP Top 10
+            4. ISO 27001 controls
+            5. Cloud Security Alliance guidelines
+            
+            For each framework, assess:
+            - Current implementation level (0-100%)
+            - Critical control gaps
+            - Priority improvements needed
+            - Implementation complexity
+            - Cost implications
+            - Timeline for full compliance
+            
+            Return in JSON format with framework_scores, control_gaps, priority_improvements, implementation_complexity, cost_estimates, compliance_timeline.
+            """
+            
+            llm_response = await self.llm_client.generate_text(
+                prompt=security_prompt,
+                system_prompt="You are a cybersecurity expert specializing in enterprise security frameworks and compliance benchmarking.",
+                temperature=0.1,
+                max_tokens=2000
+            )
+            
+            analysis_result = self._parse_llm_response(llm_response)
+            
+            return {
+                "framework_scores": analysis_result.get("framework_scores", {}),
+                "control_gaps": analysis_result.get("control_gaps", {}),
+                "priority_improvements": analysis_result.get("priority_improvements", []),
+                "implementation_complexity": analysis_result.get("implementation_complexity", {}),
+                "cost_estimates": analysis_result.get("cost_estimates", {}),
+                "compliance_timeline": analysis_result.get("compliance_timeline", {}),
+                "security_research_data": security_research.get("results", []),
+                "assessment_timestamp": datetime.now(timezone.utc).isoformat(),
+                "benchmarking_insights": analysis_result.get("analysis", "")
+            }
+            
+        except Exception as e:
+            logger.warning(f"Security controls benchmarking failed: {str(e)}")
+            return {
+                "framework_scores": {},
+                "control_gaps": ["Security assessment unavailable"],
+                "priority_improvements": ["Conduct manual security review"],
+                "implementation_complexity": "medium",
+                "assessment_timestamp": datetime.now(timezone.utc).isoformat(),
+                "error": str(e)
+            }
+    
+    async def _identify_compliance_gaps_with_real_data(
+        self, 
+        applicable_regulations: Dict[str, Any], 
+        compliance_assessment: Dict[str, Any],
+        security_assessment: Dict[str, Any],
+        regulatory_updates: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Identify compliance gaps using comprehensive real data analysis.
+        
+        Args:
+            applicable_regulations: Applicable regulations analysis
+            compliance_assessment: Current compliance posture
+            security_assessment: Security controls assessment
+            regulatory_updates: Latest regulatory updates
+            
+        Returns:
+            Dictionary containing identified compliance gaps
+        """
+        try:
+            gap_analysis_prompt = f"""
+            Analyze compliance gaps based on comprehensive assessment data:
+            
+            APPLICABLE REGULATIONS:
+            {json.dumps(applicable_regulations, indent=2)}
+            
+            CURRENT COMPLIANCE SCORES:
+            {json.dumps(compliance_assessment.get('regulation_scores', {}), indent=2)}
+            
+            SECURITY CONTROL GAPS:
+            {json.dumps(security_assessment.get('control_gaps', {}), indent=2)}
+            
+            RECENT REGULATORY CHANGES:
+            {self._prepare_regulatory_context(regulatory_updates)}
+            
+            Identify and prioritize compliance gaps:
+            1. Critical gaps requiring immediate attention
+            2. High-priority gaps for next quarter
+            3. Medium-priority gaps for 6-month timeline
+            4. Long-term strategic gaps
+            5. Resource requirements for each gap
+            6. Business impact of leaving gaps unaddressed
+            7. Implementation complexity and dependencies
+            
+            Return in JSON format with critical_gaps, high_priority_gaps, medium_priority_gaps, long_term_gaps, resource_requirements, business_impact, implementation_plan.
+            """
+            
+            llm_response = await self.llm_client.generate_text(
+                prompt=gap_analysis_prompt,
+                system_prompt="You are a compliance strategist expert at identifying and prioritizing regulatory gaps for enterprise organizations.",
+                temperature=0.1,
+                max_tokens=2500
+            )
+            
+            gap_analysis = self._parse_llm_response(llm_response)
+            
+            return {
+                "critical_gaps": gap_analysis.get("critical_gaps", []),
+                "high_priority_gaps": gap_analysis.get("high_priority_gaps", []),
+                "medium_priority_gaps": gap_analysis.get("medium_priority_gaps", []),
+                "long_term_gaps": gap_analysis.get("long_term_gaps", []),
+                "resource_requirements": gap_analysis.get("resource_requirements", {}),
+                "business_impact": gap_analysis.get("business_impact", {}),
+                "implementation_plan": gap_analysis.get("implementation_plan", {}),
+                "gap_analysis_timestamp": datetime.now(timezone.utc).isoformat(),
+                "strategic_insights": gap_analysis.get("analysis", "")
+            }
+            
+        except Exception as e:
+            logger.warning(f"Compliance gap analysis failed: {str(e)}")
+            return {
+                "critical_gaps": ["Unable to perform automated gap analysis"],
+                "high_priority_gaps": ["Manual compliance review required"],
+                "error": str(e),
+                "analysis_timestamp": datetime.now(timezone.utc).isoformat()
+            }
+    
+    async def _generate_compliance_recommendations_with_research(
+        self,
+        applicable_regulations: Dict[str, Any],
+        compliance_gaps: Dict[str, Any],
+        data_residency_analysis: Dict[str, Any],
+        regulatory_updates: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate compliance recommendations using LLM analysis and market research.
+        
+        Args:
+            applicable_regulations: Applicable regulations
+            compliance_gaps: Identified compliance gaps
+            data_residency_analysis: Data residency requirements
+            regulatory_updates: Latest regulatory updates
+            
+        Returns:
+            List of detailed compliance recommendations
+        """
+        try:
+            # Research compliance solutions and best practices
+            solutions_research = await self.web_search_client.search(
+                "enterprise compliance solutions 2024 2025 data protection GDPR HIPAA implementation",
+                num_results=5
+            )
+            
+            recommendations_prompt = f"""
+            Generate comprehensive compliance recommendations based on analysis:
+            
+            COMPLIANCE GAPS TO ADDRESS:
+            Critical: {compliance_gaps.get('critical_gaps', [])}
+            High Priority: {compliance_gaps.get('high_priority_gaps', [])}
+            Medium Priority: {compliance_gaps.get('medium_priority_gaps', [])}
+            
+            DATA RESIDENCY REQUIREMENTS:
+            {json.dumps(data_residency_analysis, indent=2)}
+            
+            CURRENT COMPLIANCE SOLUTIONS (2024-2025):
+            """
+            
+            for result in solutions_research.get("results", [])[:3]:
+                recommendations_prompt += f"- {result.get('title', '')}: {result.get('snippet', '')[:200]}...\n"
+            
+            recommendations_prompt += f"""
+            
+            Generate specific, actionable recommendations:
+            1. Immediate actions (0-30 days)
+            2. Short-term implementations (1-3 months)
+            3. Medium-term projects (3-6 months)
+            4. Long-term strategic initiatives (6-12 months)
+            
+            For each recommendation include:
+            - Specific implementation steps
+            - Required resources and budget estimates
+            - Expected compliance improvement
+            - Business benefits
+            - Risk mitigation value
+            - Implementation complexity
+            - Vendor/solution recommendations
+            
+            Return in JSON format with immediate_actions, short_term_implementations, medium_term_projects, long_term_initiatives.
+            """
+            
+            llm_response = await self.llm_client.generate_text(
+                prompt=recommendations_prompt,
+                system_prompt="You are a compliance consultant specializing in practical implementation of enterprise regulatory compliance programs.",
+                temperature=0.2,
+                max_tokens=3000
+            )
+            
+            recommendations_data = self._parse_llm_response(llm_response)
+            
+            # Structure recommendations as a list
+            recommendations = []
+            
+            # Process immediate actions
+            for action in recommendations_data.get("immediate_actions", []):
+                recommendations.append({
+                    "title": f"Critical Compliance Action: {action.get('title', 'Immediate Action Required')}",
+                    "description": action.get("description", str(action)),
+                    "priority": "critical",
+                    "timeline": "0-30 days",
+                    "category": "immediate_action",
+                    "implementation_steps": action.get("implementation_steps", []),
+                    "resources_required": action.get("resources_required", "To be determined"),
+                    "compliance_impact": action.get("compliance_impact", "High"),
+                    "business_benefits": action.get("business_benefits", []),
+                    "estimated_cost": action.get("estimated_cost", "Variable")
+                })
+            
+            # Process short-term implementations
+            for implementation in recommendations_data.get("short_term_implementations", []):
+                recommendations.append({
+                    "title": f"Short-term Implementation: {implementation.get('title', 'Compliance Implementation')}",
+                    "description": implementation.get("description", str(implementation)),
+                    "priority": "high",
+                    "timeline": "1-3 months",
+                    "category": "short_term",
+                    "implementation_steps": implementation.get("implementation_steps", []),
+                    "resources_required": implementation.get("resources_required", "Dedicated team"),
+                    "compliance_impact": implementation.get("compliance_impact", "Medium-High"),
+                    "business_benefits": implementation.get("business_benefits", []),
+                    "estimated_cost": implementation.get("estimated_cost", "Moderate")
+                })
+            
+            # Process medium-term projects
+            for project in recommendations_data.get("medium_term_projects", []):
+                recommendations.append({
+                    "title": f"Medium-term Project: {project.get('title', 'Compliance Project')}",
+                    "description": project.get("description", str(project)),
+                    "priority": "medium",
+                    "timeline": "3-6 months",
+                    "category": "medium_term",
+                    "implementation_steps": project.get("implementation_steps", []),
+                    "resources_required": project.get("resources_required", "Project team"),
+                    "compliance_impact": project.get("compliance_impact", "Medium"),
+                    "business_benefits": project.get("business_benefits", []),
+                    "estimated_cost": project.get("estimated_cost", "Significant")
+                })
+            
+            # Process long-term initiatives
+            for initiative in recommendations_data.get("long_term_initiatives", []):
+                recommendations.append({
+                    "title": f"Strategic Initiative: {initiative.get('title', 'Long-term Compliance Strategy')}",
+                    "description": initiative.get("description", str(initiative)),
+                    "priority": "low",
+                    "timeline": "6-12 months",
+                    "category": "strategic",
+                    "implementation_steps": initiative.get("implementation_steps", []),
+                    "resources_required": initiative.get("resources_required", "Strategic investment"),
+                    "compliance_impact": initiative.get("compliance_impact", "Strategic"),
+                    "business_benefits": initiative.get("business_benefits", []),
+                    "estimated_cost": initiative.get("estimated_cost", "High")
+                })
+            
+            return recommendations
+            
+        except Exception as e:
+            logger.warning(f"Enhanced recommendations generation failed: {str(e)}")
+            return [{
+                "title": "Manual Compliance Review Required",
+                "description": "Automated recommendation generation failed. Manual review by compliance expert needed.",
+                "priority": "high",
+                "timeline": "Immediate",
+                "category": "fallback",
+                "error": str(e)
+            }]
+    
+    async def _create_compliance_roadmap_with_real_data(self, recommendations: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Create a compliance roadmap using real implementation data and timelines.
+        
+        Args:
+            recommendations: List of compliance recommendations
+            
+        Returns:
+            Dictionary containing detailed compliance roadmap
+        """
+        try:
+            roadmap_prompt = f"""
+            Create a comprehensive compliance roadmap based on recommendations:
+            
+            RECOMMENDATIONS TO IMPLEMENT:
+            {json.dumps(recommendations, indent=2)}
+            
+            Create a strategic roadmap including:
+            1. Phase-based implementation plan
+            2. Resource allocation timeline
+            3. Budget planning and cost distribution
+            4. Risk mitigation milestones
+            5. Compliance metric targets
+            6. Dependencies and critical path
+            7. Success criteria and KPIs
+            8. Quarterly review checkpoints
+            
+            Return in JSON format with implementation_phases, resource_timeline, budget_plan, risk_milestones, compliance_targets, dependencies, success_criteria, review_schedule.
+            """
+            
+            llm_response = await self.llm_client.generate_text(
+                prompt=roadmap_prompt,
+                system_prompt="You are a compliance program manager expert at creating strategic implementation roadmaps for enterprise compliance initiatives.",
+                temperature=0.1,
+                max_tokens=2500
+            )
+            
+            roadmap_data = self._parse_llm_response(llm_response)
+            
+            # Organize recommendations by timeline
+            timeline_organization = {
+                "0-30_days": [r for r in recommendations if "0-30 days" in r.get("timeline", "")],
+                "1-3_months": [r for r in recommendations if "1-3 months" in r.get("timeline", "")],
+                "3-6_months": [r for r in recommendations if "3-6 months" in r.get("timeline", "")],
+                "6-12_months": [r for r in recommendations if "6-12 months" in r.get("timeline", "")]
+            }
+            
+            return {
+                "implementation_phases": roadmap_data.get("implementation_phases", {}),
+                "resource_timeline": roadmap_data.get("resource_timeline", {}),
+                "budget_plan": roadmap_data.get("budget_plan", {}),
+                "risk_milestones": roadmap_data.get("risk_milestones", {}),
+                "compliance_targets": roadmap_data.get("compliance_targets", {}),
+                "dependencies": roadmap_data.get("dependencies", {}),
+                "success_criteria": roadmap_data.get("success_criteria", {}),
+                "review_schedule": roadmap_data.get("review_schedule", {}),
+                "timeline_organization": timeline_organization,
+                "total_recommendations": len(recommendations),
+                "estimated_completion": "12 months",
+                "roadmap_created": datetime.now(timezone.utc).isoformat(),
+                "strategic_insights": roadmap_data.get("analysis", "")
+            }
+            
+        except Exception as e:
+            logger.warning(f"Compliance roadmap generation failed: {str(e)}")
+            return {
+                "implementation_phases": {"phase_1": "Manual planning required"},
+                "timeline_organization": {
+                    "immediate": [r for r in recommendations if r.get("priority") == "critical"],
+                    "short_term": [r for r in recommendations if r.get("priority") == "high"],
+                    "medium_term": [r for r in recommendations if r.get("priority") == "medium"],
+                    "long_term": [r for r in recommendations if r.get("priority") == "low"]
+                },
+                "total_recommendations": len(recommendations),
+                "error": str(e),
+                "roadmap_created": datetime.now(timezone.utc).isoformat()
+            }
+    
+    def _calculate_overall_compliance_score(self, regulation_scores: Dict[str, Any]) -> float:
+        """Calculate overall compliance score from individual regulation scores."""
+        if not regulation_scores:
+            return 0.0
+        
+        scores = []
+        for score in regulation_scores.values():
+            if isinstance(score, (int, float)):
+                scores.append(float(score))
+            elif isinstance(score, dict) and "score" in score:
+                scores.append(float(score["score"]))
+        
+        return sum(scores) / len(scores) if scores else 0.0
