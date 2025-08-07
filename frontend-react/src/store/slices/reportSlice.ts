@@ -139,56 +139,13 @@ export const shareReport = createAsyncThunk(
 
 export const fetchReports = createAsyncThunk(
     'report/fetchAll',
-    async () => {
-        // Simulate API call
-        const response = await new Promise<Report[]>((resolve) => {
-            setTimeout(() => {
-                resolve([
-                    {
-                        id: 'report-1',
-                        title: 'AI Infrastructure Strategy Report - Sample Corp',
-                        assessmentId: '1',
-                        generatedDate: '2024-01-15T10:30:00Z',
-                        status: 'final',
-                        sections: [
-                            {
-                                title: 'Executive Summary',
-                                content: 'This report provides comprehensive recommendations for scaling AI infrastructure...',
-                                type: 'executive',
-                            },
-                            {
-                                title: 'Technical Architecture',
-                                content: 'Detailed technical specifications and implementation roadmap...',
-                                type: 'technical',
-                            },
-                            {
-                                title: 'Cost Analysis',
-                                content: 'Financial projections and ROI calculations for the proposed infrastructure...',
-                                type: 'financial',
-                            },
-                        ],
-                        keyFindings: [
-                            'Multi-cloud strategy can reduce costs by 23%',
-                            'Current infrastructure is over-provisioned by 35%',
-                            'Compliance gaps identified in data storage',
-                        ],
-                        recommendations: [
-                            'Implement hybrid AWS-Azure architecture',
-                            'Migrate to containerized workloads',
-                            'Establish automated compliance monitoring',
-                        ],
-                        estimatedSavings: 45000,
-                        complianceScore: 98,
-                        exportFormats: ['pdf', 'json', 'markdown'],
-                        shareSettings: {
-                            isPublic: false,
-                            sharedWith: [],
-                        },
-                    },
-                ]);
-            }, 1000);
-        });
-        return response;
+    async (_, { rejectWithValue }) => {
+        try {
+            const response = await apiClient.getReports();
+            return response;
+        } catch (error) {
+            return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch reports');
+        }
     }
 );
 

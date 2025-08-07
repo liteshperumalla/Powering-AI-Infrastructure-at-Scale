@@ -102,7 +102,47 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
         return diff > 0 ? <TrendingUp color="error" /> : <TrendingDown color="success" />;
     };
 
-    const avgCost = recommendations.reduce((sum, rec) => sum + rec.costEstimate, 0) / recommendations.length;
+    const avgCost = recommendations.length > 0 
+        ? recommendations.reduce((sum, rec) => sum + rec.costEstimate, 0) / recommendations.length 
+        : 0;
+
+    // Handle empty state
+    if (recommendations.length === 0) {
+        return (
+            <Card>
+                <CardContent>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                        <Typography variant="h6">
+                            {title}
+                        </Typography>
+                    </Box>
+                    <Box sx={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        py: 6,
+                        textAlign: 'center'
+                    }}>
+                        <Info sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
+                        <Typography variant="h6" color="text.secondary" gutterBottom>
+                            No Recommendations Available
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            Complete an assessment to see personalized service recommendations.
+                        </Typography>
+                        <Button 
+                            variant="contained" 
+                            sx={{ mt: 2 }}
+                            onClick={() => window.location.href = '/assessment'}
+                        >
+                            Start Assessment
+                        </Button>
+                    </Box>
+                </CardContent>
+            </Card>
+        );
+    }
 
     return (
         <Card>
@@ -139,7 +179,9 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
                             Avg Confidence
                         </Typography>
                         <Typography variant="h6">
-                            {(recommendations.reduce((sum, r) => sum + r.confidenceScore, 0) / recommendations.length).toFixed(1)}%
+                            {recommendations.length > 0 
+                                ? (recommendations.reduce((sum, r) => sum + r.confidenceScore, 0) / recommendations.length).toFixed(1)
+                                : '0'}%
                         </Typography>
                     </Box>
                 </Box>

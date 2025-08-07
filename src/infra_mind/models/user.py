@@ -5,7 +5,7 @@ Defines user authentication and profile data structure.
 """
 
 from datetime import datetime
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from beanie import Document, Indexed
 from pydantic import Field, EmailStr, field_validator
 import bcrypt
@@ -49,6 +49,10 @@ class User(Document):
             "marketing": False
         },
         description="User notification preferences"
+    )
+    preferences: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="General user preferences for UI, settings, etc."
     )
     
     # Activity tracking

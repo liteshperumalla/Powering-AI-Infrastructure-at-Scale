@@ -265,7 +265,7 @@ export default function D3InteractiveChart({
                                 borderRadius: 1,
                                 p: 1,
                                 boxShadow: 2,
-                                zIndex: 1000,
+                                zIndex: (theme) => theme.zIndex.tooltip,
                             }}
                         >
                             <Typography variant="body2" fontWeight="bold">

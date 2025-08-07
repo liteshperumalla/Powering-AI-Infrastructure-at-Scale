@@ -14,7 +14,7 @@ from .base import BaseAgent, AgentConfig, AgentRole
 from .tools import ToolResult
 from .web_search import get_web_search_client
 from ..models.assessment import Assessment
-from ..core.llm_client import get_llm_client
+from ..llm.manager import LLMManager
 
 logger = logging.getLogger(__name__)
 
@@ -344,7 +344,7 @@ class InfrastructureAgent(BaseAgent):
             if not self.web_search_client:
                 self.web_search_client = await get_web_search_client()
             if not self.llm_client:
-                self.llm_client = await get_llm_client()
+                self.llm_client = LLMManager()
             
             # Step 1: Analyze current infrastructure requirements with LLM enhancement
             infrastructure_analysis = await self._analyze_infrastructure_requirements_with_llm()

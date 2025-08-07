@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
 
@@ -245,9 +245,21 @@ export const useWebSocket = (config: WebSocketConfig) => {
 // Specialized hook for assessment-specific WebSocket connections
 export const useAssessmentWebSocket = (assessmentId: string) => {
     const baseUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
-    const url = `${baseUrl}/ws/${assessmentId}`;
+    const url = `${baseUrl}/ws`;
 
-    return useWebSocket({ url });
+    const webSocket = useWebSocket({ url });
+
+    // Auto-subscribe to assessment updates when connected
+    React.useEffect(() => {
+        if (webSocket.isConnected && assessmentId) {
+            webSocket.sendTypedMessage('subscribe', { 
+                assessment_id: assessmentId,
+                type: 'assessment_updates'
+            });
+        }
+    }, [webSocket.isConnected, assessmentId, webSocket.sendTypedMessage]);
+
+    return webSocket;
 };
 
 // Specialized hook for general system WebSocket connections

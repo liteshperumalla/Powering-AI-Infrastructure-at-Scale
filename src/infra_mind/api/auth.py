@@ -110,6 +110,21 @@ class UserInfoResponse(BaseModel):
     assessments_created: int
 
 
+class ProfileUpdateRequest(BaseModel):
+    """Profile update request model."""
+    full_name: Optional[str] = Field(default=None, description="User's full name", max_length=100)
+    company: Optional[str] = Field(default=None, description="Company name", max_length=200)
+    preferences: Optional[dict] = Field(default=None, description="User preferences")
+
+    @validator('full_name')
+    def validate_full_name(cls, v):
+        return v.strip() if v else None
+    
+    @validator('company')
+    def validate_company(cls, v):
+        return v.strip() if v else None
+
+
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(request: RegisterRequest, http_request: Request):
     """
@@ -357,6 +372,114 @@ async def get_current_user_info(
     )
 
 
+@router.get("/profile", response_model=UserInfoResponse)
+async def get_profile(
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Get current user profile (alias for /me endpoint).
+    
+    Returns the profile information of the currently authenticated user.
+    """
+    return UserInfoResponse(
+        id=str(current_user.id),
+        email=current_user.email,
+        full_name=current_user.full_name,
+        company_name=current_user.company_name,
+        job_title=current_user.job_title,
+        role=current_user.role,
+        is_active=current_user.is_active,
+        is_verified=current_user.is_verified,
+        created_at=current_user.created_at,
+        last_login=current_user.last_login,
+        login_count=current_user.login_count,
+        assessments_created=current_user.assessments_created
+    )
+
+
+@router.put("/profile", response_model=UserInfoResponse)
+async def update_profile(
+    request: ProfileUpdateRequest,
+    http_request: Request,
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Update user profile with comprehensive validation.
+    
+    Updates the profile information for the authenticated user.
+    Includes audit logging and validation.
+    """
+    client_ip = http_request.client.host if http_request.client else None
+    
+    try:
+        # Update fields if provided
+        if request.full_name is not None:
+            current_user.full_name = request.full_name
+        
+        if request.company is not None:
+            current_user.company_name = request.company
+        
+        if request.preferences is not None:
+            # Update preferences
+            if not hasattr(current_user, 'preferences') or current_user.preferences is None:
+                current_user.preferences = {}
+            current_user.preferences.update(request.preferences)
+        
+        current_user.updated_at = datetime.utcnow()
+        await current_user.save()
+        
+        logger.info(f"Profile updated successfully for user: {current_user.email}")
+        
+        # Log profile update
+        log_security_event(
+            AuditEventType.USER_UPDATED,
+            user=current_user,
+            ip_address=client_ip,
+            details={
+                "updated_fields": [
+                    field for field, value in request.dict(exclude_unset=True).items()
+                    if value is not None
+                ]
+            },
+            severity=AuditSeverity.LOW
+        )
+        
+        return UserInfoResponse(
+            id=str(current_user.id),
+            email=current_user.email,
+            full_name=current_user.full_name,
+            company_name=current_user.company_name,
+            job_title=current_user.job_title,
+            role=current_user.role,
+            is_active=current_user.is_active,
+            is_verified=current_user.is_verified,
+            created_at=current_user.created_at,
+            last_login=current_user.last_login,
+            login_count=current_user.login_count,
+            assessments_created=current_user.assessments_created
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to update profile for {current_user.email}: {str(e)}")
+        
+        # Log system error
+        log_security_event(
+            AuditEventType.USER_UPDATED,
+            user=current_user,
+            ip_address=client_ip,
+            details={
+                "error": str(e),
+                "action": "profile_update_failed"
+            },
+            severity=AuditSeverity.MEDIUM
+        )
+        
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update profile"
+        )
+
+
 @router.put("/change-password", response_model=SuccessResponse)
 async def change_password(
     request: ChangePasswordRequest,
@@ -583,9 +706,43 @@ async def revoke_token(
 
 
 # Dependency for getting current user (alias for compatibility)
-async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
-    """Get current authenticated user (alias for get_current_active_user)."""
-    return await get_current_active_user(credentials)
+async def get_current_user(
+    request: Request,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+) -> User:
+    """Get current authenticated user."""
+    if not credentials:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    try:
+        token = credentials.credentials
+        user = await auth_service.get_current_user(token)
+        
+        # Check if user is active
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="User account is inactive"
+            )
+        
+        return user
+        
+    except AuthenticationError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e),
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    except Exception as e:
+        logger.error(f"Authentication error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication failed"
+        )
 
 # Dependency for getting current admin user
 async def get_current_admin_user(current_user: User = Depends(get_current_user)) -> User:

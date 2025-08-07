@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Any
 from decimal import Decimal
 from beanie import Document, Indexed
 from pydantic import Field, field_validator
+from bson import Decimal128
 
 from ..schemas.base import Priority, RecommendationConfidence, CloudProvider
 
@@ -62,6 +63,14 @@ class ServiceRecommendation(Document):
         description="Estimated implementation time in hours"
     )
     
+    @field_validator('estimated_monthly_cost', mode='before')
+    @classmethod
+    def convert_decimal128(cls, v):
+        """Convert MongoDB Decimal128 to Python Decimal."""
+        if isinstance(v, Decimal128):
+            return Decimal(str(v))
+        return v
+    
     class Settings:
         name = "service_recommendations"
         indexes = [
@@ -82,6 +91,12 @@ class Recommendation(Document):
     assessment_id: str = Indexed()
     agent_name: str = Indexed()  # cto, cloud_engineer, research, etc.
     agent_version: str = Field(default="1.0", description="Agent version for tracking changes")
+    
+    # Unique recommendation identifier for external references
+    recommendation_id: Optional[str] = Field(
+        default=None,
+        description="Optional unique identifier for external tracking"
+    )
     
     # Recommendation metadata
     title: str = Field(description="Brief title of the recommendation")
@@ -166,6 +181,14 @@ class Recommendation(Document):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     
+    @field_validator('total_estimated_monthly_cost', mode='before')
+    @classmethod
+    def convert_decimal128_total_cost(cls, v):
+        """Convert MongoDB Decimal128 to Python Decimal."""
+        if isinstance(v, Decimal128):
+            return Decimal(str(v))
+        return v
+
     @field_validator('confidence_score')
     @classmethod
     def validate_confidence_consistency(cls, v, info):

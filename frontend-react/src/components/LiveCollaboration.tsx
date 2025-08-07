@@ -32,7 +32,7 @@ import {
 
 interface User {
     id: string;
-    name: string;
+    full_name: string;
     email: string;
     avatar?: string;
     color: string;
@@ -114,7 +114,7 @@ const LiveCollaboration: React.FC<LiveCollaborationProps> = ({
                 case 'user_joined':
                     const newUser: User = {
                         id: message.data.user_id,
-                        name: message.data.user_name,
+                        full_name: message.data.user_full_name,
                         email: message.data.user_email || '',
                         color: getUserColor(message.data.user_id)
                     };
@@ -142,7 +142,7 @@ const LiveCollaboration: React.FC<LiveCollaborationProps> = ({
                         id: Date.now().toString(),
                         userId: 'system',
                         userName: 'System',
-                        message: `${newUser.name} joined the assessment`,
+                        message: `${newUser.full_name} joined the assessment`,
                         timestamp: new Date(),
                         type: 'system'
                     }]);
@@ -164,7 +164,7 @@ const LiveCollaboration: React.FC<LiveCollaborationProps> = ({
                             id: Date.now().toString(),
                             userId: 'system',
                             userName: 'System',
-                            message: `${leavingUser.user.name} left the assessment`,
+                            message: `${leavingUser.user.full_name} left the assessment`,
                             timestamp: new Date(),
                             type: 'system'
                         }]);
@@ -198,7 +198,7 @@ const LiveCollaboration: React.FC<LiveCollaborationProps> = ({
                         timestamp: new Date(message.timestamp)
                     };
 
-                    setFieldUpdates(prev => [update, ...prev.slice(0, 49)]); // Keep last 50 updates
+                    setFieldUpdates(prev => [update, ...(prev || []).slice(0, 49)]); // Keep last 50 updates
 
                     // Update collaborator status
                     setCollaborators(prev =>
@@ -222,7 +222,7 @@ const LiveCollaboration: React.FC<LiveCollaborationProps> = ({
                     const chatMessage: ChatMessage = {
                         id: message.data.message_id || Date.now().toString(),
                         userId: message.data.user_id,
-                        userName: message.data.user_name,
+                        userName: message.data.user_full_name,
                         message: message.data.message,
                         timestamp: new Date(message.timestamp),
                         type: 'message'
@@ -295,12 +295,12 @@ const LiveCollaboration: React.FC<LiveCollaborationProps> = ({
             websocket.send(JSON.stringify({
                 type: 'chat_message',
                 message: newMessage.trim(),
-                user_name: currentUser.name
+                user_full_name: currentUser.full_name
             }));
 
             setNewMessage('');
         }
-    }, [newMessage, websocket, currentUser.name]);
+    }, [newMessage, websocket, currentUser.full_name]);
 
     // Handle chat input key press
     const handleChatKeyPress = (event: React.KeyboardEvent) => {
@@ -341,7 +341,7 @@ const LiveCollaboration: React.FC<LiveCollaborationProps> = ({
                         {activeCollaborators.map((collaborator) => (
                             <Tooltip
                                 key={collaborator.user.id}
-                                title={`${collaborator.user.name} ${collaborator.currentField ? `editing ${collaborator.currentField}` : 'online'}`}
+                                title={`${collaborator.user.full_name} ${collaborator.currentField ? `editing ${collaborator.currentField}` : 'online'}`}
                             >
                                 <Avatar
                                     sx={{
@@ -351,9 +351,9 @@ const LiveCollaboration: React.FC<LiveCollaborationProps> = ({
                                     }}
                                 >
                                     {collaborator.user.avatar ? (
-                                        <img src={collaborator.user.avatar} alt={collaborator.user.name} />
+                                        <img src={collaborator.user.avatar} alt={collaborator.user.full_name} />
                                     ) : (
-                                        getUserInitials(collaborator.user.name)
+                                        getUserInitials(collaborator.user.full_name)
                                     )}
                                 </Avatar>
                             </Tooltip>
@@ -382,14 +382,14 @@ const LiveCollaboration: React.FC<LiveCollaborationProps> = ({
                         Recent changes:
                     </Typography>
                     <Stack direction="row" spacing={1} flexWrap="wrap">
-                        {fieldUpdates.slice(0, 3).map((update, index) => {
+                        {(fieldUpdates || []).slice(0, 3).map((update, index) => {
                             const user = collaborators.find(c => c.user.id === update.userId);
                             return (
                                 <Chip
                                     key={index}
                                     size="small"
                                     icon={<EditIcon />}
-                                    label={`${user?.user.name || 'Someone'} updated ${update.fieldId}`}
+                                    label={`${user?.user.full_name || 'Someone'} updated ${update.fieldId}`}
                                     variant="outlined"
                                     sx={{ fontSize: '0.7rem' }}
                                 />
@@ -405,7 +405,7 @@ const LiveCollaboration: React.FC<LiveCollaborationProps> = ({
                 anchorEl={chatAnchorRef.current}
                 placement="bottom-end"
                 transition
-                sx={{ zIndex: 1300 }}
+                sx={{ zIndex: (theme) => theme.zIndex.modal - 100 }}
             >
                 {({ TransitionProps }) => (
                     <Fade {...TransitionProps} timeout={350}>
@@ -523,7 +523,7 @@ const LiveCollaboration: React.FC<LiveCollaborationProps> = ({
                             left: collaborator.cursorPosition.x,
                             top: collaborator.cursorPosition.y,
                             pointerEvents: 'none',
-                            zIndex: 1000
+                            zIndex: (theme) => theme.zIndex.drawer - 100
                         }}
                     >
                         <Box
@@ -535,7 +535,7 @@ const LiveCollaboration: React.FC<LiveCollaborationProps> = ({
                             }}
                         >
                             <Chip
-                                label={collaborator.user.name}
+                                label={collaborator.user.full_name}
                                 size="small"
                                 sx={{
                                     position: 'absolute',

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     AppBar,
     Toolbar,
@@ -17,7 +17,6 @@ import {
     useTheme,
     useMediaQuery,
     Avatar,
-    Badge,
     Chip,
 } from '@mui/material';
 import {
@@ -29,22 +28,25 @@ import {
     Settings,
     AccountCircle,
     Menu as MenuIcon,
-    Notifications,
     Logout,
     Person,
+    Chat as ChatIcon,
+    MonitorHeart,
 } from '@mui/icons-material';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { logout } from '@/store/slices/authSlice';
 import UserProfile from './UserProfile';
+import NotificationSystem from './NotificationSystem';
 
 const navigationItems = [
     { text: 'Dashboard', icon: <Dashboard />, path: '/dashboard' },
     { text: 'Assessment', icon: <Assessment />, path: '/assessment' },
+    { text: 'AI Assistant', icon: <ChatIcon />, path: '/chat' },
     { text: 'Cloud Services', icon: <CloudQueue />, path: '/cloud-services' },
     { text: 'Compliance', icon: <Security />, path: '/compliance' },
     { text: 'Reports', icon: <Analytics />, path: '/reports' },
-    { text: 'Visualization Demo', icon: <Analytics />, path: '/visualization-demo' },
+    { text: 'System Status', icon: <MonitorHeart />, path: '/system-status' },
     { text: 'Settings', icon: <Settings />, path: '/settings' },
 ];
 
@@ -64,7 +66,6 @@ export default function Navigation({ title = 'Dashboard', children }: Navigation
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const [mobileOpen, setMobileOpen] = useState(false);
     const [profileOpen, setProfileOpen] = useState(false);
-    const [notificationCount] = useState(3); // Mock notification count
 
     const handleProfileMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
         setAnchorEl(event.currentTarget);
@@ -95,6 +96,7 @@ export default function Navigation({ title = 'Dashboard', children }: Navigation
         handleMenuClose();
         setProfileOpen(true);
     };
+
 
     const drawer = (
         <Box sx={{ width: 250 }}>
@@ -150,8 +152,13 @@ export default function Navigation({ title = 'Dashboard', children }: Navigation
             <AppBar
                 position="fixed"
                 sx={{
-                    width: { md: `calc(100% - 250px)` },
+                    width: { sm: '100%', md: `calc(100% - 250px)` },
                     ml: { md: `250px` },
+                    zIndex: (theme) => theme.zIndex.drawer + 1,
+                    transition: (theme) => theme.transitions.create(['margin', 'width'], {
+                        easing: theme.transitions.easing.sharp,
+                        duration: theme.transitions.duration.leavingScreen,
+                    }),
                 }}
             >
                 <Toolbar>
@@ -169,38 +176,33 @@ export default function Navigation({ title = 'Dashboard', children }: Navigation
                     </Typography>
 
                     {isAuthenticated && (
-                        <>
-                            <Badge badgeContent={notificationCount} color="error" sx={{ mr: 2 }}>
-                                <IconButton color="inherit">
-                                    <Notifications />
-                                </IconButton>
-                            </Badge>
-
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 1 }}>
-                                {user && (
-                                    <>
-                                        <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
-                                            <Typography variant="body2">
-                                                {user.name}
-                                            </Typography>
-                                            <Chip
-                                                label={user.role}
-                                                size="small"
-                                                color="secondary"
-                                                sx={{ height: 16, fontSize: '0.7rem' }}
-                                            />
-                                        </Box>
-                                        <Avatar
-                                            sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}
-                                            onClick={handleProfileMenuOpen}
-                                            style={{ cursor: 'pointer' }}
-                                        >
-                                            <Person fontSize="small" />
-                                        </Avatar>
-                                    </>
-                                )}
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 1 }}>
+                            {/* Notification System Bell - positioned in toolbar */}
+                            <Box sx={{ mr: 1 }}>
+                                <NotificationSystem />
                             </Box>
-                        </>
+                            
+                            {user && (
+                                <>
+                                    <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+                                        <Typography variant="body2">{user.full_name}</Typography>
+                                        <Chip
+                                            label={user.role}
+                                            size="small"
+                                            color="secondary"
+                                            sx={{ height: 16, fontSize: '0.7rem' }}
+                                        />
+                                    </Box>
+                                    <Avatar
+                                        sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}
+                                        onClick={handleProfileMenuOpen}
+                                        style={{ cursor: 'pointer' }}
+                                    >
+                                        <Person fontSize="small" />
+                                    </Avatar>
+                                </>
+                            )}
+                        </Box>
                     )}
                 </Toolbar>
             </AppBar>
@@ -220,6 +222,7 @@ export default function Navigation({ title = 'Dashboard', children }: Navigation
                     sx={{
                         display: { xs: 'block', md: 'none' },
                         '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 250 },
+                        zIndex: (theme) => theme.zIndex.drawer,
                     }}
                 >
                     {drawer}
@@ -229,6 +232,7 @@ export default function Navigation({ title = 'Dashboard', children }: Navigation
                     sx={{
                         display: { xs: 'none', md: 'block' },
                         '& .MuiDrawer-paper': { boxSizing: 'border-box', width: 250 },
+                        zIndex: (theme) => theme.zIndex.drawer,
                     }}
                     open
                 >
@@ -252,6 +256,9 @@ export default function Navigation({ title = 'Dashboard', children }: Navigation
                     }}
                     open={Boolean(anchorEl)}
                     onClose={handleMenuClose}
+                    sx={{
+                        zIndex: (theme) => theme.zIndex.modal,
+                    }}
                 >
                     <MenuItem onClick={handleProfileClick}>
                         <AccountCircle sx={{ mr: 1 }} />
@@ -277,17 +284,32 @@ export default function Navigation({ title = 'Dashboard', children }: Navigation
                 onClose={() => setProfileOpen(false)}
             />
 
+
             {/* Main Content */}
             <Box
                 component="main"
                 sx={{
                     flexGrow: 1,
-                    p: 3,
-                    width: { md: `calc(100% - 250px)` },
+                    p: { xs: 2, sm: 3 },
+                    pt: { xs: 1, sm: 3 },
+                    width: { 
+                        xs: '100%', 
+                        sm: '100%', 
+                        md: `calc(100% - 250px)` 
+                    },
+                    minHeight: '100vh',
+                    position: 'relative',
+                    overflow: 'auto',
+                    transition: (theme) => theme.transitions.create(['margin', 'width'], {
+                        easing: theme.transitions.easing.sharp,
+                        duration: theme.transitions.duration.leavingScreen,
+                    }),
                 }}
             >
                 <Toolbar />
-                {children}
+                <Box sx={{ position: 'relative', zIndex: 1 }}>
+                    {children}
+                </Box>
             </Box>
         </Box>
     );

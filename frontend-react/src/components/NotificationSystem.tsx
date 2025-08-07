@@ -86,7 +86,7 @@ interface WebSocketMessage {
 }
 
 interface NotificationSystemProps {
-    websocket?: WebSocket | null;
+    websocket?: WebSocket | null; // Optional websocket connection
     maxNotifications?: number;
     defaultDuration?: number;
     position?: {
@@ -96,13 +96,19 @@ interface NotificationSystemProps {
 }
 
 const NotificationSystem: React.FC<NotificationSystemProps> = ({
-    websocket,
+    websocket = null, // Default to null if not provided
     maxNotifications = 5,
     defaultDuration = 5000,
     position = { vertical: 'top', horizontal: 'right' }
 }) => {
     const dispatch = useDispatch();
     const notifications = useSelector((state: RootState) => state.ui.notifications);
+    const { isAuthenticated } = useSelector((state: RootState) => state.auth);
+
+    // Don't render notification system if user is not authenticated
+    if (!isAuthenticated) {
+        return null;
+    }
 
     const [drawerOpen, setDrawerOpen] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
@@ -186,16 +192,34 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({
         }
     }, [dispatch, defaultDuration]);
 
-    // Setup WebSocket listener
+    // Setup WebSocket listener only if websocket is available and connected
     useEffect(() => {
-        if (websocket) {
+        if (websocket && websocket.readyState === WebSocket.OPEN) {
             websocket.addEventListener('message', handleWebSocketMessage);
 
             return () => {
-                websocket.removeEventListener('message', handleWebSocketMessage);
+                if (websocket.readyState === WebSocket.OPEN) {
+                    websocket.removeEventListener('message', handleWebSocketMessage);
+                }
             };
         }
     }, [websocket, handleWebSocketMessage]);
+
+    // Method to manually add notifications for testing or manual updates
+    const addManualNotification = (notification: Omit<Notification, 'id' | 'timestamp'>) => {
+        const fullNotification: Notification = {
+            ...notification,
+            id: Date.now().toString(),
+            timestamp: Date.now()
+        };
+        
+        dispatch(addNotification(notification));
+        setAllNotifications(prev => [fullNotification, ...prev].slice(0, 100));
+        setUnreadCount(prev => prev + 1);
+    };
+
+    // Note: useImperativeHandle removed as it was causing errors
+    // External components can use the Redux dispatch directly to add notifications
 
     // Auto-remove notifications after duration
     useEffect(() => {
@@ -288,13 +312,13 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({
                     position: 'fixed',
                     [position.vertical]: 20,
                     [position.horizontal]: 20,
-                    zIndex: 9999,
+                    zIndex: (theme) => theme.zIndex.snackbar,
                     maxWidth: 400,
                     width: '100%'
                 }}
             >
                 <Stack spacing={1}>
-                    {notifications.slice(0, maxNotifications).map((notification) => (
+                    {(notifications || []).slice(0, maxNotifications).map((notification) => (
                         <Slide
                             key={notification.id}
                             direction={position.horizontal === 'right' ? 'left' : 'right'}

@@ -23,6 +23,7 @@ export default function ProtectedRoute({
     const [isInitialized, setIsInitialized] = useState(false);
 
     useEffect(() => {
+        console.log('ProtectedRoute: initializeAuth effect');
         const initializeAuth = async () => {
             // Check for stored token
             const storedToken = localStorage.getItem('auth_token');
@@ -46,6 +47,7 @@ export default function ProtectedRoute({
     }, [dispatch, isAuthenticated]);
 
     useEffect(() => {
+        console.log('ProtectedRoute: redirect effect');
         if (isInitialized && requireAuth && !isAuthenticated && !loading) {
             router.push(redirectTo);
         }
@@ -53,6 +55,7 @@ export default function ProtectedRoute({
 
     // Check role-based access
     useEffect(() => {
+        console.log('ProtectedRoute: role check effect');
         if (isAuthenticated && user && allowedRoles.length > 0) {
             if (!allowedRoles.includes(user.role)) {
                 router.push('/unauthorized');
@@ -110,6 +113,7 @@ export function withAuth<P extends object>(
 
 // Hook for checking authentication status
 export function useAuth() {
+    console.log('useAuth hook');
     const { isAuthenticated, user, loading, error } = useAppSelector(state => state.auth);
     const dispatch = useAppDispatch();
 

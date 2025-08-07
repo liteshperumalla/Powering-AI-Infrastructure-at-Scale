@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import {
     Container,
     Paper,
@@ -24,14 +24,24 @@ import {
     AppBar,
     Toolbar,
     IconButton,
+    Dialog,
+    DialogTitle,
+    DialogContent,
+    DialogActions,
+    DialogContentText,
+    CircularProgress,
 } from '@mui/material';
 import {
     ArrowBack,
+    Save,
+    Restore,
 } from '@mui/icons-material';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import ProgressIndicator from '@/components/ProgressIndicator';
 import IntelligentFormField from '@/components/IntelligentFormField';
 import ProgressSaver from '@/components/ProgressSaver';
+import { apiClient } from '@/services/api';
+import { useAssessmentPersistence } from '@/hooks/useAssessmentPersistence';
 
 const steps = [
     'Business Information',
@@ -65,6 +75,17 @@ interface AssessmentFormData extends Record<string, unknown> {
     dataLocation: string;
     securityLevel: string;
     auditRequirements: string;
+
+    // Custom "Other" text fields
+    companySizeOther: string;
+    currentAIMaturityOther: string;
+    currentCloudProviderOther: string;
+    currentServicesOther: string;
+    aiUseCasesOther: string;
+    performanceRequirementsOther: string;
+    complianceRequirementsOther: string;
+    dataLocationOther: string;
+    securityLevelOther: string;
 }
 
 const initialFormData: AssessmentFormData = {
@@ -84,14 +105,102 @@ const initialFormData: AssessmentFormData = {
     dataLocation: '',
     securityLevel: '',
     auditRequirements: '',
+    // Initialize custom "Other" text fields
+    companySizeOther: '',
+    currentAIMaturityOther: '',
+    currentCloudProviderOther: '',
+    currentServicesOther: '',
+    aiUseCasesOther: '',
+    performanceRequirementsOther: '',
+    complianceRequirementsOther: '',
+    dataLocationOther: '',
+    securityLevelOther: '',
 };
 
-export default function AssessmentPage() {
+function AssessmentPageInner() {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const draftId = searchParams.get('draft');
+    
     const [activeStep, setActiveStep] = useState(0);
     const [formData, setFormData] = useState<AssessmentFormData>(initialFormData);
     const [errors, setErrors] = useState<Record<string, string>>({});
     const [formId] = useState(() => `assessment_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`);
+    const [assessmentId, setAssessmentId] = useState<string | undefined>(draftId || undefined);
+    const [showRestoreDialog, setShowRestoreDialog] = useState(false);
+    const [isLoadingDraft, setIsLoadingDraft] = useState(false);
+    
+    // Initialize assessment persistence hook
+    const {
+        saveDraft,
+        loadDraft,
+        clearDraft,
+        hasDraft,
+        setupAutoSave,
+        isLoading: isSaving,
+        lastSaved
+    } = useAssessmentPersistence();
+
+    // Check for existing draft on component mount
+    useEffect(() => {
+        const checkForDraft = async () => {
+            setIsLoadingDraft(true);
+            
+            // If there's a draft ID in URL, load that specific draft
+            if (draftId) {
+                try {
+                    const assessment = await apiClient.getAssessment(draftId);
+                    if (assessment && assessment.draft_data) {
+                        setFormData(assessment.draft_data as AssessmentFormData);
+                        setActiveStep(assessment.current_step || 0);
+                        setAssessmentId(assessment.id);
+                    }
+                } catch (error) {
+                    console.error('Failed to load draft from URL:', error);
+                }
+            } else if (hasDraft()) {
+                // Show restore dialog for localStorage drafts
+                setShowRestoreDialog(true);
+            }
+            
+            setIsLoadingDraft(false);
+        };
+        
+        checkForDraft();
+    }, [draftId, hasDraft]);
+
+    // Set up auto-save functionality
+    useEffect(() => {
+        const cleanup = setupAutoSave(
+            () => formData,
+            () => activeStep,
+            () => assessmentId,
+            30000 // Auto-save every 30 seconds
+        );
+
+        return cleanup;
+    }, [formData, activeStep, assessmentId, setupAutoSave]);
+
+    // Handle draft restoration
+    const handleRestoreDraft = async () => {
+        try {
+            const draft = await loadDraft();
+            if (draft) {
+                setFormData(draft.formData as AssessmentFormData);
+                setActiveStep(draft.currentStep);
+                setAssessmentId(draft.assessmentId);
+            }
+        } catch (error) {
+            console.error('Failed to restore draft:', error);
+        } finally {
+            setShowRestoreDialog(false);
+        }
+    };
+
+    // Handle manual save
+    const handleSaveDraft = async () => {
+        await saveDraft(formData, activeStep, assessmentId);
+    };
 
     const handleNext = () => {
         if (validateStep(activeStep)) {
@@ -171,14 +280,15 @@ export default function AssessmentPage() {
                 const assessmentData = {
                     title: `${formData.companyName} Infrastructure Assessment`,
                     description: `AI infrastructure assessment for ${formData.companyName} in the ${formData.industry} industry`,
+                    priority: "medium",
                     business_requirements: {
                         company_size: formData.companySize,
                         industry: formData.industry,
                         business_goals: [
                             {
-                                goal: formData.aiUseCases.join(', ') || "Improve AI infrastructure",
+                                goal: formData.aiUseCases?.join(', ') || "Improve AI infrastructure",
                                 priority: "high",
-                                timeline_months: parseInt(formData.scalingTimeline.replace(' months', '')) || 6,
+                                timeline_months: parseInt(String(formData.scalingTimeline).replace(' months', '')) || 6,
                                 success_metrics: ["Performance improvement", "Cost optimization"]
                             }
                         ],
@@ -200,11 +310,7 @@ export default function AssessmentPage() {
                                 };
                                 return budgetMap[formData.monthlyBudget] || '10k_50k';
                             })(),
-                            monthly_budget_limit: "25000",
-                            compute_percentage: 40,
-                            storage_percentage: 20,
-                            networking_percentage: 20,
-                            security_percentage: 20,
+                            monthly_budget_limit: 25000,
                             cost_optimization_priority: "high"
                         },
                         team_structure: {
@@ -214,8 +320,7 @@ export default function AssessmentPage() {
                             data_engineers: 1,
                             cloud_expertise_level: 3,
                             kubernetes_expertise: 2,
-                            database_expertise: 3,
-                            preferred_technologies: ["Python", "JavaScript"]
+                            database_expertise: 3
                         },
                         compliance_requirements: formData.complianceRequirements.length > 0 
                             ? formData.complianceRequirements.map(req => {
@@ -242,14 +347,13 @@ export default function AssessmentPage() {
                             api_response_time_ms: 200,
                             requests_per_second: 1000,
                             concurrent_users: 500,
-                            uptime_percentage: "99.9",
-                            real_time_processing_required: false
+                            uptime_percentage: 99.9
                         },
                         scalability_requirements: {
                             current_data_size_gb: parseInt(formData.expectedDataVolume.replace(/[^0-9]/g, '')) || 100,
                             current_daily_transactions: 10000,
                             expected_data_growth_rate: "20% monthly",
-                            peak_load_multiplier: "3.0",
+                            peak_load_multiplier: 3.0,
                             auto_scaling_required: true,
                             global_distribution_required: false,
                             cdn_required: true,
@@ -288,51 +392,19 @@ export default function AssessmentPage() {
                         backup_requirements: ["Daily backups", "Point-in-time recovery"],
                         ci_cd_requirements: ["Automated deployment", "Testing pipeline"]
                     },
-                    priority: "medium",
-                    tags: [formData.industry, formData.companySize],
                     source: "web_form"
                 };
 
-                // Make API call to create assessment
-                const response = await fetch('http://localhost:8000/api/v1/assessments/', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify(assessmentData),
-                });
-
-                if (!response.ok) {
-                    const errorData = await response.json();
-                    console.error('API Error Response:', errorData);
-                    
-                    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
-                    
-                    if (errorData.detail) {
-                        if (typeof errorData.detail === 'string') {
-                            errorMessage = errorData.detail;
-                        } else if (Array.isArray(errorData.detail)) {
-                            // Handle validation errors array
-                            const validationErrors = errorData.detail.map((err: any) => {
-                                if (typeof err === 'object' && err.msg) {
-                                    return `${err.loc?.join('.')}: ${err.msg}`;
-                                }
-                                return JSON.stringify(err);
-                            }).join('; ');
-                            errorMessage = `Validation errors: ${validationErrors}`;
-                        } else {
-                            errorMessage = JSON.stringify(errorData.detail);
-                        }
-                    }
-                    
-                    throw new Error(errorMessage);
-                }
-
-                const createdAssessment = await response.json();
+                // Make API call to create assessment using apiClient
+                const createdAssessment = await apiClient.createAssessment(assessmentData);
                 console.log('Assessment created successfully:', createdAssessment);
 
-                // Redirect to dashboard or results page
-                router.push(`/dashboard?assessment_id=${createdAssessment.id}`);
+                // Clear the draft since assessment was successfully submitted
+                await clearDraft(assessmentId);
+
+                // Show success message and redirect to dashboard to see the assessment
+                alert('Assessment submitted successfully! Redirecting to dashboard...');
+                router.push('/dashboard');
             } catch (error) {
                 console.error('Error submitting assessment:', error);
                 // You could add a toast notification here to show the error to the user
@@ -343,86 +415,57 @@ export default function AssessmentPage() {
 
     // Intelligent form service functions
     const getSmartDefaults = async (fieldName: string) => {
-        // Mock implementation - in real app, this would call the backend API
-        const mockDefaults = {
-            industry: [
-                { value: 'technology', confidence: 0.8, reason: 'Common choice for new assessments', source: 'usage_patterns' }
-            ],
-            companySize: [
-                { value: 'small', confidence: 0.7, reason: 'Most common company size', source: 'industry_patterns' }
-            ],
-            monthlyBudget: [
-                { value: '10k-50k', confidence: 0.6, reason: 'Typical for small companies', source: 'size_patterns' }
-            ]
-        };
-
-        return mockDefaults[fieldName as keyof typeof mockDefaults] || [];
+        try {
+            return await apiClient.getSmartDefaults(fieldName, formData);
+        } catch (error) {
+            console.error('Failed to get smart defaults:', error);
+            return [];
+        }
     };
 
     const getSuggestions = async (fieldName: string, query: string) => {
-        // Mock implementation - in real app, this would call the backend API
-        const mockSuggestions = {
-            companyName: [
-                { value: 'TechCorp Inc', label: 'TechCorp Inc', description: 'Technology company', confidence: 0.8 },
-                { value: 'InnovateLabs', label: 'InnovateLabs', description: 'Innovation laboratory', confidence: 0.7 }
-            ]
-        };
-
-        const suggestions = mockSuggestions[fieldName as keyof typeof mockSuggestions] || [];
-        return suggestions.filter(s =>
-            s.value.toLowerCase().includes(query.toLowerCase()) ||
-            s.label.toLowerCase().includes(query.toLowerCase())
-        );
+        try {
+            return await apiClient.getFieldSuggestions(fieldName, query, formData);
+        } catch (error) {
+            console.error('Failed to get field suggestions:', error);
+            return [];
+        }
     };
 
     const getContextualHelp = async (fieldName: string) => {
-        // Mock implementation - in real app, this would call the backend API
-        const mockHelp = {
-            companySize: {
-                title: 'Company Size',
-                content: 'Select the size category that best matches your organization.',
-                examples: [
-                    'Startup: 1-50 employees, early stage',
-                    'Small: 51-200 employees, established',
-                    'Medium: 201-1000 employees, multiple departments'
-                ],
-                tips: [
-                    'Consider total employee count, not just technical team',
-                    'This affects budget recommendations and complexity levels'
-                ],
-                related_fields: ['monthlyBudget', 'technicalTeamSize'],
-                help_type: 'tooltip'
-            },
-            industry: {
-                title: 'Industry',
-                content: 'Select the industry that best describes your business.',
-                examples: [
-                    'Technology: Software, hardware, IT services',
-                    'Healthcare: Medical, pharmaceutical, health services',
-                    'Finance: Banking, insurance, fintech'
-                ],
-                tips: [
-                    'This affects compliance requirements and service recommendations',
-                    'Choose the primary industry if you operate in multiple sectors'
-                ],
-                related_fields: ['complianceRequirements'],
-                help_type: 'tooltip'
-            }
-        };
-
-        return mockHelp[fieldName as keyof typeof mockHelp] || null;
+        try {
+            return await apiClient.getContextualHelp(fieldName, formData);
+        } catch (error) {
+            console.error('Failed to get contextual help:', error);
+            return null;
+        }
     };
 
     // Progress saving functions
     const saveProgress = async (formId: string, formData: Record<string, unknown>, currentStep: number) => {
         try {
-            // Mock implementation - in real app, this would call the backend API
-            localStorage.setItem(`form_${formId}`, JSON.stringify({
-                formData,
-                currentStep,
-                savedAt: new Date().toISOString()
-            }));
-            return true;
+            // Try to save to backend first, fallback to localStorage
+            try {
+                await apiClient.request('/forms/save-progress', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        form_id: formId,
+                        form_data: formData,
+                        current_step: currentStep,
+                        saved_at: new Date().toISOString()
+                    })
+                });
+                return true;
+            } catch (apiError) {
+                console.warn('Backend save failed, using localStorage:', apiError);
+                // Fallback to localStorage
+                localStorage.setItem(`form_${formId}`, JSON.stringify({
+                    formData,
+                    currentStep,
+                    savedAt: new Date().toISOString()
+                }));
+                return true;
+            }
         } catch (error) {
             console.error('Failed to save progress:', error);
             return false;
@@ -431,13 +474,24 @@ export default function AssessmentPage() {
 
     const loadProgress = async (formId: string) => {
         try {
-            // Mock implementation - in real app, this would call the backend API
-            const saved = localStorage.getItem(`form_${formId}`);
-            if (saved) {
-                const data = JSON.parse(saved);
-                setFormData(data.formData);
-                setActiveStep(data.currentStep);
-                return data.formData;
+            // Try to load from backend first, fallback to localStorage
+            try {
+                const data = await apiClient.request(`/forms/load-progress/${formId}`);
+                if (data && data.form_data) {
+                    setFormData(data.form_data);
+                    setActiveStep(data.current_step || 0);
+                    return data.form_data;
+                }
+            } catch (apiError) {
+                console.warn('Backend load failed, using localStorage:', apiError);
+                // Fallback to localStorage
+                const saved = localStorage.getItem(`form_${formId}`);
+                if (saved) {
+                    const data = JSON.parse(saved);
+                    setFormData(data.formData);
+                    setActiveStep(data.currentStep);
+                    return data.formData;
+                }
             }
             return null;
         } catch (error) {
@@ -448,6 +502,15 @@ export default function AssessmentPage() {
 
     const deleteProgress = async (formId: string) => {
         try {
+            // Try to delete from backend first, then localStorage
+            try {
+                await apiClient.request(`/forms/delete-progress/${formId}`, {
+                    method: 'DELETE'
+                });
+            } catch (apiError) {
+                console.warn('Backend delete failed:', apiError);
+            }
+            // Always remove from localStorage as well
             localStorage.removeItem(`form_${formId}`);
             return true;
         } catch (error) {
@@ -458,6 +521,17 @@ export default function AssessmentPage() {
 
     const listSavedForms = async () => {
         try {
+            // Try to get from backend first, fallback to localStorage
+            try {
+                const backendForms = await apiClient.request('/forms/list-saved');
+                if (backendForms && Array.isArray(backendForms)) {
+                    return backendForms;
+                }
+            } catch (apiError) {
+                console.warn('Backend list failed, using localStorage:', apiError);
+            }
+            
+            // Fallback to localStorage
             const saved = [];
             for (let i = 0; i < localStorage.length; i++) {
                 const key = localStorage.key(i);
@@ -535,7 +609,18 @@ export default function AssessmentPage() {
                                 <FormControlLabel value="small" control={<Radio />} label="Small (51-200 employees)" />
                                 <FormControlLabel value="medium" control={<Radio />} label="Medium (201-1000 employees)" />
                                 <FormControlLabel value="large" control={<Radio />} label="Large (1000+ employees)" />
+                                <FormControlLabel value="other" control={<Radio />} label="Other" />
                             </RadioGroup>
+                            {formData.companySize === 'other' && (
+                                <TextField
+                                    fullWidth
+                                    label="Please specify company size"
+                                    value={formData.companySizeOther}
+                                    onChange={(e) => handleInputChange('companySizeOther', e.target.value)}
+                                    sx={{ mt: 2 }}
+                                    size="small"
+                                />
+                            )}
                         </FormControl>
 
                         <FormControl error={!!errors.currentAIMaturity}>
@@ -548,7 +633,18 @@ export default function AssessmentPage() {
                                 <FormControlLabel value="pilot" control={<Radio />} label="Pilot projects" />
                                 <FormControlLabel value="production" control={<Radio />} label="Production AI systems" />
                                 <FormControlLabel value="advanced" control={<Radio />} label="Advanced AI operations" />
+                                <FormControlLabel value="other" control={<Radio />} label="Other" />
                             </RadioGroup>
+                            {formData.currentAIMaturity === 'other' && (
+                                <TextField
+                                    fullWidth
+                                    label="Please specify AI maturity level"
+                                    value={formData.currentAIMaturityOther}
+                                    onChange={(e) => handleInputChange('currentAIMaturityOther', e.target.value)}
+                                    sx={{ mt: 2 }}
+                                    size="small"
+                                />
+                            )}
                         </FormControl>
                     </Box>
                 );
@@ -576,12 +672,22 @@ export default function AssessmentPage() {
                                     />
                                 ))}
                             </FormGroup>
+                            {formData.currentCloudProvider.includes('Other') && (
+                                <TextField
+                                    fullWidth
+                                    label="Please specify other cloud provider"
+                                    value={formData.currentCloudProviderOther}
+                                    onChange={(e) => handleInputChange('currentCloudProviderOther', e.target.value)}
+                                    sx={{ mt: 2 }}
+                                    size="small"
+                                />
+                            )}
                         </FormControl>
 
                         <FormControl fullWidth>
                             <FormLabel>Current Services (Select all that apply)</FormLabel>
                             <FormGroup>
-                                {['Compute (VMs/Containers)', 'Storage', 'Databases', 'ML/AI Services', 'Analytics', 'Networking'].map((service) => (
+                                {['Compute (VMs/Containers)', 'Storage', 'Databases', 'ML/AI Services', 'Analytics', 'Networking', 'Other'].map((service) => (
                                     <FormControlLabel
                                         key={service}
                                         control={
@@ -594,6 +700,16 @@ export default function AssessmentPage() {
                                     />
                                 ))}
                             </FormGroup>
+                            {formData.currentServices.includes('Other') && (
+                                <TextField
+                                    fullWidth
+                                    label="Please specify other services"
+                                    value={formData.currentServicesOther}
+                                    onChange={(e) => handleInputChange('currentServicesOther', e.target.value)}
+                                    sx={{ mt: 2 }}
+                                    size="small"
+                                />
+                            )}
                         </FormControl>
 
                         <FormControl fullWidth error={!!errors.monthlyBudget}>
@@ -631,7 +747,7 @@ export default function AssessmentPage() {
                         <FormControl error={!!errors.aiUseCases}>
                             <FormLabel>AI Use Cases (Select all that apply)</FormLabel>
                             <FormGroup>
-                                {['Machine Learning Models', 'Natural Language Processing', 'Computer Vision', 'Predictive Analytics', 'Recommendation Systems', 'Chatbots/Virtual Assistants'].map((useCase) => (
+                                {['Machine Learning Models', 'Natural Language Processing', 'Computer Vision', 'Predictive Analytics', 'Recommendation Systems', 'Chatbots/Virtual Assistants', 'Other'].map((useCase) => (
                                     <FormControlLabel
                                         key={useCase}
                                         control={
@@ -644,6 +760,16 @@ export default function AssessmentPage() {
                                     />
                                 ))}
                             </FormGroup>
+                            {formData.aiUseCases.includes('Other') && (
+                                <TextField
+                                    fullWidth
+                                    label="Please specify other AI use cases"
+                                    value={formData.aiUseCasesOther}
+                                    onChange={(e) => handleInputChange('aiUseCasesOther', e.target.value)}
+                                    sx={{ mt: 2 }}
+                                    size="small"
+                                />
+                            )}
                         </FormControl>
 
                         <FormControl fullWidth error={!!errors.expectedDataVolume}>
@@ -670,7 +796,18 @@ export default function AssessmentPage() {
                                 <FormControlLabel value="standard" control={<Radio />} label="Standard performance" />
                                 <FormControlLabel value="high" control={<Radio />} label="High performance" />
                                 <FormControlLabel value="real-time" control={<Radio />} label="Real-time processing" />
+                                <FormControlLabel value="other" control={<Radio />} label="Other" />
                             </RadioGroup>
+                            {formData.performanceRequirements === 'other' && (
+                                <TextField
+                                    fullWidth
+                                    label="Please specify performance requirements"
+                                    value={formData.performanceRequirementsOther}
+                                    onChange={(e) => handleInputChange('performanceRequirementsOther', e.target.value)}
+                                    sx={{ mt: 2 }}
+                                    size="small"
+                                />
+                            )}
                         </FormControl>
 
                         <FormControl fullWidth>
@@ -699,7 +836,7 @@ export default function AssessmentPage() {
                         <FormControl>
                             <FormLabel>Compliance Requirements (Select all that apply)</FormLabel>
                             <FormGroup>
-                                {['GDPR', 'HIPAA', 'SOC 2', 'ISO 27001', 'PCI DSS', 'CCPA'].map((compliance) => (
+                                {['GDPR', 'HIPAA', 'SOC 2', 'ISO 27001', 'PCI DSS', 'CCPA', 'Other'].map((compliance) => (
                                     <FormControlLabel
                                         key={compliance}
                                         control={
@@ -712,6 +849,16 @@ export default function AssessmentPage() {
                                     />
                                 ))}
                             </FormGroup>
+                            {formData.complianceRequirements.includes('Other') && (
+                                <TextField
+                                    fullWidth
+                                    label="Please specify other compliance requirements"
+                                    value={formData.complianceRequirementsOther}
+                                    onChange={(e) => handleInputChange('complianceRequirementsOther', e.target.value)}
+                                    sx={{ mt: 2 }}
+                                    size="small"
+                                />
+                            )}
                         </FormControl>
 
                         <FormControl error={!!errors.dataLocation}>
@@ -724,7 +871,18 @@ export default function AssessmentPage() {
                                 <FormControlLabel value="eu" control={<Radio />} label="European Union" />
                                 <FormControlLabel value="asia" control={<Radio />} label="Asia Pacific" />
                                 <FormControlLabel value="multi" control={<Radio />} label="Multi-region" />
+                                <FormControlLabel value="other" control={<Radio />} label="Other" />
                             </RadioGroup>
+                            {formData.dataLocation === 'other' && (
+                                <TextField
+                                    fullWidth
+                                    label="Please specify data location preference"
+                                    value={formData.dataLocationOther}
+                                    onChange={(e) => handleInputChange('dataLocationOther', e.target.value)}
+                                    sx={{ mt: 2 }}
+                                    size="small"
+                                />
+                            )}
                         </FormControl>
 
                         <FormControl error={!!errors.securityLevel}>
@@ -736,7 +894,18 @@ export default function AssessmentPage() {
                                 <FormControlLabel value="standard" control={<Radio />} label="Standard security" />
                                 <FormControlLabel value="enhanced" control={<Radio />} label="Enhanced security" />
                                 <FormControlLabel value="enterprise" control={<Radio />} label="Enterprise security" />
+                                <FormControlLabel value="other" control={<Radio />} label="Other" />
                             </RadioGroup>
+                            {formData.securityLevel === 'other' && (
+                                <TextField
+                                    fullWidth
+                                    label="Please specify security level requirements"
+                                    value={formData.securityLevelOther}
+                                    onChange={(e) => handleInputChange('securityLevelOther', e.target.value)}
+                                    sx={{ mt: 2 }}
+                                    size="small"
+                                />
+                            )}
                         </FormControl>
 
                         <TextField
@@ -819,7 +988,7 @@ export default function AssessmentPage() {
                     <IconButton
                         edge="start"
                         color="inherit"
-                        onClick={() => router.push('/dashboard')}
+                        onClick={() => router.push('/')}
                         sx={{ mr: 2 }}
                     >
                         <ArrowBack />
@@ -827,6 +996,41 @@ export default function AssessmentPage() {
                     <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
                         AI Infrastructure Assessment
                     </Typography>
+                    
+                    {/* Save Status and Button */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2 }}>
+                        {lastSaved && (
+                            <Typography variant="caption" color="text.secondary">
+                                Saved: {lastSaved.toLocaleTimeString()}
+                            </Typography>
+                        )}
+                        
+                        {/* Restore Session Button */}
+                        {hasDraft() && !showRestoreDialog && (
+                            <Button
+                                variant="outlined"
+                                size="small"
+                                startIcon={<Restore />}
+                                onClick={() => setShowRestoreDialog(true)}
+                                color="inherit"
+                                sx={{ mr: 1 }}
+                            >
+                                Restore Session
+                            </Button>
+                        )}
+                        
+                        <Button
+                            variant="outlined"
+                            size="small"
+                            startIcon={isSaving ? <CircularProgress size={16} /> : <Save />}
+                            onClick={handleSaveDraft}
+                            disabled={isSaving}
+                            color="inherit"
+                        >
+                            {isSaving ? 'Saving...' : 'Save Draft'}
+                        </Button>
+                    </Box>
+                    
                     <Typography variant="body2">
                         Step {activeStep + 1} of {steps.length}
                     </Typography>
@@ -836,7 +1040,16 @@ export default function AssessmentPage() {
 
             <Container maxWidth="md" sx={{ py: 4 }}>
                 <Paper sx={{ p: 4 }}>
-                    <ProgressIndicator
+                    {isLoadingDraft ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
+                            <CircularProgress />
+                            <Typography variant="body1" sx={{ ml: 2 }}>
+                                Loading assessment...
+                            </Typography>
+                        </Box>
+                    ) : (
+                        <>
+                            <ProgressIndicator
                         title="Assessment Progress"
                         steps={steps.map((label, index) => ({
                             label,
@@ -879,8 +1092,54 @@ export default function AssessmentPage() {
                             </Button>
                         )}
                     </Box>
+                        </>
+                    )}
                 </Paper>
             </Container>
+
+            {/* Draft Restore Dialog */}
+            <Dialog
+                open={showRestoreDialog}
+                onClose={() => setShowRestoreDialog(false)}
+                aria-labelledby="restore-dialog-title"
+                aria-describedby="restore-dialog-description"
+            >
+                <DialogTitle id="restore-dialog-title">
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Restore color="primary" />
+                        Restore Previous Assessment
+                    </Box>
+                </DialogTitle>
+                <DialogContent>
+                    <DialogContentText id="restore-dialog-description">
+                        We found a saved draft of your assessment. Would you like to continue where you left off?
+                    </DialogContentText>
+                </DialogContent>
+                <DialogActions>
+                    <Button 
+                        onClick={() => setShowRestoreDialog(false)}
+                        color="secondary"
+                    >
+                        Start Fresh
+                    </Button>
+                    <Button 
+                        onClick={handleRestoreDraft}
+                        variant="contained"
+                        startIcon={<Restore />}
+                        autoFocus
+                    >
+                        Restore Draft
+                    </Button>
+                </DialogActions>
+            </Dialog>
         </>
+    );
+}
+
+export default function AssessmentPage() {
+    return (
+        <Suspense fallback={<div>Loading...</div>}>
+            <AssessmentPageInner />
+        </Suspense>
     );
 }

@@ -41,7 +41,7 @@ export default function UserProfile({ open, onClose }: UserProfileProps) {
 
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState({
-        name: user?.name || '',
+        full_name: user?.full_name || '',
         company: user?.company || '',
         preferences: {
             emailNotifications: true,
@@ -72,7 +72,7 @@ export default function UserProfile({ open, onClose }: UserProfileProps) {
     const handleSave = async () => {
         try {
             await dispatch(updateProfile({
-                name: formData.name,
+                full_name: formData.full_name,
                 company: formData.company,
                 preferences: formData.preferences,
             })).unwrap();
@@ -86,7 +86,7 @@ export default function UserProfile({ open, onClose }: UserProfileProps) {
     const handleCancel = () => {
         // Reset form data
         setFormData({
-            name: user?.name || '',
+            full_name: user?.full_name || '',
             company: user?.company || '',
             preferences: {
                 emailNotifications: true,
@@ -143,8 +143,8 @@ export default function UserProfile({ open, onClose }: UserProfileProps) {
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                         <TextField
                             label="Full Name"
-                            name="name"
-                            value={formData.name}
+                            name="full_name"
+                            value={formData.full_name}
                             onChange={handleChange}
                             disabled={!isEditing}
                             fullWidth

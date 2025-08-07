@@ -298,7 +298,7 @@ export default function RealTimeDashboard() {
                                 </Typography>
                                 <LinearProgress
                                     variant="determinate"
-                                    value={metrics.cpu_usage_percent}
+                                    value={metrics.cpu_usage_percent || 0}
                                     color={getMetricColor(metrics.cpu_usage_percent, { warning: 70, critical: 90 })}
                                     sx={{ mt: 1 }}
                                 />
@@ -319,7 +319,7 @@ export default function RealTimeDashboard() {
                                 </Typography>
                                 <LinearProgress
                                     variant="determinate"
-                                    value={metrics.memory_usage_percent}
+                                    value={metrics.memory_usage_percent || 0}
                                     color={getMetricColor(metrics.memory_usage_percent, { warning: 80, critical: 95 })}
                                     sx={{ mt: 1 }}
                                 />
@@ -340,7 +340,7 @@ export default function RealTimeDashboard() {
                                 </Typography>
                                 <LinearProgress
                                     variant="determinate"
-                                    value={metrics.disk_usage_percent}
+                                    value={metrics.disk_usage_percent || 0}
                                     color={getMetricColor(metrics.disk_usage_percent, { warning: 85, critical: 95 })}
                                     sx={{ mt: 1 }}
                                 />
@@ -388,7 +388,7 @@ export default function RealTimeDashboard() {
                                         </Stack>
                                         <LinearProgress
                                             variant="determinate"
-                                            value={Math.min(metrics.response_time_avg_ms / 10, 100)} // Scale to 1s max
+                                            value={Math.min(metrics.response_time_avg_ms / 10, 100) || 0} // Scale to 1s max
                                             color={getMetricColor(metrics.response_time_avg_ms, { warning: 500, critical: 1000 })}
                                         />
                                     </Box>
@@ -402,7 +402,7 @@ export default function RealTimeDashboard() {
                                         </Stack>
                                         <LinearProgress
                                             variant="determinate"
-                                            value={metrics.error_rate_percent}
+                                            value={metrics.error_rate_percent || 0}
                                             color={getMetricColor(metrics.error_rate_percent, { warning: 1, critical: 5 })}
                                         />
                                     </Box>
@@ -416,7 +416,7 @@ export default function RealTimeDashboard() {
                                         </Stack>
                                         <LinearProgress
                                             variant="determinate"
-                                            value={metrics.cache_hit_rate_percent}
+                                            value={metrics.cache_hit_rate_percent || 0}
                                             color={metrics.cache_hit_rate_percent > 90 ? 'success' :
                                                 metrics.cache_hit_rate_percent > 70 ? 'warning' : 'error'}
                                         />
@@ -488,7 +488,7 @@ export default function RealTimeDashboard() {
                                                     </Typography>
                                                     <LinearProgress
                                                         variant="determinate"
-                                                        value={workflow.progress}
+                                                        value={workflow.progress || 0}
                                                         sx={{ mt: 1, width: '100%' }}
                                                     />
                                                 </Box>

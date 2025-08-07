@@ -1,0 +1,140 @@
+/* Z-Index Hierarchy for Infra Mind Application
+ * This file establishes a consistent z-index hierarchy to prevent overlay conflicts
+ * Based on Material-UI's default z-index values and extended for custom components
+ */
+
+:root {
+  /* Base z-index values (following Material-UI conventions) */
+  --z-mobileStepper: 1000;
+  --z-speedDial: 1050;
+  --z-appBar: 1100;
+  --z-drawer: 1200;
+  --z-modal: 1300;
+  --z-snackbar: 1400;
+  --z-tooltip: 1500;
+  
+  /* Custom application z-index values */
+  --z-navigation: 1100;
+  --z-sidebar: 1200;
+  --z-dropdown-menu: 1250;
+  --z-chat-widget: 1275;
+  --z-live-collaboration: 1280;
+  --z-modal-overlay: 1300;
+  --z-notification-toast: 1400;
+  --z-tooltip-hover: 1500;
+  --z-debug-overlay: 9000;
+}
+
+/* Navigation Components */
+.app-navigation {
+  z-index: var(--z-navigation) !important;
+}
+
+.app-sidebar {
+  z-index: var(--z-sidebar) !important;
+}
+
+/* Interactive Elements */
+.dropdown-menu {
+  z-index: var(--z-dropdown-menu) !important;
+}
+
+.profile-menu {
+  z-index: var(--z-dropdown-menu) !important;
+}
+
+/* Chat and Collaboration */
+.chat-widget {
+  z-index: var(--z-chat-widget) !important;
+}
+
+.live-collaboration-overlay {
+  z-index: var(--z-live-collaboration) !important;
+}
+
+.collaboration-cursor {
+  z-index: calc(var(--z-live-collaboration) - 50) !important;
+}
+
+/* Modals and Overlays */
+.modal-overlay {
+  z-index: var(--z-modal-overlay) !important;
+}
+
+.dialog-overlay {
+  z-index: var(--z-modal-overlay) !important;
+}
+
+/* Notifications */
+.notification-toast {
+  z-index: var(--z-notification-toast) !important;
+}
+
+.snackbar {
+  z-index: var(--z-notification-toast) !important;
+}
+
+/* Tooltips */
+.tooltip {
+  z-index: var(--z-tooltip-hover) !important;
+}
+
+.chart-tooltip {
+  z-index: var(--z-tooltip-hover) !important;
+}
+
+/* Content Areas */
+.main-content {
+  position: relative;
+  z-index: 1;
+}
+
+.page-content {
+  position: relative;
+  z-index: 1;
+}
+
+/* Special Cases */
+.loading-overlay {
+  z-index: calc(var(--z-modal-overlay) + 50) !important;
+}
+
+.error-boundary {
+  z-index: calc(var(--z-modal-overlay) + 100) !important;
+}
+
+/* Debug and Development */
+.debug-overlay {
+  z-index: var(--z-debug-overlay) !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .mobile-navigation {
+    z-index: calc(var(--z-navigation) + 100) !important;
+  }
+  
+  .mobile-drawer {
+    z-index: calc(var(--z-drawer) + 100) !important;
+  }
+}
+
+/* Accessibility - ensure focus indicators are visible */
+*:focus-visible {
+  position: relative;
+  z-index: calc(var(--z-tooltip-hover) + 1) !important;
+}
+
+/* Utility classes for manual z-index control */
+.z-base { z-index: 1 !important; }
+.z-low { z-index: 10 !important; }
+.z-medium { z-index: 100 !important; }
+.z-high { z-index: 1000 !important; }
+.z-critical { z-index: 9999 !important; }
+
+/* Print styles - reset all z-index for printing */
+@media print {
+  * {
+    z-index: auto !important;
+  }
+}

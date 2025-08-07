@@ -66,6 +66,13 @@ class PasswordChange(BaseModel):
     new_password: str = Field(min_length=8)
 
 
+class ProfileUpdate(BaseModel):
+    """Profile update request."""
+    full_name: Optional[str] = None
+    company: Optional[str] = None
+    preferences: Optional[dict] = None
+
+
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_data: UserRegister):
     """
@@ -324,6 +331,118 @@ async def change_password(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Password change failed"
+        )
+
+
+@router.put("/profile", response_model=UserProfile)
+async def update_profile(
+    update_data: ProfileUpdate,
+    credentials: HTTPAuthorizationCredentials = Depends(security)
+):
+    """
+    Update user profile.
+    
+    Updates the profile information for the authenticated user.
+    """
+    try:
+        # Decode JWT token and get user
+        user_id = await decode_token(credentials.credentials)
+        user = await User.get(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Invalid token"
+            )
+        
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Account disabled"
+            )
+        
+        # Update fields if provided
+        if update_data.full_name is not None:
+            user.full_name = update_data.full_name
+        
+        if update_data.company is not None:
+            user.company_name = update_data.company
+        
+        if update_data.preferences is not None:
+            # Store preferences in a separate field or in user metadata
+            # For now, we'll add a preferences field to the user model
+            if not hasattr(user, 'preferences'):
+                user.preferences = {}
+            user.preferences.update(update_data.preferences)
+        
+        user.updated_at = datetime.utcnow()
+        await user.save()
+        
+        logger.info(f"Profile updated successfully for user: {user.email}")
+        
+        return UserProfile(
+            id=str(user.id),
+            email=user.email,
+            full_name=user.full_name,
+            company=user.company_name,
+            role=user.role,
+            is_active=user.is_active,
+            created_at=user.created_at
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update profile: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update profile"
+        )
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """
+    Refresh JWT token.
+    
+    Issues a new JWT token for the authenticated user.
+    """
+    try:
+        # Decode and validate current token
+        user_id = await decode_token(credentials.credentials)
+        user = await User.get(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Invalid token"
+            )
+        
+        if not user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED, 
+                detail="Account disabled"
+            )
+        
+        # Generate new access token
+        access_token = await create_access_token(str(user.id))
+        
+        logger.info(f"Token refreshed for user: {user.email}")
+        
+        return TokenResponse(
+            access_token=access_token,
+            token_type="bearer",
+            expires_in=3600,
+            user_id=str(user.id),
+            email=user.email,
+            full_name=user.full_name
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Token refresh failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token refresh failed"
         )
 
 

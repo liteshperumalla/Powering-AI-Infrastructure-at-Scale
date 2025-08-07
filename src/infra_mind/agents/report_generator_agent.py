@@ -550,28 +550,28 @@ class ReportGeneratorAgent(BaseAgent):
                 content = self._generate_technical_requirements(assessment)
             elif title == "Key Recommendations" or title == "Recommendations Overview":
                 content = await self._generate_recommendations_overview_enhanced(recommendations, research_data)
-        elif title == "Detailed Technical Recommendations":
-            content = self._generate_detailed_recommendations(recommendations)
-        elif title == "Investment Summary" or title == "Cost Analysis":
-            content = self._generate_cost_analysis(recommendations)
-        elif title == "Implementation Roadmap":
-            content = self._generate_implementation_roadmap(recommendations)
-        elif title == "Risk Assessment" or title == "Risk Assessment & Mitigation":
-            content = self._generate_risk_assessment(recommendations)
-        elif title == "Architecture Recommendations":
-            content = self._generate_architecture_recommendations(recommendations)
-        elif title == "Technology Stack":
-            content = self._generate_technology_stack(recommendations)
-        elif title == "Implementation Details":
-            content = self._generate_implementation_details(recommendations)
-        elif title == "Security & Compliance":
-            content = self._generate_security_compliance(assessment, recommendations)
-        elif title == "Monitoring & Operations":
-            content = self._generate_monitoring_operations(recommendations)
-        elif title == "Next Steps":
-            content = self._generate_next_steps(recommendations)
-        else:
-            content = f"Content for {title} section would be generated here."
+            elif title == "Detailed Technical Recommendations":
+                content = self._generate_detailed_recommendations(recommendations)
+            elif title == "Investment Summary" or title == "Cost Analysis":
+                content = self._generate_cost_analysis(recommendations)
+            elif title == "Implementation Roadmap":
+                content = self._generate_implementation_roadmap(recommendations)
+            elif title == "Risk Assessment" or title == "Risk Assessment & Mitigation":
+                content = self._generate_risk_assessment(recommendations)
+            elif title == "Architecture Recommendations":
+                content = self._generate_architecture_recommendations(recommendations)
+            elif title == "Technology Stack":
+                content = self._generate_technology_stack(recommendations)
+            elif title == "Implementation Details":
+                content = self._generate_implementation_details(recommendations)
+            elif title == "Security & Compliance":
+                content = self._generate_security_compliance(assessment, recommendations)
+            elif title == "Monitoring & Operations":
+                content = self._generate_monitoring_operations(recommendations)
+            elif title == "Next Steps":
+                content = self._generate_next_steps(recommendations)
+            else:
+                content = f"Content for {title} section would be generated here."
         
         # Determine if section should be interactive
         is_interactive = self._should_be_interactive(title, recommendations)

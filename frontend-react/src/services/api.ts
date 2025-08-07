@@ -6,6 +6,7 @@
  */
 
 import { Assessment, BusinessRequirements, TechnicalRequirements } from '@/store/slices/assessmentSlice';
+import { cacheBuster, getNoCacheHeaders } from '@/utils/cache-buster';
 
 // API Configuration
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
@@ -63,20 +64,42 @@ export interface Recommendation {
     assessment_id: string;
     agent_name: string;
     title: string;
-    description: string;
+    summary: string;
+    confidence_level: string;
     confidence_score: number;
-    business_alignment: number;
+    business_alignment?: number;
     recommended_services: Array<{
         service_name: string;
         provider: string;
-        estimated_monthly_cost: number;
-        specifications: Record<string, unknown>;
+        service_category: string;
+        estimated_monthly_cost: string;
+        cost_model: string;
+        configuration: Record<string, unknown>;
+        reasons: string[];
+        alternatives: string[];
+        setup_complexity: 'low' | 'medium' | 'high';
+        implementation_time_hours: number;
     }>;
-    pros: string[];
-    cons: string[];
-    implementation_complexity: 'low' | 'medium' | 'high';
-    status: 'pending' | 'approved' | 'rejected';
+    cost_estimates: {
+        total_monthly?: number;
+        annual_savings?: number;
+        [key: string]: number | undefined;
+    };
+    total_estimated_monthly_cost: string;
+    implementation_steps: string[];
+    prerequisites: string[];
+    risks_and_considerations: string[];
+    business_impact: 'low' | 'medium' | 'high';
+    alignment_score: number;
+    tags: string[];
+    priority: 'low' | 'medium' | 'high';
+    category: string;
+    pros?: string[];
+    cons?: string[];
+    implementation_complexity?: 'low' | 'medium' | 'high';
+    status?: 'pending' | 'approved' | 'rejected';
     created_at: string;
+    updated_at: string;
 }
 
 export interface Report {
@@ -94,6 +117,26 @@ export interface Report {
     estimated_savings: number;
     compliance_score: number;
     generated_at: string;
+}
+
+export interface CloudService {
+    id: string;
+    name: string;
+    provider: 'AWS' | 'Azure' | 'GCP' | 'Alibaba' | 'IBM';
+    category: string;
+    description: string;
+    pricing: {
+        model: string;
+        starting_price: number;
+        unit: string;
+    };
+    features: string[];
+    rating: number;
+    compliance: string[];
+    region_availability: string[];
+    use_cases?: string[];
+    integration?: string[];
+    managed?: boolean;
 }
 
 // API Client Class
@@ -114,14 +157,14 @@ class ApiClient {
         return null;
     }
 
-    private setStoredToken(token: string): void {
+    public setStoredToken(token: string): void {
         if (typeof window !== 'undefined') {
             localStorage.setItem('auth_token', token);
         }
         this.token = token;
     }
 
-    private removeStoredToken(): void {
+    public removeStoredToken(): void {
         if (typeof window !== 'undefined') {
             localStorage.removeItem('auth_token');
         }
@@ -208,7 +251,13 @@ class ApiClient {
                 if (error.name === 'AbortError') {
                     throw new Error('Request timeout. Please try again.');
                 }
-                console.error(`API request failed: ${endpoint}`, error);
+                
+                // Handle network connectivity issues
+                if (error.message.includes('fetch') || error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
+                    throw new Error('Connection failed - please check if the server is running at http://localhost:8000');
+                }
+                
+                console.error(`API request failed: ${config.method || 'GET'} ${endpoint}`, error);
                 throw error;
             }
             throw new Error('An unexpected error occurred');
@@ -262,18 +311,38 @@ class ApiClient {
 
     // Assessment methods
     async createAssessment(assessmentData: CreateAssessmentRequest): Promise<Assessment> {
-        return this.request<Assessment>('/assessments', {
+        return this.request<Assessment>('/assessments/', {
             method: 'POST',
             body: JSON.stringify(assessmentData),
         });
     }
 
+    async createSimpleAssessment(data: { title: string; description?: string }): Promise<Assessment> {
+        return this.request<Assessment>('/assessments/simple', {
+            method: 'POST',
+            body: JSON.stringify(data),
+        });
+    }
+
     async getAssessments(): Promise<Assessment[]> {
-        return this.request<Assessment[]>('/assessments');
+        // Use cache buster to ensure fresh data
+        const url = cacheBuster.bustCache('/assessments/', 'assessments_list');
+        const response = await this.request<{assessments: Assessment[], total: number, page: number, limit: number, pages: number}>(url, {
+            headers: {
+                ...getNoCacheHeaders()
+            }
+        });
+        return response.assessments;
     }
 
     async getAssessment(id: string): Promise<Assessment> {
-        return this.request<Assessment>(`/assessments/${id}`);
+        // Use cache buster for individual assessment
+        const url = cacheBuster.bustCache(`/assessments/${id}`, `assessment_${id}`);
+        return this.request<Assessment>(url, {
+            headers: {
+                ...getNoCacheHeaders()
+            }
+        });
     }
 
     async updateAssessment(id: string, updates: Partial<Assessment>): Promise<Assessment> {
@@ -289,6 +358,102 @@ class ApiClient {
         });
     }
 
+    async getAssessmentVisualizationData(id: string): Promise<{
+        assessment_id: string;
+        data: {
+            assessment_results: Array<{
+                category: string;
+                currentScore: number;
+                targetScore: number;
+                improvement: number;
+                color: string;
+            }>;
+            overall_score: number;
+            recommendations_count: number;
+            completion_status: string;
+            generated_at: string;
+            fallback_data?: boolean;
+        };
+        generated_at: string;
+        status: string;
+    }> {
+        // Use cache buster to ensure fresh visualization data
+        const url = cacheBuster.bustCache(`/assessments/${id}/visualization-data`, `visualization_${id}`);
+        return this.request<{
+            assessment_id: string;
+            data: {
+                assessment_results: Array<{
+                    category: string;
+                    currentScore: number;
+                    targetScore: number;
+                    improvement: number;
+                    color: string;
+                }>;
+                overall_score: number;
+                recommendations_count: number;
+                completion_status: string;
+                generated_at: string;
+                fallback_data?: boolean;
+            };
+            generated_at: string;
+            status: string;
+        }>(url, {
+            // Disable caching for fresh data
+            headers: {
+                ...getNoCacheHeaders()
+            }
+        });
+    }
+
+    // Draft assessment methods
+    async createDraftAssessment(draftData: {
+        title: string;
+        draft_data: Record<string, unknown>;
+        current_step: number;
+        status: 'draft';
+    }): Promise<Assessment> {
+        return this.request<Assessment>('/assessments/', {
+            method: 'POST',
+            body: JSON.stringify({
+                title: draftData.title,
+                status: 'draft',
+                draft_data: draftData.draft_data,
+                current_step: draftData.current_step,
+                // Add minimal required fields for validation
+                business_requirements: {
+                    business_goals: [],
+                    growth_projection: 'stable',
+                    budget_constraints: 50000,
+                    team_structure: 'small',
+                    compliance_requirements: ['none'],
+                    project_timeline_months: 6
+                },
+                technical_requirements: {
+                    current_infrastructure: 'on_premise',
+                    workload_types: ['web_application'],
+                    performance_requirements: {},
+                    scalability_requirements: {},
+                    security_requirements: {},
+                    integration_requirements: {}
+                }
+            }),
+        });
+    }
+
+    async updateDraftAssessment(id: string, draftData: {
+        draft_data: Record<string, unknown>;
+        current_step: number;
+    }): Promise<Assessment> {
+        return this.request<Assessment>(`/assessments/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify({
+                draft_data: draftData.draft_data,
+                current_step: draftData.current_step,
+                status: 'draft'
+            }),
+        });
+    }
+
     // Recommendation methods
     async generateRecommendations(assessmentId: string): Promise<{ workflow_id: string }> {
         return this.request<{ workflow_id: string }>(`/recommendations/${assessmentId}/generate`, {
@@ -297,7 +462,14 @@ class ApiClient {
     }
 
     async getRecommendations(assessmentId: string): Promise<Recommendation[]> {
-        return this.request<Recommendation[]>(`/recommendations/${assessmentId}`);
+        // Use cache buster to ensure fresh recommendations data
+        const url = cacheBuster.bustCache(`/recommendations/${assessmentId}`, `recommendations_${assessmentId}`);
+        const response = await this.request<{recommendations: Recommendation[], total: number, assessment_id: string, summary: any}>(url, {
+            headers: {
+                ...getNoCacheHeaders()
+            }
+        });
+        return response.recommendations;
     }
 
     async updateRecommendationStatus(
@@ -322,9 +494,18 @@ class ApiClient {
         });
     }
 
-    async getReports(assessmentId?: string): Promise<Report[]> {
-        const endpoint = assessmentId ? `/reports?assessment_id=${assessmentId}` : '/reports';
-        return this.request<Report[]>(endpoint);
+    async getReports(assessmentId: string): Promise<Report[]> {
+        // Add cache-busting timestamp to ensure fresh data
+        const timestamp = Date.now();
+        const response = await this.request<{reports: Report[]}>(
+            `/reports/${assessmentId}?t=${timestamp}`, 
+            {
+                headers: {
+                    'Cache-Control': 'no-cache'
+                }
+            }
+        );
+        return response.reports || [];
     }
 
     async getReport(reportId: string): Promise<Report> {
@@ -429,6 +610,116 @@ class ApiClient {
         return ws;
     }
 
+    // Cloud Services methods
+    async getCloudServices(options?: {
+        provider?: string;
+        category?: string;
+        search?: string;
+        limit?: number;
+        offset?: number;
+    }): Promise<{
+        services: CloudService[];
+        pagination: {
+            total: number;
+            limit: number;
+            offset: number;
+            has_more: boolean;
+        };
+        filters: {
+            provider?: string;
+            category?: string;
+            search?: string;
+        };
+    }> {
+        const params = new URLSearchParams();
+        
+        if (options?.provider) {
+            params.append('provider', options.provider);
+        }
+        if (options?.category) {
+            params.append('category', options.category);
+        }
+        if (options?.search) {
+            params.append('search', options.search);
+        }
+        if (options?.limit) {
+            params.append('limit', options.limit.toString());
+        }
+        if (options?.offset) {
+            params.append('offset', options.offset.toString());
+        }
+
+        return this.request<{
+            services: CloudService[];
+            pagination: {
+                total: number;
+                limit: number;
+                offset: number;
+                has_more: boolean;
+            };
+            filters: {
+                provider?: string;
+                category?: string;
+                search?: string;
+            };
+        }>(`/cloud-services?${params.toString()}`);
+    }
+
+    async getCloudServiceDetails(serviceId: string): Promise<CloudService> {
+        return this.request<CloudService>(`/cloud-services/${serviceId}`);
+    }
+
+    async compareCloudServices(serviceIds: string[]): Promise<{
+        services: CloudService[];
+        comparison: {
+            price_comparison: any;
+            feature_overlap: any;
+            compliance_comparison: any;
+            recommendations: any[];
+        };
+        compared_count: number;
+    }> {
+        const serviceIdsParam = serviceIds.join(',');
+        return this.request(`/cloud-services/compare/${serviceIdsParam}`);
+    }
+
+    async getCloudServiceProviders(): Promise<{
+        providers: Array<{
+            name: string;
+            service_count: number;
+            categories: string[];
+        }>;
+        total_providers: number;
+    }> {
+        return this.request('/cloud-services/providers');
+    }
+
+    async getCloudServiceCategories(): Promise<{
+        categories: Array<{
+            name: string;
+            service_count: number;
+            providers: string[];
+        }>;
+        total_categories: number;
+    }> {
+        return this.request('/cloud-services/categories');
+    }
+
+    async getCloudServicesStats(): Promise<{
+        total_services: number;
+        providers: Record<string, any>;
+        categories: Record<string, any>;
+        pricing: {
+            min_price: number;
+            max_price: number;
+            avg_price: number;
+        };
+        compliance_standards: Record<string, number>;
+        most_common_compliance: string;
+    }> {
+        return this.request('/cloud-services/stats');
+    }
+
     // Utility methods
     isAuthenticated(): boolean {
         return !!this.token;
@@ -441,16 +732,47 @@ class ApiClient {
     // Health check method
     async checkHealth(): Promise<{
         status: string;
-        version: string;
+        version?: string;
         timestamp: string;
-        services: Record<string, string>;
+        services?: Record<string, string>;
+        system?: any;
+        performance?: any;
     }> {
-        // This endpoint is at the root, so we call it directly without the API prefix.
-        const response = await fetch(`${API_BASE_URL}/health`);
-        if (!response.ok) {
-            throw new Error('Health check failed');
+        try {
+            // Use the base URL directly for health endpoint (no API prefix needed)
+            const url = `${API_BASE_URL}/health`;
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                // Add timeout for health check
+                signal: AbortSignal.timeout(10000), // 10 second timeout
+            });
+            
+            if (!response.ok) {
+                throw new Error(`Health check failed: ${response.status}`);
+            }
+            
+            return await response.json();
+        } catch (error) {
+            console.error('Health check error:', error);
+            // Return a fallback response instead of throwing
+            return {
+                status: 'unknown',
+                timestamp: new Date().toISOString(),
+                system: {
+                    cpu_usage_percent: 0,
+                    memory_usage_percent: 0,
+                    active_connections: 0
+                },
+                performance: {
+                    avg_response_time_ms: 0,
+                    error_rate_percent: 0
+                }
+            };
         }
-        return response.json();
     }
 
     // Get system metrics
@@ -461,6 +783,311 @@ class ApiClient {
         response_time_avg: number;
     }> {
         return this.request('/admin/metrics');
+    }
+
+    // Chat API methods - TEMPORARILY DISABLED - Backend endpoints not implemented yet
+    async startConversation(request: {
+        title?: string;
+        context?: string;
+        assessment_id?: string;
+        report_id?: string;
+        initial_message?: string;
+    }): Promise<{
+        id: string;
+        title: string;
+        status: string;
+        context: string;
+        messages: Array<{
+            id: string;
+            role: 'user' | 'assistant' | 'system';
+            content: string;
+            timestamp: string;
+            metadata?: any;
+        }>;
+        message_count: number;
+        started_at: string;
+        last_activity: string;
+        assessment_id?: string;
+        report_id?: string;
+        escalated: boolean;
+        total_tokens_used: number;
+        topics_discussed: string[];
+    }> {
+        // Temporary fallback since chat endpoints are not yet implemented
+        throw new Error('AI Assistant feature is not yet available. Chat endpoints are being implemented.');
+        
+        // return this.request('/chat/conversations', {
+        //     method: 'POST',
+        //     body: JSON.stringify(request),
+        // });
+    }
+
+    async getConversations(params?: {
+        page?: number;
+        limit?: number;
+        status_filter?: string;
+        context_filter?: string;
+    }): Promise<{
+        conversations: Array<{
+            id: string;
+            title: string;
+            status: string;
+            context: string;
+            message_count: number;
+            started_at: string;
+            last_activity: string;
+            assessment_id?: string;
+            report_id?: string;
+            escalated: boolean;
+        }>;
+        total: number;
+        page: number;
+        limit: number;
+        has_more: boolean;
+    }> {
+        const searchParams = new URLSearchParams();
+        if (params?.page) searchParams.append('page', params.page.toString());
+        if (params?.limit) searchParams.append('limit', params.limit.toString());
+        if (params?.status_filter) searchParams.append('status_filter', params.status_filter);
+        if (params?.context_filter) searchParams.append('context_filter', params.context_filter);
+
+        const query = searchParams.toString();
+        return this.request(`/chat/conversations${query ? `?${query}` : ''}`);
+    }
+
+    async getConversation(conversationId: string): Promise<{
+        id: string;
+        title: string;
+        status: string;
+        context: string;
+        messages: Array<{
+            id: string;
+            role: 'user' | 'assistant' | 'system';
+            content: string;
+            timestamp: string;
+            metadata?: any;
+        }>;
+        message_count: number;
+        started_at: string;
+        last_activity: string;
+        assessment_id?: string;
+        report_id?: string;
+        escalated: boolean;
+        total_tokens_used: number;
+        topics_discussed: string[];
+    }> {
+        return this.request(`/chat/conversations/${conversationId}`);
+    }
+
+    async sendMessage(conversationId: string, request: {
+        content: string;
+        context?: string;
+        assessment_id?: string;
+        report_id?: string;
+    }): Promise<{
+        id: string;
+        role: 'user' | 'assistant' | 'system';
+        content: string;
+        timestamp: string;
+        metadata?: any;
+    }> {
+        return this.request(`/chat/conversations/${conversationId}/messages`, {
+            method: 'POST',
+            body: JSON.stringify(request),
+        });
+    }
+
+    async updateConversationTitle(conversationId: string, title: string): Promise<{
+        message: string;
+    }> {
+        return this.request(`/chat/conversations/${conversationId}/title`, {
+            method: 'PUT',
+            body: JSON.stringify({ title }),
+        });
+    }
+
+    async deleteConversation(conversationId: string): Promise<{
+        message: string;
+    }> {
+        return this.request(`/chat/conversations/${conversationId}`, {
+            method: 'DELETE',
+        });
+    }
+
+    async endConversation(conversationId: string, satisfactionRating?: number): Promise<{
+        message: string;
+    }> {
+        const params = new URLSearchParams();
+        if (satisfactionRating) {
+            params.append('satisfaction_rating', satisfactionRating.toString());
+        }
+
+        const query = params.toString();
+        return this.request(`/chat/conversations/${conversationId}/end${query ? `?${query}` : ''}`, {
+            method: 'POST',
+        });
+    }
+
+    async getChatAnalytics(days: number = 30): Promise<{
+        total_conversations: number;
+        total_messages: number;
+        avg_conversation_length: number;
+        escalation_rate: number;
+        satisfaction_score?: number;
+        top_contexts: Array<{
+            context: string;
+            count: number;
+        }>;
+        recent_activity: Array<{
+            date: string;
+            title: string;
+            context: string;
+            message_count: number;
+            escalated: boolean;
+        }>;
+    }> {
+        return this.request(`/chat/analytics?days=${days}`);
+    }
+
+    // Intelligent Form Features
+    async getSmartDefaults(fieldName: string, context?: Record<string, any>): Promise<{
+        value: any;
+        confidence: number;
+        reason: string;
+        source: string;
+    }[]> {
+        try {
+            return await this.request('/forms/smart-defaults', {
+                method: 'POST',
+                body: JSON.stringify({ field_name: fieldName, context })
+            });
+        } catch (error) {
+            // Fallback to basic defaults if API fails
+            console.warn('Smart defaults API failed, using fallbacks:', error);
+            return this.getFallbackDefaults(fieldName);
+        }
+    }
+
+    async getFieldSuggestions(fieldName: string, query: string, context?: Record<string, any>): Promise<{
+        value: string;
+        label: string;
+        description?: string;
+        confidence: number;
+    }[]> {
+        try {
+            return await this.request('/forms/suggestions', {
+                method: 'POST',
+                body: JSON.stringify({ field_name: fieldName, query, context })
+            });
+        } catch (error) {
+            // Fallback to basic suggestions if API fails
+            console.warn('Field suggestions API failed, using fallbacks:', error);
+            return this.getFallbackSuggestions(fieldName, query);
+        }
+    }
+
+    async getContextualHelp(fieldName: string, context?: Record<string, any>): Promise<{
+        title: string;
+        content: string;
+        examples?: string[];
+        tips?: string[];
+        related_fields?: string[];
+        help_type: 'tooltip' | 'modal' | 'inline';
+    } | null> {
+        try {
+            return await this.request('/forms/contextual-help', {
+                method: 'POST',
+                body: JSON.stringify({ field_name: fieldName, context })
+            });
+        } catch (error) {
+            // Fallback to basic help if API fails
+            console.warn('Contextual help API failed, using fallbacks:', error);
+            return this.getFallbackHelp(fieldName);
+        }
+    }
+
+    // Fallback methods for when intelligent form APIs are not available
+    private getFallbackDefaults(fieldName: string): {
+        value: any;
+        confidence: number;
+        reason: string;
+        source: string;
+    }[] {
+        const defaults: Record<string, any[]> = {
+            industry: [
+                { value: 'technology', confidence: 0.6, reason: 'Most common industry in our user base', source: 'usage_patterns' }
+            ],
+            companySize: [
+                { value: 'small', confidence: 0.5, reason: 'Common starting point for assessments', source: 'industry_patterns' }
+            ],
+            monthlyBudget: [
+                { value: '5k-25k', confidence: 0.4, reason: 'Typical budget range for small to medium companies', source: 'size_patterns' }
+            ]
+        };
+        return defaults[fieldName] || [];
+    }
+
+    private getFallbackSuggestions(fieldName: string, query: string): {
+        value: string;
+        label: string;
+        description?: string;
+        confidence: number;
+    }[] {
+        const suggestions: Record<string, any[]> = {
+            companyName: [
+                { value: 'TechCorp', label: 'TechCorp', description: 'Technology company', confidence: 0.6 },
+                { value: 'InnovateLabs', label: 'InnovateLabs', description: 'Innovation laboratory', confidence: 0.5 }
+            ]
+        };
+        
+        const fieldSuggestions = suggestions[fieldName] || [];
+        return fieldSuggestions.filter(s =>
+            s.value.toLowerCase().includes(query.toLowerCase()) ||
+            s.label.toLowerCase().includes(query.toLowerCase())
+        );
+    }
+
+    private getFallbackHelp(fieldName: string): {
+        title: string;
+        content: string;
+        examples?: string[];
+        tips?: string[];
+        related_fields?: string[];
+        help_type: 'tooltip' | 'modal' | 'inline';
+    } | null {
+        const help: Record<string, any> = {
+            companySize: {
+                title: 'Company Size',
+                content: 'Select the size category that best matches your organization.',
+                examples: [
+                    'Startup: 1-50 employees, early stage',
+                    'Small: 51-200 employees, established',
+                    'Medium: 201-1000 employees, multiple departments'
+                ],
+                tips: [
+                    'Consider total employee count, not just technical team',
+                    'This affects budget recommendations and complexity levels'
+                ],
+                related_fields: ['monthlyBudget', 'technicalTeamSize'],
+                help_type: 'tooltip'
+            },
+            industry: {
+                title: 'Industry',
+                content: 'Select the industry that best describes your business.',
+                examples: [
+                    'Technology: Software, hardware, IT services',
+                    'Healthcare: Medical, pharmaceutical, health services',
+                    'Finance: Banking, insurance, fintech'
+                ],
+                tips: [
+                    'This affects compliance requirements and service recommendations',
+                    'Choose the primary industry if you operate in multiple sectors'
+                ],
+                related_fields: ['complianceRequirements'],
+                help_type: 'tooltip'
+            }
+        };
+        return help[fieldName] || null;
     }
 }
 

@@ -9,6 +9,7 @@ from .recommendation import Recommendation, ServiceRecommendation
 from .user import User
 from .report import Report, ReportSection
 from .metrics import Metric, AgentMetrics
+from .conversation import Conversation, ConversationSummary, ChatAnalytics
 
 # List of all document models for Beanie initialization
 __all__ = [
@@ -19,7 +20,10 @@ __all__ = [
     "Report",
     "ReportSection", 
     "Metric",
-    "AgentMetrics"
+    "AgentMetrics",
+    "Conversation",
+    "ConversationSummary",
+    "ChatAnalytics"
 ]
 
 # Document models list for Beanie
@@ -31,5 +35,8 @@ DOCUMENT_MODELS = [
     Report,
     ReportSection,
     Metric,
-    AgentMetrics
+    AgentMetrics,
+    Conversation,
+    ConversationSummary,
+    ChatAnalytics
 ]

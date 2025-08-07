@@ -4,6 +4,7 @@ import assessmentReducer from './slices/assessmentSlice';
 import reportReducer from './slices/reportSlice';
 import scenarioReducer from './slices/scenarioSlice';
 import uiReducer from './slices/uiSlice';
+import { apiSyncMiddleware } from './middleware/apiSyncMiddleware';
 
 export const store = configureStore({
     reducer: {
@@ -18,7 +19,7 @@ export const store = configureStore({
             serializableCheck: {
                 ignoredActions: ['persist/PERSIST'],
             },
-        }),
+        }).concat(apiSyncMiddleware),
 });
 
 export type RootState = ReturnType<typeof store.getState>;

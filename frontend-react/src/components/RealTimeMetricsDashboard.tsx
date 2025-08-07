@@ -316,7 +316,7 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
                     <Typography variant="subtitle1">
                         {criticalAlerts.length} Critical Alert{criticalAlerts.length > 1 ? 's' : ''}
                     </Typography>
-                    {criticalAlerts.slice(0, 3).map(alert => (
+                    {(criticalAlerts || []).slice(0, 3).map(alert => (
                         <Typography key={alert.id} variant="body2">
                             • {alert.message}
                         </Typography>
@@ -584,7 +584,7 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
                                         />
                                     </ListItem>
                                 ) : (
-                                    activeAlerts.slice(0, 10).map((alert) => (
+                                    (activeAlerts || []).slice(0, 10).map((alert) => (
                                         <ListItem key={alert.id}>
                                             <ListItemIcon>
                                                 {getAlertIcon(alert.severity)}

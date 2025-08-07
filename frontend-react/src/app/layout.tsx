@@ -3,7 +3,8 @@ import { Roboto } from "next/font/google";
 import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
 import ReduxProvider from "@/components/ReduxProvider";
-import NotificationSystem from "@/components/NotificationSystem";
+import AuthInitializer from "@/components/AuthInitializer";
+import ErrorBoundary from "@/components/ErrorBoundary";
 
 const roboto = Roboto({
   weight: ['300', '400', '500', '700'],
@@ -26,8 +27,10 @@ export default function RootLayout({
       <body className={roboto.className}>
         <ReduxProvider>
           <ThemeProvider>
-            {children}
-            <NotificationSystem />
+            <ErrorBoundary>
+              <AuthInitializer />
+              {children}
+            </ErrorBoundary>
           </ThemeProvider>
         </ReduxProvider>
       </body>

@@ -15,7 +15,7 @@ from .base import BaseAgent, AgentConfig, AgentRole
 from .tools import ToolResult
 from .web_search import WebSearchClient, get_web_search_client
 from ..models.assessment import Assessment
-from ..core.llm_client import get_llm_client
+from ..llm.manager import LLMManager
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +159,7 @@ class ComplianceAgent(BaseAgent):
             if not self.web_search_client:
                 self.web_search_client = await get_web_search_client()
             if not self.llm_client:
-                self.llm_client = await get_llm_client()
+                self.llm_client = LLMManager()
             
             # Step 1: Collect real-time regulatory updates
             regulatory_updates = await self._collect_regulatory_updates()

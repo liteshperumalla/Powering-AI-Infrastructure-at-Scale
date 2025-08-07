@@ -47,6 +47,9 @@ class BusinessRequirementsForm(BaseForm):
             field_type=FormFieldType.SELECT,
             required=True,
             help_text="Select the industry that best describes your business",
+            allow_text_input=True,
+            text_input_label="Other industry",
+            text_input_placeholder="Please specify your industry...",
             options=[
                 {"value": "technology", "label": "Technology"},
                 {"value": "healthcare", "label": "Healthcare"},
@@ -57,8 +60,7 @@ class BusinessRequirementsForm(BaseForm):
                 {"value": "government", "label": "Government"},
                 {"value": "nonprofit", "label": "Non-profit"},
                 {"value": "consulting", "label": "Consulting"},
-                {"value": "media", "label": "Media & Entertainment"},
-                {"value": "other", "label": "Other"}
+                {"value": "media", "label": "Media & Entertainment"}
             ]
         ))
         
@@ -204,6 +206,9 @@ class BusinessRequirementsForm(BaseForm):
             field_type=FormFieldType.MULTISELECT,
             required=True,
             help_text="What are your biggest challenges with current infrastructure?",
+            allow_text_input=True,
+            text_input_label="Other challenge",
+            text_input_placeholder="Describe your specific challenge...",
             options=[
                 {"value": "high_costs", "label": "High operational costs"},
                 {"value": "poor_performance", "label": "Poor performance"},
@@ -270,6 +275,9 @@ class TechnicalRequirementsForm(BaseForm):
             field_type=FormFieldType.MULTISELECT,
             required=False,
             help_text="What technologies are you currently using?",
+            allow_text_input=True,
+            text_input_label="Other technology",
+            text_input_placeholder="Specify the technology you're using...",
             options=[
                 {"value": "containers", "label": "Containers (Docker)"},
                 {"value": "kubernetes", "label": "Kubernetes"},
@@ -523,6 +531,46 @@ class AssessmentForm(BaseForm):
         
         return errors
     
+    def _process_field_value(self, field_name: str, value: Any) -> Any:
+        """
+        Process a field value, handling text input options.
+        
+        Args:
+            field_name: Name of the field
+            value: Raw field value
+            
+        Returns:
+            Processed field value
+        """
+        # Find the field definition
+        field = None
+        for step in self.steps:
+            field = step.get_field(field_name)
+            if field:
+                break
+        
+        if not field:
+            return value
+        
+        # Handle text input values for multiselect/select fields
+        if field.field_type in [FormFieldType.MULTISELECT, FormFieldType.SELECT]:
+            if field.allow_text_input:
+                if isinstance(value, list):
+                    # Process multiselect with text inputs
+                    processed_values = []
+                    for v in value:
+                        if isinstance(v, dict) and "text_input" in v:
+                            # Convert text input to readable format
+                            processed_values.append(f"Custom: {v['text_input']}")
+                        else:
+                            processed_values.append(v)
+                    return processed_values
+                elif isinstance(value, dict) and "text_input" in value:
+                    # Process select with text input
+                    return f"Custom: {value['text_input']}"
+        
+        return value
+
     async def process_assessment(self, assessment_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Process assessment data and validate it.
@@ -541,14 +589,21 @@ class AssessmentForm(BaseForm):
                 for section, section_data in assessment_data.items():
                     if isinstance(section_data, dict):
                         for key, value in section_data.items():
-                            flattened_data[key] = value
+                            # Process field values to handle text inputs
+                            processed_value = self._process_field_value(key, value)
+                            flattened_data[key] = processed_value
                     else:
                         flattened_data[section] = section_data
                 
                 # Update form data with flattened assessment data
                 self.form_data.update(flattened_data)
             else:
-                self.form_data.update(assessment_data)
+                # Process each field value
+                processed_data = {}
+                for key, value in assessment_data.items():
+                    processed_value = self._process_field_value(key, value)
+                    processed_data[key] = processed_value
+                self.form_data.update(processed_data)
             
             # Basic validation - check for required fields
             validation_errors = {}
@@ -568,14 +623,24 @@ class AssessmentForm(BaseForm):
             # For demo purposes, we'll be more lenient with validation
             is_valid = True  # Always pass validation for demo
             
+            # Extract text inputs for summary
+            text_inputs = {}
+            for key, value in self.form_data.items():
+                if isinstance(value, list):
+                    text_inputs[key] = [v for v in value if isinstance(v, str) and v.startswith("Custom: ")]
+                elif isinstance(value, str) and value.startswith("Custom: "):
+                    text_inputs[key] = value
+            
             result = {
                 "valid": is_valid,
                 "form_id": self.form_id,
                 "processed_at": datetime.now(timezone.utc).isoformat(),
                 "data": assessment_data,
+                "processed_data": self.form_data,
+                "text_inputs": text_inputs,  # Include custom text inputs in result
                 "summary": {
                     "company": company_info.get("name", "Unknown"),
-                    "industry": company_info.get("industry", "Unknown"),
+                    "industry": self.form_data.get("industry", "Unknown"),
                     "size": company_info.get("size", "Unknown"),
                     "monthly_spend": current_infra.get("monthly_spend", 0),
                     "ai_use_cases": len(assessment_data.get("ai_requirements", {}).get("use_cases", [])),
@@ -591,7 +656,7 @@ class AssessmentForm(BaseForm):
                 result["assessment_summary"] = {
                     "company_profile": {
                         "name": company_info.get("name", "Demo Company"),
-                        "industry": company_info.get("industry", "technology"),
+                        "industry": self.form_data.get("industry", "technology"),
                         "size": company_info.get("size", "medium"),
                         "employees": company_info.get("employees", 100)
                     },
@@ -599,7 +664,12 @@ class AssessmentForm(BaseForm):
                         "current_provider": current_infra.get("cloud_provider", "aws"),
                         "monthly_spend": current_infra.get("monthly_spend", 5000),
                         "services_count": len(current_infra.get("services_used", [])),
-                        "data_volume": current_infra.get("data_volume", "5TB")
+                        "data_volume": current_infra.get("data_volume", "5TB"),
+                        "current_technologies": self.form_data.get("current_technologies", [])
+                    },
+                    "challenges_and_requirements": {
+                        "main_challenges": self.form_data.get("main_challenges", []),
+                        "custom_inputs": text_inputs
                     },
                     "ai_readiness": {
                         "use_cases": assessment_data.get("ai_requirements", {}).get("use_cases", []),

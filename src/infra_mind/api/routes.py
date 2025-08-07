@@ -6,7 +6,7 @@ Supports API versioning for backward compatibility and evolution.
 """
 
 from fastapi import APIRouter, HTTPException, status
-from .endpoints import auth, assessments, recommendations, reports, monitoring, webhooks, admin, testing, resilience, compliance, integrations, compliance_dashboard, business_tools, performance_monitoring
+from .endpoints import auth, assessments, recommendations, reports, monitoring, webhooks, admin, testing, resilience, compliance, integrations, compliance_dashboard, business_tools, performance_monitoring, forms, cloud_services, chat
 
 # Create versioned API routers
 api_v1_router = APIRouter()
@@ -38,6 +38,12 @@ api_v1_router.include_router(
 )
 
 api_v1_router.include_router(
+    forms.router,
+    prefix="/forms",
+    tags=["Forms"]
+)
+
+api_v1_router.include_router(
     performance_monitoring.router,
     tags=["Performance Monitoring"]
 )
@@ -65,6 +71,12 @@ api_v2_router.include_router(
     reports.router,
     prefix="/reports",
     tags=["Reports"]
+)
+
+api_v2_router.include_router(
+    forms.router,
+    prefix="/forms",
+    tags=["Forms"]
 )
 
 api_v2_router.include_router(
@@ -126,6 +138,18 @@ api_v2_router.include_router(
     tags=["Performance Monitoring"]
 )
 
+api_v2_router.include_router(
+    cloud_services.router,
+    prefix="/cloud-services",
+    tags=["Cloud Services"]
+)
+
+api_v2_router.include_router(
+    chat.router,
+    prefix="/chat",
+    tags=["Chat"]
+)
+
 # Main API router that includes all versions
 api_router = APIRouter()
 
@@ -154,7 +178,7 @@ async def get_api_versions():
                 "sunset_date": None,
                 "description": "Original API with core functionality",
                 "endpoints": [
-                    "/auth", "/assessments", "/recommendations", "/reports"
+                    "/auth", "/assessments", "/recommendations", "/reports", "/forms"
                 ]
             },
             {
@@ -164,8 +188,8 @@ async def get_api_versions():
                 "sunset_date": None,
                 "description": "Enhanced API with webhooks, monitoring, and admin features",
                 "endpoints": [
-                    "/auth", "/assessments", "/recommendations", "/reports",
-                    "/monitoring", "/webhooks", "/admin", "/testing", "/resilience", "/compliance", "/integrations"
+                    "/auth", "/assessments", "/recommendations", "/reports", "/forms", 
+                    "/monitoring", "/webhooks", "/admin", "/testing", "/resilience", "/compliance", "/integrations", "/chat"
                 ],
                 "new_features": [
                     "Webhook support with delivery tracking",

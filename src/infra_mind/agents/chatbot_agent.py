@@ -19,7 +19,7 @@ from ..models.user import User
 from ..models.assessment import Assessment
 from ..core.database import get_database
 from ..core.cache import get_cache_manager
-from ..core.llm_client import get_llm_client
+from ..llm.manager import LLMManager
 from ..llm.interface import LLMRequest
 
 logger = logging.getLogger(__name__)
@@ -101,7 +101,7 @@ class ChatbotAgent(BaseAgent):
         if not self.web_search_client:
             self.web_search_client = await get_web_search_client()
         if not self.llm_client:
-            self.llm_client = await get_llm_client()
+            self.llm_client = LLMManager()
         
         # Initialize knowledge base with real-time data
         await self._load_knowledge_base_with_real_time_data()
@@ -467,12 +467,38 @@ class ChatbotAgent(BaseAgent):
             - Role: {self.user_info.get('job_title', 'Not specified')}
             - Experience Level: {self.user_info.get('experience_level', 'Unknown')}
             """
+
+        # Add report/assessment context if available
+        domain_context = ""
+        if additional_context:
+            if additional_context.get("report_data"):
+                report_data = additional_context["report_data"]
+                domain_context += f"""
+                Related Report Information:
+                - Title: {report_data.get('title', 'N/A')}
+                - Key Findings: {', '.join(report_data.get('key_findings', [])[:3])}
+                - Top Recommendations: {', '.join(report_data.get('recommendations', [])[:2])}
+                - Compliance Score: {report_data.get('compliance_score', 'N/A')}
+                - Estimated Savings: ${report_data.get('estimated_savings', 'N/A')}
+                """
+            
+            if additional_context.get("assessment_data"):
+                assessment_data = additional_context["assessment_data"]
+                domain_context += f"""
+                Related Assessment Information:
+                - Title: {assessment_data.get('title', 'N/A')}
+                - Status: {assessment_data.get('status', 'N/A')}
+                - Business Goals: {', '.join(assessment_data.get('business_goals', [])[:3])}
+                - Cloud Providers: {', '.join(assessment_data.get('cloud_providers', []))}
+                """
         
         # Create comprehensive prompt
         prompt = f"""
         {system_prompt}
         
         {user_context}
+        
+        {domain_context}
         
         Current conversation context: {context.value}
         User intent: {intent.value}
@@ -486,15 +512,32 @@ class ChatbotAgent(BaseAgent):
         Keep responses concise but informative. If you don't know something specific
         about the platform, be honest and offer to help find the information or
         connect them with someone who can help.
+        
+        IMPORTANT: If the user is asking about decision-making, recommendations, or analysis
+        related to their reports or assessments, use the provided context data to give
+        specific, actionable insights based on their actual data.
         """
         
         try:
+            # Check if we should enhance with real-time knowledge
+            enhanced_response = None
+            if self.enable_real_time_search and await self._should_use_real_time_knowledge(message, intent, context):
+                real_time_info = await self._search_real_time_knowledge(message, intent, context)
+                if real_time_info and real_time_info.get("summary"):
+                    prompt += f"""
+                    
+                    Additional Real-time Information:
+                    {real_time_info["summary"]}
+                    
+                    Use this current information to enhance your response if relevant.
+                    """
+            
             # Generate response using LLM
             response_content = await self._call_llm(
                 prompt,
                 system_prompt=system_prompt,
                 temperature=0.7,
-                max_tokens=500
+                max_tokens=800  # Increased for more detailed responses
             )
             
             # Generate suggestions based on context
@@ -1230,3 +1273,46 @@ class ChatbotAgent(BaseAgent):
         except Exception as e:
             logger.warning(f"Failed to summarize search results: {str(e)}")
             return "Found some relevant information, but unable to summarize at this time."
+    
+    async def _call_llm(
+        self, 
+        prompt: str, 
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: int = 500
+    ) -> str:
+        """
+        Call the LLM to generate a response.
+        
+        Args:
+            prompt: The user prompt
+            system_prompt: Optional system prompt
+            temperature: Sampling temperature
+            max_tokens: Maximum tokens to generate
+            
+        Returns:
+            Generated response text
+        """
+        try:
+            if not self.llm_client:
+                self.llm_client = LLMManager()
+            
+            # Create LLM request
+            from ..llm.interface import LLMRequest
+            
+            llm_request = LLMRequest(
+                prompt=prompt,
+                system_prompt=system_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                model="gpt-4"  # Use GPT-4 for better conversational responses
+            )
+            
+            # Generate response
+            response = await self.llm_client.generate_completion(llm_request)
+            
+            return response.strip()
+            
+        except Exception as e:
+            logger.error(f"LLM call failed: {str(e)}")
+            raise

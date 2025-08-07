@@ -207,7 +207,7 @@ export default function ProgressSaver({
             {/* Auto-save indicator */}
             <Fade in={saving}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                    <LinearProgress size={16} />
+                    <LinearProgress sx={{ width: '100%' }} />
                     <Typography variant="caption" color="text.secondary">
                         Saving progress...
                     </Typography>
@@ -300,7 +300,7 @@ export default function ProgressSaver({
                                         }
                                         secondary={
                                             <Box>
-                                                <Typography variant="body2" color="text.secondary">
+                                                <Typography variant="body2" color="text.secondary" component="div">
                                                     Saved: {formatDate(form.saved_at)}
                                                 </Typography>
                                                 <LinearProgress

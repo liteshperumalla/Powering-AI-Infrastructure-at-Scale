@@ -42,6 +42,12 @@ class AssessmentProgress(BaseSchema):
         description="Estimated minutes until completion"
     )
     
+    # Error handling
+    error: Optional[str] = Field(
+        default=None,
+        description="Error message if workflow failed"
+    )
+    
     # Agent-specific progress
     agent_progress: Dict[str, Dict[str, Any]] = Field(
         default_factory=dict,
@@ -91,6 +97,7 @@ class Assessment(BaseSchema, TimestampMixin):
     Learning Note: This is the main model that combines all
     requirements and tracks the assessment lifecycle.
     """
+    model_config = {"extra": "allow"}
     # Basic information
     title: str = Field(description="Assessment title/name")
     description: Optional[str] = Field(
@@ -116,7 +123,8 @@ class Assessment(BaseSchema, TimestampMixin):
         default=Priority.MEDIUM,
         description="Assessment priority level"
     )
-    progress: AssessmentProgress = Field(
+    progress: Dict[str, Any] = Field(
+        default_factory=dict,
         description="Assessment progress tracking"
     )
     

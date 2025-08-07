@@ -147,41 +147,77 @@ const ComplianceDashboard: React.FC = () => {
         try {
             setLoading(true);
 
+            // Check if user is authenticated
+            const authToken = localStorage.getItem('auth_token');
+            if (!authToken) {
+                console.warn('No auth token found, skipping compliance data load');
+                setLoading(false);
+                return;
+            }
+
             // Load consent status
-            const consentResponse = await fetch('/api/compliance/consent', {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-            });
-            if (consentResponse.ok) {
-                const consentData = await consentResponse.json();
-                setConsentSummary(consentData.consent_summary || {});
+            try {
+                const consentResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v2/compliance/consent`, {
+                    headers: { 
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                if (consentResponse.ok) {
+                    const consentData = await consentResponse.json();
+                    setConsentSummary(consentData.consent_summary || consentData || {});
+                } else if (consentResponse.status === 401) {
+                    console.warn('Authentication failed for compliance data');
+                    // Optionally redirect to login or clear invalid token
+                    localStorage.removeItem('auth_token');
+                } else {
+                    console.error('Failed to load consent status:', consentResponse.status, consentResponse.statusText);
+                }
+            } catch (consentError) {
+                console.error('Error fetching consent data:', consentError);
+                // Set default consent summary to prevent UI errors
+                setConsentSummary({});
             }
 
             // Load retention policies (admin only)
             try {
-                const policiesResponse = await fetch('/api/compliance/retention/policies', {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                const policiesResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v2/compliance/retention/policies`, {
+                    headers: { 
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
                 });
                 if (policiesResponse.ok) {
                     const policiesData = await policiesResponse.json();
                     setRetentionPolicies(policiesData.policies || {});
+                } else {
+                    console.warn('Failed to load retention policies:', policiesResponse.status);
                 }
             } catch (e) {
-                // User might not have admin access
-                console.log('Retention policies not accessible (admin only)');
+                // User might not have admin access or network error
+                console.log('Retention policies not accessible (admin only or network error)');
+                setRetentionPolicies({});
             }
 
             // Load recent audit events (admin only)
             try {
-                const auditResponse = await fetch('/api/compliance/audit/summary?days=7', {
-                    headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+                const auditResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v2/compliance/audit/summary?days=7`, {
+                    headers: { 
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
                 });
                 if (auditResponse.ok) {
                     const auditData = await auditResponse.json();
                     setAuditEvents(auditData.audit_summary?.recent_events || []);
+                } else {
+                    console.warn('Failed to load audit events:', auditResponse.status);
                 }
             } catch (e) {
-                // User might not have admin access
-                console.log('Audit data not accessible (admin only)');
+                // User might not have admin access or network error
+                console.log('Audit data not accessible (admin only or network error)');
+                setAuditEvents([]);
             }
 
         } catch (err) {
@@ -194,11 +230,11 @@ const ComplianceDashboard: React.FC = () => {
 
     const handleConsentChange = async (consentType: string, granted: boolean) => {
         try {
-            const response = await fetch('/api/compliance/consent', {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v2/compliance/consent`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
                 },
                 body: JSON.stringify({
                     consent_type: consentType,
@@ -222,11 +258,11 @@ const ComplianceDashboard: React.FC = () => {
 
     const handleDataExport = async () => {
         try {
-            const response = await fetch('/api/compliance/data/export', {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v2/compliance/data/export`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
                 },
                 body: JSON.stringify({
                     data_categories: selectedCategories.length > 0 ? selectedCategories : undefined,
@@ -268,11 +304,11 @@ const ComplianceDashboard: React.FC = () => {
         }
 
         try {
-            const response = await fetch('/api/compliance/data/delete', {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v2/compliance/data/delete`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
                 },
                 body: JSON.stringify({
                     data_categories: selectedCategories.length > 0 ? selectedCategories : undefined,

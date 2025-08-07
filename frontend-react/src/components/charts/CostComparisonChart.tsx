@@ -49,6 +49,34 @@ const CostComparisonChart: React.FC<CostComparisonChartProps> = ({
 
     const formatCurrency = (value: number) => `$${value.toLocaleString()}`;
 
+    // Handle empty data state
+    if (!data || data.length === 0) {
+        return (
+            <Card>
+                <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                        {title}
+                    </Typography>
+                    <Box sx={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        py: 6,
+                        textAlign: 'center'
+                    }}>
+                        <Typography variant="h6" color="text.secondary" gutterBottom>
+                            No Cost Data Available
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            Complete an assessment to see cost comparisons across cloud providers.
+                        </Typography>
+                    </Box>
+                </CardContent>
+            </Card>
+        );
+    }
+
     const CustomTooltip = ({ active, payload, label }: {
         active?: boolean;
         payload?: Array<{ name: string; value: number; color: string }>;

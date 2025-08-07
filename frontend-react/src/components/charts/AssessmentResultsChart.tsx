@@ -1,13 +1,14 @@
 'use client';
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { useVisualizationData } from '@/hooks/useFreshData';
 import {
     AreaChart,
     Area,
     XAxis,
     YAxis,
     CartesianGrid,
-    Tooltip,
+    Tooltip as RechartsTooltip,
     ResponsiveContainer,
     BarChart,
     Bar,
@@ -16,7 +17,8 @@ import {
     Pie,
     Cell,
 } from 'recharts';
-import { Card, CardContent, Typography, Box, ToggleButton, ToggleButtonGroup } from '@mui/material';
+import { Card, CardContent, Typography, Box, ToggleButton, ToggleButtonGroup, IconButton, Tooltip } from '@mui/material';
+import RefreshIcon from '@mui/icons-material/Refresh';
 
 interface AssessmentData {
     category: string;
@@ -30,14 +32,37 @@ interface AssessmentResultsChartProps {
     data: AssessmentData[];
     title?: string;
     showComparison?: boolean;
+    assessmentId?: string;
+    onDataRefresh?: () => void;
 }
 
 const AssessmentResultsChart: React.FC<AssessmentResultsChartProps> = ({
     data,
     title = "Assessment Results",
-    showComparison = true
+    showComparison = true,
+    assessmentId,
+    onDataRefresh
 }) => {
     const [viewType, setViewType] = React.useState<'bar' | 'area' | 'pie'>('bar');
+    const [refreshKey, setRefreshKey] = useState(0);
+    
+    // Use fresh data hook if assessmentId is provided
+    const { refreshTrigger, forceRefresh, isStale } = useVisualizationData(
+        assessmentId || '',
+        {
+            onRefresh: () => {
+                setRefreshKey(prev => prev + 1);
+                onDataRefresh?.();
+            }
+        }
+    );
+
+    // Force refresh when data might be stale
+    useEffect(() => {
+        if (isStale && assessmentId) {
+            forceRefresh();
+        }
+    }, [isStale, assessmentId, forceRefresh]);
 
     const handleViewChange = (
         _event: React.MouseEvent<HTMLElement>,
@@ -49,6 +74,34 @@ const AssessmentResultsChart: React.FC<AssessmentResultsChartProps> = ({
     };
 
     const formatScore = (value: number) => `${value}%`;
+
+    // Handle empty data state
+    if (!data || data.length === 0) {
+        return (
+            <Card>
+                <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                        {title}
+                    </Typography>
+                    <Box sx={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        py: 6,
+                        textAlign: 'center'
+                    }}>
+                        <Typography variant="h6" color="text.secondary" gutterBottom>
+                            No Assessment Results Available
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            Complete an assessment to see your infrastructure readiness scores.
+                        </Typography>
+                    </Box>
+                </CardContent>
+            </Card>
+        );
+    }
 
     const CustomTooltip = ({ active, payload, label }: {
         active?: boolean;
@@ -118,26 +171,46 @@ const AssessmentResultsChart: React.FC<AssessmentResultsChartProps> = ({
         <Card>
             <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="h6">
-                        {title}
-                    </Typography>
-                    <ToggleButtonGroup
-                        value={viewType}
-                        exclusive
-                        onChange={handleViewChange}
-                        aria-label="chart view toggle"
-                        size="small"
-                    >
-                        <ToggleButton value="bar">
-                            Bar Chart
-                        </ToggleButton>
-                        <ToggleButton value="area">
-                            Area Chart
-                        </ToggleButton>
-                        <ToggleButton value="pie">
-                            Pie Chart
-                        </ToggleButton>
-                    </ToggleButtonGroup>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="h6">
+                            {title}
+                        </Typography>
+                        {isStale && (
+                            <Typography variant="caption" color="warning.main">
+                                (Data may be stale)
+                            </Typography>
+                        )}
+                    </Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        {assessmentId && (
+                            <Tooltip title="Refresh data">
+                                <IconButton 
+                                    onClick={forceRefresh} 
+                                    size="small"
+                                    color={isStale ? "warning" : "default"}
+                                >
+                                    <RefreshIcon />
+                                </IconButton>
+                            </Tooltip>
+                        )}
+                        <ToggleButtonGroup
+                            value={viewType}
+                            exclusive
+                            onChange={handleViewChange}
+                            aria-label="chart view toggle"
+                            size="small"
+                        >
+                            <ToggleButton value="bar">
+                                Bar Chart
+                            </ToggleButton>
+                            <ToggleButton value="area">
+                                Area Chart
+                            </ToggleButton>
+                            <ToggleButton value="pie">
+                                Pie Chart
+                            </ToggleButton>
+                        </ToggleButtonGroup>
+                    </Box>
                 </Box>
 
                 <Box sx={{ width: '100%', height: 400 }}>
@@ -147,7 +220,7 @@ const AssessmentResultsChart: React.FC<AssessmentResultsChartProps> = ({
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="category" />
                                 <YAxis tickFormatter={formatScore} domain={[0, 100]} />
-                                <Tooltip content={<CustomTooltip />} />
+                                <RechartsTooltip content={<CustomTooltip />} />
                                 <Legend />
                                 <Bar dataKey="currentScore" fill="#8884d8" name="Current Score" />
                                 {showComparison && (
@@ -159,7 +232,7 @@ const AssessmentResultsChart: React.FC<AssessmentResultsChartProps> = ({
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="category" />
                                 <YAxis tickFormatter={formatScore} domain={[0, 100]} />
-                                <Tooltip content={<CustomTooltip />} />
+                                <RechartsTooltip content={<CustomTooltip />} />
                                 <Legend />
                                 <Area
                                     type="monotone"
@@ -196,7 +269,7 @@ const AssessmentResultsChart: React.FC<AssessmentResultsChartProps> = ({
                                         <Cell key={`cell-${index}`} fill={entry.color} />
                                     ))}
                                 </Pie>
-                                <Tooltip content={<PieTooltip />} />
+                                <RechartsTooltip content={<PieTooltip />} />
                             </PieChart>
                         )}
                     </ResponsiveContainer>

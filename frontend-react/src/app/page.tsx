@@ -90,7 +90,7 @@ export default function Home() {
                     color: 'primary.main',
                     '&:hover': { bgcolor: 'grey.100' },
                   }}
-                  onClick={() => router.push('/assessment')}
+                  onClick={() => router.push('/auth/login')}
                 >
                   Start Assessment
                 </Button>
@@ -108,19 +108,25 @@ export default function Home() {
                 </Button>
               </Stack>
             </Box>
-            <Box sx={{ flex: 1 }}>
+            <Box sx={{ flex: 1, display: { xs: 'none', md: 'block' } }}>
               <Box
                 sx={{
                   display: 'flex',
+                  flexDirection: 'column',
                   justifyContent: 'center',
                   alignItems: 'center',
-                  height: { xs: 200, md: 300 },
+                  height: 300,
                   bgcolor: 'rgba(255,255,255,0.1)',
                   borderRadius: 2,
+                  p: 3,
                 }}
               >
-                <Typography variant="h4" sx={{ opacity: 0.7 }}>
-                  Dashboard Preview
+                <CloudQueue sx={{ fontSize: 80, mb: 2, opacity: 0.8 }} />
+                <Typography variant="h5" sx={{ mb: 1, textAlign: 'center' }}>
+                  AI-Powered Infrastructure
+                </Typography>
+                <Typography variant="body1" sx={{ opacity: 0.8, textAlign: 'center' }}>
+                  Get intelligent recommendations for your cloud infrastructure
                 </Typography>
               </Box>
             </Box>
@@ -209,7 +215,7 @@ export default function Home() {
           <Button
             variant="contained"
             size="large"
-            onClick={() => router.push('/auth/register')}
+            onClick={() => router.push('/auth/login')}
             sx={{ px: 4, py: 1.5 }}
           >
             Start Your Assessment

@@ -150,103 +150,6 @@ async def get_recommendations(
         
         logger.info(f"Retrieved {len(recommendations)} recommendations for assessment: {assessment_id}")
         
-        # If no real recommendations found, fall back to mock data for demonstration
-        if not recommendations:
-            logger.info(f"No database recommendations found, using mock data for assessment: {assessment_id}")
-            mock_recommendations = [
-            RecommendationResponse(
-                id=str(uuid.uuid4()),
-                assessment_id=assessment_id,
-                agent_name="cto_agent",
-                title="Strategic Cloud Migration Roadmap",
-                summary="Recommended phased approach to migrate to AWS with focus on cost optimization and scalability",
-                confidence_level=RecommendationConfidence.HIGH,
-                confidence_score=0.85,
-                recommendation_data={
-                    "migration_phases": ["assessment", "pilot", "production"],
-                    "timeline_months": 6,
-                    "key_benefits": ["30% cost reduction", "improved scalability", "better security"]
-                },
-                recommended_services=[
-                    ServiceRecommendationResponse(
-                        service_name="EC2",
-                        provider=CloudProvider.AWS,
-                        service_category="compute",
-                        estimated_monthly_cost=Decimal("2500.00"),
-                        cost_model="on_demand",
-                        configuration={"instance_type": "m5.large", "count": 5},
-                        reasons=["Cost effective for variable workloads", "Easy to scale"],
-                        alternatives=["ECS", "Lambda"],
-                        setup_complexity="medium",
-                        implementation_time_hours=40
-                    )
-                ],
-                cost_estimates={"total_monthly": 5000, "annual_savings": 36000},
-                total_estimated_monthly_cost=Decimal("5000.00"),
-                implementation_steps=[
-                    "Set up AWS account and IAM roles",
-                    "Create VPC and security groups",
-                    "Deploy pilot workload",
-                    "Monitor and optimize"
-                ],
-                prerequisites=["AWS account", "Technical team training"],
-                risks_and_considerations=["Data migration complexity", "Downtime during cutover"],
-                business_impact="high",
-                alignment_score=0.9,
-                tags=["migration", "aws", "cost_optimization"],
-                priority=Priority.HIGH,
-                category="architecture",
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
-            ),
-            RecommendationResponse(
-                id=str(uuid.uuid4()),
-                assessment_id=assessment_id,
-                agent_name="cloud_engineer_agent",
-                title="Multi-Cloud Service Selection",
-                summary="Curated selection of best-fit cloud services across AWS and Azure for your workloads",
-                confidence_level=RecommendationConfidence.HIGH,
-                confidence_score=0.82,
-                recommendation_data={
-                    "primary_provider": "aws",
-                    "secondary_provider": "azure",
-                    "service_mapping": {"compute": "aws_ec2", "database": "azure_sql"}
-                },
-                recommended_services=[
-                    ServiceRecommendationResponse(
-                        service_name="RDS PostgreSQL",
-                        provider=CloudProvider.AWS,
-                        service_category="database",
-                        estimated_monthly_cost=Decimal("800.00"),
-                        cost_model="reserved_instance",
-                        configuration={"instance_class": "db.r5.large", "storage_gb": 500},
-                        reasons=["Managed service reduces overhead", "High availability built-in"],
-                        alternatives=["Aurora", "Azure SQL"],
-                        setup_complexity="low",
-                        implementation_time_hours=16
-                    )
-                ],
-                cost_estimates={"database_monthly": 800, "compute_monthly": 2500},
-                total_estimated_monthly_cost=Decimal("3300.00"),
-                implementation_steps=[
-                    "Create RDS subnet group",
-                    "Configure security groups",
-                    "Launch RDS instance",
-                    "Set up monitoring and backups"
-                ],
-                prerequisites=["Database schema design", "Backup strategy"],
-                risks_and_considerations=["Vendor lock-in", "Data transfer costs"],
-                business_impact="medium",
-                alignment_score=0.85,
-                tags=["database", "managed_service", "high_availability"],
-                priority=Priority.MEDIUM,
-                category="infrastructure",
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow()
-            )
-            ]
-            recommendations = mock_recommendations
-        
         # Calculate summary from the final recommendations list
         summary = {
             "total_recommendations": len(recommendations),
@@ -254,7 +157,7 @@ async def get_recommendations(
             "total_estimated_cost": sum(r.total_estimated_monthly_cost or 0 for r in recommendations),
             "agents_involved": list(set(r.agent_name for r in recommendations)),
             "categories": list(set(r.category for r in recommendations)),
-            "data_source": "database" if recommendations != mock_recommendations else "mock",
+            "data_source": "database",
             "filtered_by": {
                 "agent": agent_filter,
                 "confidence_min": confidence_min,

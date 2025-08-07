@@ -60,6 +60,9 @@ class FormField:
     placeholder: str = ""
     help_text: str = ""
     options: List[Dict[str, Any]] = field(default_factory=list)  # For select/multiselect
+    allow_text_input: bool = False  # Allow custom text input for multiselect/select fields
+    text_input_label: str = "Other (please specify)"  # Label for text input option
+    text_input_placeholder: str = "Please specify..."  # Placeholder for text input
     min_value: Optional[Union[int, float]] = None
     max_value: Optional[Union[int, float]] = None
     min_length: Optional[int] = None
@@ -113,7 +116,15 @@ class FormField:
             elif self.field_type == FormFieldType.SELECT:
                 if self.options:
                     valid_values = [opt.get("value") for opt in self.options]
-                    if value not in valid_values:
+                    if self.allow_text_input:
+                        valid_values.append("__text_input__")  # Special value for custom text
+                    
+                    # Handle text input values
+                    if self.allow_text_input and isinstance(value, dict) and "text_input" in value:
+                        text_value = value.get("text_input", "").strip()
+                        if not text_value:
+                            raise FormValidationError(self.name, "Text input cannot be empty")
+                    elif value not in valid_values:
                         raise FormValidationError(self.name, f"Invalid selection. Must be one of: {valid_values}")
             
             elif self.field_type == FormFieldType.MULTISELECT:
@@ -121,7 +132,17 @@ class FormField:
                     raise FormValidationError(self.name, "Must be a list of values")
                 if self.options:
                     valid_values = [opt.get("value") for opt in self.options]
+                    if self.allow_text_input:
+                        valid_values.append("__text_input__")  # Special value for custom text
+                    
                     for v in value:
+                        # Handle text input values
+                        if self.allow_text_input and isinstance(v, dict) and "text_input" in v:
+                            text_value = v.get("text_input", "").strip()
+                            if not text_value:
+                                raise FormValidationError(self.name, "Text input cannot be empty")
+                            continue
+                        
                         if v not in valid_values:
                             raise FormValidationError(self.name, f"Invalid selection '{v}'. Must be one of: {valid_values}")
             
@@ -149,6 +170,9 @@ class FormField:
             "placeholder": self.placeholder,
             "help_text": self.help_text,
             "options": self.options,
+            "allow_text_input": self.allow_text_input,
+            "text_input_label": self.text_input_label,
+            "text_input_placeholder": self.text_input_placeholder,
             "min_value": self.min_value,
             "max_value": self.max_value,
             "min_length": self.min_length,

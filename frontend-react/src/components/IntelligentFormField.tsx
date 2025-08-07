@@ -23,6 +23,10 @@ import {
     Badge,
     Fade,
     Alert,
+    Checkbox,
+    FormControlLabel,
+    Collapse,
+    Button,
 } from '@mui/material';
 import {
     Help,
@@ -30,6 +34,8 @@ import {
     Lightbulb,
     TipsAndUpdates,
     Info,
+    Edit,
+    Add,
 } from '@mui/icons-material';
 
 interface SmartDefault {
@@ -68,6 +74,9 @@ interface IntelligentFormFieldProps {
     placeholder?: string;
     multiline?: boolean;
     rows?: number;
+    allowTextInput?: boolean;
+    textInputLabel?: string;
+    textInputPlaceholder?: string;
     formContext?: Record<string, unknown>;
     onGetSmartDefaults?: (fieldName: string) => Promise<SmartDefault[]>;
     onGetSuggestions?: (fieldName: string, query: string) => Promise<Suggestion[]>;
@@ -86,6 +95,9 @@ export default function IntelligentFormField({
     placeholder,
     multiline = false,
     rows = 1,
+    allowTextInput = false,
+    textInputLabel = "Other (please specify)",
+    textInputPlaceholder = "Please specify...",
     formContext = {},
     onGetSmartDefaults,
     onGetSuggestions,
@@ -98,6 +110,8 @@ export default function IntelligentFormField({
     const [helpAnchorEl, setHelpAnchorEl] = useState<HTMLElement | null>(null);
     const [inputValue, setInputValue] = useState(value as string || '');
     const [showSuggestions, setShowSuggestions] = useState(false);
+    const [textInputValue, setTextInputValue] = useState('');
+    const [showTextInput, setShowTextInput] = useState(false);
 
     // Load smart defaults when form context changes
     useEffect(() => {
@@ -123,10 +137,12 @@ export default function IntelligentFormField({
 
         try {
             const defaults = await onGetSmartDefaults(name);
-            setSmartDefaults(defaults);
-            setShowSmartDefaults(defaults.length > 0 && !value);
+            setSmartDefaults(defaults || []);
+            setShowSmartDefaults((defaults && defaults.length > 0) && !value);
         } catch (error) {
             console.error('Error loading smart defaults:', error);
+            setSmartDefaults([]);
+            setShowSmartDefaults(false);
         }
     }, [name, onGetSmartDefaults, value]);
 
@@ -135,9 +151,10 @@ export default function IntelligentFormField({
 
         try {
             const suggestions = await onGetSuggestions(name, query);
-            setSuggestions(suggestions);
+            setSuggestions(suggestions || []);
         } catch (error) {
             console.error('Error loading suggestions:', error);
+            setSuggestions([]);
         }
     }, [name, onGetSuggestions]);
 
@@ -146,9 +163,10 @@ export default function IntelligentFormField({
 
         try {
             const help = await onGetContextualHelp(name);
-            setContextualHelp(help);
+            setContextualHelp(help || null);
         } catch (error) {
             console.error('Error loading contextual help:', error);
+            setContextualHelp(null);
         }
     }, [name, onGetContextualHelp]);
 
@@ -182,7 +200,7 @@ export default function IntelligentFormField({
     };
 
     const renderSmartDefaults = () => {
-        if (!showSmartDefaults || smartDefaults.length === 0) return null;
+        if (!showSmartDefaults || !smartDefaults || smartDefaults.length === 0) return null;
 
         return (
             <Fade in={showSmartDefaults}>
@@ -250,7 +268,7 @@ export default function IntelligentFormField({
                         {contextualHelp.content}
                     </Typography>
 
-                    {contextualHelp.examples.length > 0 && (
+                    {contextualHelp.examples && contextualHelp.examples.length > 0 && (
                         <>
                             <Typography variant="subtitle2" gutterBottom>
                                 Examples:
@@ -271,7 +289,7 @@ export default function IntelligentFormField({
                         </>
                     )}
 
-                    {contextualHelp.tips.length > 0 && (
+                    {contextualHelp.tips && contextualHelp.tips.length > 0 && (
                         <>
                             <Typography variant="subtitle2" gutterBottom>
                                 Tips:
@@ -337,36 +355,103 @@ export default function IntelligentFormField({
                 );
 
             case 'multiselect':
+                const selectedValues = Array.isArray(value) ? value : [];
+                
                 return (
-                    <FormControl fullWidth error={Boolean(error)}>
-                        <InputLabel>{label}</InputLabel>
-                        <Select
-                            multiple
-                            value={value || []}
-                            onChange={(e: SelectChangeEvent<unknown>) => handleInputChange(e.target.value)}
-                            label={label}
-                            renderValue={(selected) => (
-                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                                    {(selected as string[]).map((val) => {
-                                        const option = options.find(opt => opt.value === val);
-                                        return (
-                                            <Chip
-                                                key={val}
-                                                label={option?.label || val}
-                                                size="small"
-                                            />
-                                        );
-                                    })}
+                    <Box>
+                        <FormControl fullWidth error={Boolean(error)}>
+                            <InputLabel>{label}</InputLabel>
+                            <Select
+                                multiple
+                                value={selectedValues}
+                                onChange={(e: SelectChangeEvent<unknown>) => {
+                                    const newValues = e.target.value as string[];
+                                    handleInputChange(newValues);
+                                }}
+                                label={label}
+                                renderValue={(selected) => (
+                                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                        {(selected as string[]).map((val) => {
+                                            // Handle text input values
+                                            if (typeof val === 'object' && val && 'text_input' in val) {
+                                                return (
+                                                    <Chip
+                                                        key={`text_${(val as any).text_input}`}
+                                                        label={`${textInputLabel}: ${(val as any).text_input}`}
+                                                        size="small"
+                                                        icon={<Edit />}
+                                                        color="secondary"
+                                                    />
+                                                );
+                                            }
+                                            const option = options.find(opt => opt.value === val);
+                                            return (
+                                                <Chip
+                                                    key={val}
+                                                    label={option?.label || val}
+                                                    size="small"
+                                                />
+                                            );
+                                        })}
+                                    </Box>
+                                )}
+                            >
+                                {options.map((option) => (
+                                    <MenuItem key={option.value} value={option.value}>
+                                        <Checkbox 
+                                            checked={selectedValues.includes(option.value)}
+                                            size="small"
+                                        />
+                                        {option.label}
+                                    </MenuItem>
+                                ))}
+                                {allowTextInput && (
+                                    <MenuItem key="__text_input__" value="__text_input__">
+                                        <Checkbox 
+                                            checked={showTextInput}
+                                            onChange={(e) => setShowTextInput(e.target.checked)}
+                                            size="small"
+                                        />
+                                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <Edit fontSize="small" />
+                                            {textInputLabel}
+                                        </Box>
+                                    </MenuItem>
+                                )}
+                            </Select>
+                        </FormControl>
+                        
+                        {allowTextInput && showTextInput && (
+                            <Collapse in={showTextInput}>
+                                <Box sx={{ mt: 2, display: 'flex', gap: 1, alignItems: 'flex-end' }}>
+                                    <TextField
+                                        fullWidth
+                                        size="small"
+                                        placeholder={textInputPlaceholder}
+                                        value={textInputValue}
+                                        onChange={(e) => setTextInputValue(e.target.value)}
+                                        label="Custom option"
+                                    />
+                                    <Button
+                                        variant="outlined"
+                                        size="small"
+                                        startIcon={<Add />}
+                                        onClick={() => {
+                                            if (textInputValue.trim()) {
+                                                const newTextInput = { text_input: textInputValue.trim() };
+                                                const newValues = [...selectedValues, newTextInput];
+                                                handleInputChange(newValues);
+                                                setTextInputValue('');
+                                            }
+                                        }}
+                                        disabled={!textInputValue.trim()}
+                                    >
+                                        Add
+                                    </Button>
                                 </Box>
-                            )}
-                        >
-                            {options.map((option) => (
-                                <MenuItem key={option.value} value={option.value}>
-                                    {option.label}
-                                </MenuItem>
-                            ))}
-                        </Select>
-                    </FormControl>
+                            </Collapse>
+                        )}
+                    </Box>
                 );
 
             case 'autocomplete':
@@ -440,7 +525,7 @@ export default function IntelligentFormField({
                             <Badge
                                 color="primary"
                                 variant="dot"
-                                invisible={!contextualHelp.tips.length}
+                                invisible={!contextualHelp.tips || !contextualHelp.tips.length}
                             >
                                 <Help />
                             </Badge>

@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
     Box,
     LinearProgress,
@@ -211,40 +211,78 @@ export function useProgressSteps() {
     const { reports, loading: reportLoading } = useAppSelector(state => state.report);
     const { scenarios, loading: scenarioLoading } = useAppSelector(state => state.scenario);
 
-    const currentAssessment = assessments[0]; // Get the most recent assessment
+    const currentAssessment = assessments && assessments.length > 0 ? assessments[0] : null;
 
-    const steps: ProgressStep[] = [
-        {
-            label: 'Business Requirements',
-            description: 'Collect business goals and constraints',
-            status: currentAssessment?.businessRequirements ? 'completed' : 'pending',
-        },
-        {
-            label: 'Technical Assessment',
-            description: 'Analyze current infrastructure and requirements',
-            status: currentAssessment?.technicalRequirements ? 'completed' :
-                assessmentLoading ? 'active' : 'pending',
-        },
-        {
-            label: 'Agent Analysis',
-            description: 'AI agents analyze requirements and generate recommendations',
-            status: currentAssessment?.status === 'completed' ? 'completed' :
-                currentAssessment?.status === 'in_progress' ? 'active' : 'pending',
-            progress: currentAssessment?.progress || 0,
-        },
-        {
-            label: 'Scenario Modeling',
-            description: 'Generate and compare infrastructure scenarios',
-            status: scenarios.length > 0 ? 'completed' :
-                scenarioLoading ? 'active' : 'pending',
-        },
-        {
-            label: 'Report Generation',
-            description: 'Create comprehensive strategy reports',
-            status: reports.length > 0 ? 'completed' :
-                reportLoading ? 'active' : 'pending',
-        },
-    ];
+    const steps: ProgressStep[] = useMemo(() => {
+        const assessmentProgress = currentAssessment?.progress || {};
+        const currentStep = assessmentProgress.current_step || 'created';
+        const completedSteps = assessmentProgress.completed_steps || [];
+        const progressPercentage = assessmentProgress.progress_percentage || 0;
+        
+        // Define the correct workflow order matching the backend
+        const workflowSteps = [
+            {
+                id: 'created',
+                label: 'Assessment Created',
+                description: 'Initial assessment setup and requirements collection',
+            },
+            {
+                id: 'analysis',
+                label: 'AI Agent Analysis',
+                description: 'Multi-agent analysis including CTO, Cloud Engineer, Infrastructure, Security, and Research agents',
+            },
+            {
+                id: 'recommendations',
+                label: 'Recommendations Generation',
+                description: 'Generating personalized cloud infrastructure recommendations',
+            },
+            {
+                id: 'reports',
+                label: 'Report Generation',
+                description: 'Creating executive summary, technical roadmap, and cost analysis reports',
+            },
+            {
+                id: 'visualization',
+                label: 'Data Visualization',
+                description: 'Generating charts and visual representations of recommendations',
+            }
+        ];
+
+        return workflowSteps.map((step, index) => {
+            let status: ProgressStep['status'] = 'pending';
+            let progress = 0;
+
+            if (completedSteps.includes(step.id)) {
+                status = 'completed';
+                progress = 100;
+            } else if (currentStep === step.id) {
+                status = 'active';
+                // Calculate progress within current step
+                if (step.id === 'analysis') {
+                    // Agent analysis is 80% of total progress (10 agents)
+                    progress = Math.min(progressPercentage * 1.25, 100); // Scale 0-80% to 0-100%
+                } else if (step.id === 'recommendations') {
+                    progress = progressPercentage > 80 ? Math.min((progressPercentage - 80) * 5, 100) : 0;
+                } else if (step.id === 'reports') {
+                    progress = progressPercentage > 85 ? Math.min((progressPercentage - 85) * 6.67, 100) : 0;
+                } else if (step.id === 'visualization') {
+                    progress = progressPercentage > 95 ? Math.min((progressPercentage - 95) * 20, 100) : 0;
+                } else {
+                    progress = 50; // Default progress for current step
+                }
+            } else if (currentStep === 'failed' && index === workflowSteps.length - 1) {
+                status = 'error';
+                progress = 0;
+            }
+
+            return {
+                label: step.label,
+                description: step.description,
+                status,
+                progress: Math.round(progress),
+            };
+        });
+    }, [currentAssessment, assessmentLoading, reportLoading, scenarioLoading]);
 
     return steps;
 }

@@ -38,6 +38,10 @@ services:
       context: .
       dockerfile: Dockerfile
       target: production
+      args:
+        - BUILD_DATE=2025-08-04
+        - VCS_REF=local
+        - VERSION=0.1.0-local
     container_name: infra_mind_api
     restart: unless-stopped
     ports:
@@ -100,20 +104,24 @@ services:
     build:
       context: ./frontend-react
       dockerfile: Dockerfile
-      target: production
+      target: development
+      args:
+        - BUILD_DATE=2025-08-04
+        - VCS_REF=local
+        - VERSION=0.1.0-local
     container_name: infra_mind_frontend
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://api:8000
-      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NODE_ENV: development
     depends_on:
       - api
     networks:
       - infra_mind_network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      test: ["CMD", "sh", "-c", "wget --no-verbose --tries=1 --spider http://$(hostname -i):3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3

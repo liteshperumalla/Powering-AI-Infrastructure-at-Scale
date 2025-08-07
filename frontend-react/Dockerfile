@@ -2,7 +2,7 @@
 # Learning Note: Multi-stage builds optimize image size for production
 
 # Build stage
-FROM node:20-alpine as builder
+FROM node:20-alpine AS builder
 
 # Set build arguments for security scanning
 ARG BUILD_DATE
@@ -32,11 +32,11 @@ RUN npm run build && \
     npm prune --production
 
 # Security scanning stage (optional)
-FROM builder as security-scan
+FROM builder AS security-scan
 RUN npm audit --audit-level=high || true
 
 # Production stage
-FROM node:20-alpine as production
+FROM node:20-alpine AS production
 
 # Set build metadata labels
 LABEL maintainer="Infra Mind Team" \
@@ -93,3 +93,22 @@ ENTRYPOINT ["tini", "--"]
 
 # Start the application
 CMD ["node", "server.js"]
+
+# Development stage
+FROM node:20-alpine AS development
+
+WORKDIR /app
+
+RUN apk update && apk upgrade && apk add --no-cache \
+    curl \
+    ca-certificates
+
+COPY package*.json ./
+
+RUN npm install
+
+COPY . .
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev"]

@@ -1,942 +1,460 @@
-/**
- * Comprehensive Analytics Dashboard Component
- * 
- * Advanced admin dashboard for system metrics, performance monitoring,
- * user analytics, recommendation quality tracking, and alerting system.
- */
-
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import {
     Box,
     Card,
     CardContent,
     Typography,
     Grid,
-    Tabs,
-    Tab,
+    Chip,
+    LinearProgress,
+    Alert,
+    Stack,
+    IconButton,
+    Tooltip,
+    Badge,
+    List,
+    ListItem,
+    ListItemText,
+    ListItemIcon,
+    Divider,
+    Button,
     Select,
     MenuItem,
     FormControl,
     InputLabel,
-    Button,
-    Alert,
-    Chip,
-    LinearProgress,
-    IconButton,
-    Tooltip,
     Paper,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
-    CircularProgress,
-    Switch,
-    FormControlLabel
+    Tabs,
+    Tab,
 } from '@mui/material';
 import {
-    Refresh as RefreshIcon,
-    Download as DownloadIcon,
-    Settings as SettingsIcon,
-    TrendingUp as TrendingUpIcon,
-    TrendingDown as TrendingDownIcon,
-    Warning as WarningIcon,
-    CheckCircle as CheckCircleIcon,
-    Error as ErrorIcon,
-    Info as InfoIcon
+    TrendingUp,
+    TrendingDown,
+    Warning,
+    CheckCircle,
+    Error,
+    Info,
+    Speed,
+    Memory,
+    Storage,
+    NetworkCheck,
+    People,
+    Assessment,
+    CloudQueue,
+    Timeline,
+    Notifications,
+    Close,
+    FilterList,
+    DateRange,
+    Cloud,
 } from '@mui/icons-material';
-import {
-    LineChart,
-    Line,
-    AreaChart,
-    Area,
-    BarChart,
-    Bar,
-    PieChart,
-    Pie,
-    Cell,
-    XAxis,
-    YAxis,
-    CartesianGrid,
-    Tooltip as RechartsTooltip,
-    Legend,
-    ResponsiveContainer
-} from 'recharts';
+import { useAppSelector } from '@/store/hooks';
+import { apiClient } from '@/services/api';
+import CostComparisonChart from './charts/CostComparisonChart';
+import RecommendationScoreChart from './charts/RecommendationScoreChart';
+import AssessmentResultsChart from './charts/AssessmentResultsChart';
 
-// Types
-interface AnalyticsTimeframe {
-    value: string;
-    label: string;
-}
-
-interface TrendAnalysis {
-    current_value: number;
-    previous_value: number;
-    change_percent: number;
-    trend: 'up' | 'down' | 'stable' | 'volatile';
-    confidence: number;
-    data_points: number;
-}
-
-interface UserAnalytics {
-    total_users: number;
-    active_users_24h: number;
-    active_users_7d: number;
-    new_users_24h: number;
-    new_users_7d: number;
-    user_retention_rate: number;
-    avg_session_duration_minutes: number;
-    bounce_rate_percent: number;
-    user_engagement_score: number;
-    geographic_distribution: Record<string, number>;
-    company_size_distribution: Record<string, number>;
-    industry_distribution: Record<string, number>;
-    feature_usage: Record<string, number>;
-}
-
-interface RecommendationQualityMetrics {
-    total_recommendations: number;
-    avg_confidence_score: number;
-    user_satisfaction_score: number;
-    implementation_success_rate: number;
-    recommendation_accuracy: number;
-    agent_performance_breakdown: Record<string, {
-        success_rate: number;
-        avg_response_time: number;
-        total_executions: number;
-        cost_per_execution: number;
-        error_breakdown: Record<string, number>;
-    }>;
-    quality_trends: Record<string, TrendAnalysis>;
-    feedback_distribution: Record<string, number>;
-    cost_savings_achieved: number;
-    time_to_implementation: number;
-}
-
-interface SystemPerformanceAnalytics {
-    avg_response_time_ms: number;
-    p95_response_time_ms: number;
-    p99_response_time_ms: number;
-    error_rate_percent: number;
-    throughput_requests_per_minute: number;
-    system_availability_percent: number;
-    resource_utilization: Record<string, number>;
-    performance_trends: Record<string, TrendAnalysis>;
-    bottleneck_analysis: Array<{
-        component: string;
-        impact_score: number;
-        description: string;
-        recommendation: string;
-    }>;
-    capacity_projections: Record<string, number>;
-}
-
-interface AlertAnalytics {
-    total_alerts_24h: number;
-    active_alerts: number;
-    resolved_alerts_24h: number;
-    avg_resolution_time_minutes: number;
-    alert_frequency_by_type: Record<string, number>;
-    alert_severity_distribution: Record<string, number>;
-    most_common_issues: Array<{
-        issue: string;
-        count: number;
-        percentage: number;
-    }>;
-}
-
-interface ComprehensiveAnalytics {
-    timestamp: string;
-    timeframe: string;
-    user_analytics: UserAnalytics;
-    recommendation_quality: RecommendationQualityMetrics;
-    system_performance: SystemPerformanceAnalytics;
-    alert_analytics: AlertAnalytics;
-    business_metrics: Record<string, {
-        value: number;
+interface AnalyticsData {
+    overall_performance: {
+        score: number;
         trend: 'up' | 'down' | 'stable';
-        target: number;
-    }>;
-    operational_insights: Array<{
-        type: string;
-        priority: string;
-        title: string;
-        description: string;
+    };
+    cost_efficiency: {
+        score: number;
+        trend: 'up' | 'down' | 'stable';
+    };
+    security_compliance: {
+        score: number;
+        trend: 'up' | 'down' | 'stable';
+    };
+    cost_breakdown: {
+        aws: number;
+        azure: number;
+        gcp: number;
+    };
+    performance_by_service: {
+        service: string;
+        provider: string;
+        score: number;
+    }[];
+    alerts_by_severity: {
+        critical: number;
+        high: number;
+        medium: number;
+        low: number;
+    };
+    operational_insights: {
+        id: string;
+        insight: string;
         recommendation: string;
-        impact: string;
-        estimated_effort: string;
-    }>;
-    predictive_analytics: Record<string, {
-        predicted_value: number;
-        confidence_interval: [number, number];
-        historical_data: number[];
-    }>;
+        severity: 'low' | 'medium' | 'high';
+        category: 'cost' | 'performance' | 'security' | 'reliability';
+    }[];
+    feature_usage: {
+        feature: string;
+        usage_count: number;
+        user_engagement_score: number;
+    }[];
 }
 
-const TIMEFRAMES: AnalyticsTimeframe[] = [
-    { value: '1h', label: 'Last Hour' },
-    { value: '24h', label: 'Last 24 Hours' },
-    { value: '7d', label: 'Last 7 Days' },
-    { value: '30d', label: 'Last 30 Days' },
-    { value: '90d', label: 'Last 90 Days' },
-    { value: '365d', label: 'Last Year' }
-];
-
-const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
-
-const ComprehensiveAnalyticsDashboard: React.FC = () => {
-    const [activeTab, setActiveTab] = useState(0);
-    const [timeframe, setTimeframe] = useState('24h');
-    const [analytics, setAnalytics] = useState<ComprehensiveAnalytics | null>(null);
+export default function ComprehensiveAnalyticsDashboard() {
+    const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [autoRefresh, setAutoRefresh] = useState(true);
-    const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+    const [timeframe, setTimeframe] = useState('30d');
+    const [providerFilter, setProviderFilter] = useState('all');
+    const [activeTab, setActiveTab] = useState(0);
 
-    // Fetch analytics data
-    const fetchAnalytics = useCallback(async () => {
-        try {
+    useEffect(() => {
+        const fetchAnalytics = async () => {
             setLoading(true);
             setError(null);
-
-            const response = await fetch(`/api/admin/analytics/comprehensive?timeframe=${timeframe}`);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            try {
+                // Simulate API call
+                const response = await new Promise<AnalyticsData>((resolve) => {
+                    setTimeout(() => {
+                        resolve({
+                            overall_performance: { score: 85, trend: 'up' },
+                            cost_efficiency: { score: 78, trend: 'down' },
+                            security_compliance: { score: 92, trend: 'up' },
+                            cost_breakdown: { aws: 12500, azure: 9800, gcp: 7600 },
+                            performance_by_service: [
+                                { service: 'EC2', provider: 'AWS', score: 88 },
+                                { service: 'RDS', provider: 'AWS', score: 92 },
+                                { service: 'Azure VMs', provider: 'Azure', score: 85 },
+                                { service: 'Azure SQL', provider: 'Azure', score: 89 },
+                                { service: 'Compute Engine', provider: 'GCP', score: 90 },
+                                { service: 'Cloud SQL', provider: 'GCP', score: 91 },
+                            ],
+                            alerts_by_severity: { critical: 5, high: 12, medium: 34, low: 56 },
+                            operational_insights: [
+                                {
+                                    id: '1',
+                                    insight: 'High CPU utilization on RDS instances during peak hours.',
+                                    recommendation: 'Consider upgrading to a larger instance class or implementing read replicas.',
+                                    severity: 'high',
+                                    category: 'performance',
+                                },
+                                {
+                                    id: '2',
+                                    insight: 'Unused EBS volumes detected in us-east-1.',
+                                    recommendation: 'Review and delete unused volumes to reduce costs.',
+                                    severity: 'medium',
+                                    category: 'cost',
+                                },
+                                {
+                                    id: '3',
+                                    insight: 'S3 buckets without public access block.',
+                                    recommendation: 'Enable public access block on all S3 buckets to enhance security.',
+                                    severity: 'high',
+                                    category: 'security',
+                                },
+                            ],
+                            feature_usage: [
+                                { feature: 'Assessments', usage_count: 120, user_engagement_score: 85 },
+                                { feature: 'Reports', usage_count: 95, user_engagement_score: 78 },
+                                { feature: 'Scenarios', usage_count: 65, user_engagement_score: 92 },
+                                { feature: 'Analytics', usage_count: 45, user_engagement_score: 65 },
+                            ],
+                        });
+                    }, 1000);
+                });
+                setAnalytics(response);
+            } catch (err) {
+                setError('Failed to fetch analytics data.');
+            } finally {
+                setLoading(false);
             }
+        };
 
-            const data = await response.json();
-            setAnalytics(data.analytics);
-            setLastUpdated(new Date());
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to fetch analytics');
-        } finally {
-            setLoading(false);
-        }
-    }, [timeframe]);
-
-    // Auto-refresh effect
-    useEffect(() => {
         fetchAnalytics();
+    }, [timeframe, providerFilter]);
 
-        if (autoRefresh) {
-            const interval = setInterval(fetchAnalytics, 300000); // 5 minutes
-            return () => clearInterval(interval);
-        }
-    }, [fetchAnalytics, autoRefresh]);
-
-    // Export analytics report
-    const handleExport = async () => {
-        try {
-            const response = await fetch(`/api/admin/analytics/export?format=json&timeframe=${timeframe}`);
-            if (!response.ok) throw new Error('Export failed');
-
-            const data = await response.json();
-            const blob = new Blob([data.report_data], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `analytics-report-${timeframe}-${new Date().toISOString().split('T')[0]}.json`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-        } catch (err) {
-            setError('Failed to export analytics report');
-        }
+    const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+        setActiveTab(newValue);
     };
 
-    // Render trend indicator
-    const renderTrendIndicator = (trend: TrendAnalysis) => {
-        const getTrendIcon = () => {
-            switch (trend.trend) {
-                case 'up':
-                    return <TrendingUpIcon color="success" />;
-                case 'down':
-                    return <TrendingDownIcon color="error" />;
-                case 'volatile':
-                    return <WarningIcon color="warning" />;
-                default:
-                    return <CheckCircleIcon color="info" />;
-            }
-        };
-
-        const getTrendColor = () => {
-            switch (trend.trend) {
-                case 'up':
-                    return 'success';
-                case 'down':
-                    return 'error';
-                case 'volatile':
-                    return 'warning';
-                default:
-                    return 'info';
-            }
-        };
-
-        return (
-            <Box display="flex" alignItems="center" gap={1}>
-                {getTrendIcon()}
-                <Typography variant="body2" color={getTrendColor()}>
-                    {trend.change_percent > 0 ? '+' : ''}{trend.change_percent.toFixed(1)}%
-                </Typography>
-                <Typography variant="caption" color="text.secondary">
-                    (confidence: {(trend.confidence * 100).toFixed(0)}%)
-                </Typography>
-            </Box>
+    const filteredPerformanceData = useMemo(() => {
+        if (!analytics) return [];
+        if (providerFilter === 'all') return analytics.performance_by_service;
+        return analytics.performance_by_service.filter(
+            (service) => service.provider.toLowerCase() === providerFilter
         );
-    };
+    }, [analytics, providerFilter]);
 
-    // Render metric card
-    const renderMetricCard = (title: string, value: string | number, trend?: TrendAnalysis, unit?: string) => (
-        <Card>
-            <CardContent>
-                <Typography variant="h6" gutterBottom>
-                    {title}
-                </Typography>
-                <Typography variant="h4" color="primary">
-                    {typeof value === 'number' ? value.toLocaleString() : value}
-                    {unit && <Typography component="span" variant="body2" color="text.secondary"> {unit}</Typography>}
-                </Typography>
-                {trend && renderTrendIndicator(trend)}
-            </CardContent>
-        </Card>
-    );
-
-    // Overview Tab
-    const renderOverviewTab = () => {
-        if (!analytics) return null;
-
+    if (loading) {
         return (
-            <Grid container spacing={3}>
-                {/* Key Metrics */}
-                <Grid item xs={12} md={3}>
-                    {renderMetricCard(
-                        'Active Users (24h)',
-                        analytics.user_analytics.active_users_24h,
-                        undefined,
-                        'users'
-                    )}
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    {renderMetricCard(
-                        'User Satisfaction',
-                        analytics.recommendation_quality.user_satisfaction_score.toFixed(1),
-                        analytics.recommendation_quality.quality_trends.satisfaction,
-                        '/5.0'
-                    )}
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    {renderMetricCard(
-                        'Response Time',
-                        analytics.system_performance.avg_response_time_ms.toFixed(0),
-                        analytics.system_performance.performance_trends.response_time,
-                        'ms'
-                    )}
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    {renderMetricCard(
-                        'Active Alerts',
-                        analytics.alert_analytics.active_alerts,
-                        undefined,
-                        'alerts'
-                    )}
-                </Grid>
-
-                {/* System Health Overview */}
-                <Grid item xs={12} md={6}>
-                    <Card>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                System Health
-                            </Typography>
-                            <Box mb={2}>
-                                <Typography variant="body2" gutterBottom>
-                                    CPU Usage: {analytics.system_performance.resource_utilization.cpu?.toFixed(1)}%
-                                </Typography>
-                                <LinearProgress
-                                    variant="determinate"
-                                    value={analytics.system_performance.resource_utilization.cpu || 0}
-                                    color={analytics.system_performance.resource_utilization.cpu > 80 ? 'error' : 'primary'}
-                                />
-                            </Box>
-                            <Box mb={2}>
-                                <Typography variant="body2" gutterBottom>
-                                    Memory Usage: {analytics.system_performance.resource_utilization.memory?.toFixed(1)}%
-                                </Typography>
-                                <LinearProgress
-                                    variant="determinate"
-                                    value={analytics.system_performance.resource_utilization.memory || 0}
-                                    color={analytics.system_performance.resource_utilization.memory > 85 ? 'error' : 'primary'}
-                                />
-                            </Box>
-                            <Box>
-                                <Typography variant="body2" gutterBottom>
-                                    Error Rate: {analytics.system_performance.error_rate_percent.toFixed(2)}%
-                                </Typography>
-                                <LinearProgress
-                                    variant="determinate"
-                                    value={Math.min(analytics.system_performance.error_rate_percent * 10, 100)}
-                                    color={analytics.system_performance.error_rate_percent > 5 ? 'error' : 'success'}
-                                />
-                            </Box>
-                        </CardContent>
-                    </Card>
-                </Grid>
-
-                {/* Operational Insights */}
-                <Grid item xs={12} md={6}>
-                    <Card>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                Operational Insights
-                            </Typography>
-                            {analytics.operational_insights.slice(0, 3).map((insight, index) => (
-                                <Alert
-                                    key={index}
-                                    severity={insight.priority === 'critical' ? 'error' : insight.priority === 'high' ? 'warning' : 'info'}
-                                    sx={{ mb: 1 }}
-                                >
-                                    <Typography variant="subtitle2">{insight.title}</Typography>
-                                    <Typography variant="body2">{insight.description}</Typography>
-                                </Alert>
-                            ))}
-                        </CardContent>
-                    </Card>
-                </Grid>
-
-                {/* User Engagement Chart */}
-                <Grid item xs={12} md={6}>
-                    <Card>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                User Engagement Score
-                            </Typography>
-                            <Box height={300}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={[
-                                        { time: '6h ago', score: 7.2 },
-                                        { time: '5h ago', score: 7.5 },
-                                        { time: '4h ago', score: 7.1 },
-                                        { time: '3h ago', score: 7.8 },
-                                        { time: '2h ago', score: 8.0 },
-                                        { time: '1h ago', score: 7.9 },
-                                        { time: 'now', score: analytics.user_analytics.user_engagement_score }
-                                    ]}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="time" />
-                                        <YAxis domain={[0, 10]} />
-                                        <RechartsTooltip />
-                                        <Line type="monotone" dataKey="score" stroke="#8884d8" strokeWidth={2} />
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </Box>
-                        </CardContent>
-                    </Card>
-                </Grid>
-
-                {/* Recommendation Quality */}
-                <Grid item xs={12} md={6}>
-                    <Card>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                Recommendation Quality
-                            </Typography>
-                            <Box height={300}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={[
-                                        { metric: 'Confidence', value: analytics.recommendation_quality.avg_confidence_score * 100 },
-                                        { metric: 'Accuracy', value: analytics.recommendation_quality.recommendation_accuracy * 100 },
-                                        { metric: 'Success Rate', value: analytics.recommendation_quality.implementation_success_rate * 100 },
-                                        { metric: 'Satisfaction', value: analytics.recommendation_quality.user_satisfaction_score * 20 }
-                                    ]}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="metric" />
-                                        <YAxis domain={[0, 100]} />
-                                        <RechartsTooltip formatter={(value: number) => [`${value}%`, 'Score']} />
-                                        <Bar dataKey="value" fill="#82ca9d" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </Box>
-                        </CardContent>
-                    </Card>
-                </Grid>
-            </Grid>
-        );
-    };
-
-    // User Analytics Tab
-    const renderUserAnalyticsTab = () => {
-        if (!analytics) return null;
-
-        const { user_analytics } = analytics;
-
-        return (
-            <Grid container spacing={3}>
-                {/* User Metrics */}
-                <Grid item xs={12} md={3}>
-                    {renderMetricCard('Total Users', user_analytics.total_users)}
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    {renderMetricCard('Active Users (24h)', user_analytics.active_users_24h)}
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    {renderMetricCard('New Users (24h)', user_analytics.new_users_24h)}
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    {renderMetricCard('Retention Rate', `${(user_analytics.user_retention_rate * 100).toFixed(1)}%`)}
-                </Grid>
-
-                {/* Geographic Distribution */}
-                <Grid item xs={12} md={6}>
-                    <Card>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                Geographic Distribution
-                            </Typography>
-                            <Box height={300}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={Object.entries(user_analytics.geographic_distribution).map(([region, count]) => ({
-                                                name: region,
-                                                value: count
-                                            }))}
-                                            cx="50%"
-                                            cy="50%"
-                                            labelLine={false}
-                                            label={({ name, percent }: { name: string, percent: number }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                            outerRadius={80}
-                                            fill="#8884d8"
-                                            dataKey="value"
-                                        >
-                                            {Object.entries(user_analytics.geographic_distribution).map((_, index) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <RechartsTooltip />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </Box>
-                        </CardContent>
-                    </Card>
-                </Grid>
-
-                {/* Company Size Distribution */}
-                <Grid item xs={12} md={6}>
-                    <Card>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                Company Size Distribution
-                            </Typography>
-                            <Box height={300}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={Object.entries(user_analytics.company_size_distribution).map(([size, count]) => ({
-                                        size: size.charAt(0).toUpperCase() + size.slice(1),
-                                        count
-                                    }))}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="size" />
-                                        <YAxis />
-                                        <RechartsTooltip />
-                                        <Bar dataKey="count" fill="#8884d8" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </Box>
-                        </CardContent>
-                    </Card>
-                </Grid>
-
-                {/* Feature Usage */}
-                <Grid item xs={12}>
-                    <Card>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                Feature Usage
-                            </Typography>
-                            <Grid container spacing={2}>
-                                {Object.entries(user_analytics.feature_usage).map(([feature, usage]) => (
-                                    <Grid item xs={12} sm={6} md={3} key={feature}>
-                                        <Box textAlign="center">
-                                            <Typography variant="h4" color="primary">
-                                                {usage.toLocaleString()}
-                                            </Typography>
-                                            <Typography variant="body2" color="text.secondary">
-                                                {feature.charAt(0).toUpperCase() + feature.slice(1)}
-                                            </Typography>
-                                        </Box>
-                                    </Grid>
-                                ))}
-                            </Grid>
-                        </CardContent>
-                    </Card>
-                </Grid>
-            </Grid>
-        );
-    };
-
-    // System Performance Tab
-    const renderSystemPerformanceTab = () => {
-        if (!analytics) return null;
-
-        const { system_performance } = analytics;
-
-        return (
-            <Grid container spacing={3}>
-                {/* Performance Metrics */}
-                <Grid item xs={12} md={3}>
-                    {renderMetricCard(
-                        'Avg Response Time',
-                        system_performance.avg_response_time_ms.toFixed(0),
-                        system_performance.performance_trends.response_time,
-                        'ms'
-                    )}
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    {renderMetricCard(
-                        'Error Rate',
-                        system_performance.error_rate_percent.toFixed(2),
-                        system_performance.performance_trends.error_rate,
-                        '%'
-                    )}
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    {renderMetricCard(
-                        'Throughput',
-                        system_performance.throughput_requests_per_minute.toFixed(0),
-                        system_performance.performance_trends.throughput,
-                        'req/min'
-                    )}
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    {renderMetricCard(
-                        'Availability',
-                        system_performance.system_availability_percent.toFixed(1),
-                        undefined,
-                        '%'
-                    )}
-                </Grid>
-
-                {/* Resource Utilization */}
-                <Grid item xs={12} md={6}>
-                    <Card>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                Resource Utilization
-                            </Typography>
-                            <Box height={300}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={Object.entries(system_performance.resource_utilization).map(([resource, usage]) => ({
-                                        resource: resource.toUpperCase(),
-                                        usage: usage || 0
-                                    }))}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="resource" />
-                                        <YAxis domain={[0, 100]} />
-                                        <RechartsTooltip formatter={(value: number) => [`${value}%`, 'Usage']} />
-                                        <Bar dataKey="usage" fill="#82ca9d" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </Box>
-                        </CardContent>
-                    </Card>
-                </Grid>
-
-                {/* Bottleneck Analysis */}
-                <Grid item xs={12} md={6}>
-                    <Card>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                Bottleneck Analysis
-                            </Typography>
-                            <TableContainer>
-                                <Table size="small">
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>Component</TableCell>
-                                            <TableCell>Impact</TableCell>
-                                            <TableCell>Description</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {system_performance.bottleneck_analysis.map((bottleneck, index) => (
-                                            <TableRow key={index}>
-                                                <TableCell>{bottleneck.component}</TableCell>
-                                                <TableCell>
-                                                    <Chip
-                                                        label={bottleneck.impact_score.toFixed(1)}
-                                                        color={bottleneck.impact_score > 7 ? 'error' : bottleneck.impact_score > 5 ? 'warning' : 'success'}
-                                                        size="small"
-                                                    />
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Typography variant="body2">{bottleneck.description}</Typography>
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
-                        </CardContent>
-                    </Card>
-                </Grid>
-
-                {/* Capacity Projections */}
-                <Grid item xs={12}>
-                    <Card>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                Capacity Projections (30 days)
-                            </Typography>
-                            <Grid container spacing={2}>
-                                {Object.entries(system_performance.capacity_projections).map(([metric, value]) => (
-                                    <Grid item xs={12} sm={6} md={3} key={metric}>
-                                        <Box textAlign="center">
-                                            <Typography variant="h4" color="primary">
-                                                {typeof value === 'number' ? value.toLocaleString() : value}
-                                            </Typography>
-                                            <Typography variant="body2" color="text.secondary">
-                                                {metric.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                                            </Typography>
-                                        </Box>
-                                    </Grid>
-                                ))}
-                            </Grid>
-                        </CardContent>
-                    </Card>
-                </Grid>
-            </Grid>
-        );
-    };
-
-    // Alerts Tab
-    const renderAlertsTab = () => {
-        if (!analytics) return null;
-
-        const { alert_analytics } = analytics;
-
-        return (
-            <Grid container spacing={3}>
-                {/* Alert Metrics */}
-                <Grid item xs={12} md={3}>
-                    {renderMetricCard('Active Alerts', alert_analytics.active_alerts)}
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    {renderMetricCard('Alerts (24h)', alert_analytics.total_alerts_24h)}
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    {renderMetricCard('Resolved (24h)', alert_analytics.resolved_alerts_24h)}
-                </Grid>
-                <Grid item xs={12} md={3}>
-                    {renderMetricCard(
-                        'Avg Resolution Time',
-                        alert_analytics.avg_resolution_time_minutes.toFixed(0),
-                        undefined,
-                        'min'
-                    )}
-                </Grid>
-
-                {/* Alert Severity Distribution */}
-                <Grid item xs={12} md={6}>
-                    <Card>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                Alert Severity Distribution
-                            </Typography>
-                            <Box height={300}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <PieChart>
-                                        <Pie
-                                            data={Object.entries(alert_analytics.alert_severity_distribution).map(([severity, count]) => ({
-                                                name: severity.charAt(0).toUpperCase() + severity.slice(1),
-                                                value: count
-                                            }))}
-                                            cx="50%"
-                                            cy="50%"
-                                            labelLine={false}
-                                            label={({ name, percent }: { name: string, percent: number }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                            outerRadius={80}
-                                            fill="#8884d8"
-                                            dataKey="value"
-                                        >
-                                            {Object.entries(alert_analytics.alert_severity_distribution).map((_, index) => (
-                                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                            ))}
-                                        </Pie>
-                                        <RechartsTooltip />
-                                    </PieChart>
-                                </ResponsiveContainer>
-                            </Box>
-                        </CardContent>
-                    </Card>
-                </Grid>
-
-                {/* Most Common Issues */}
-                <Grid item xs={12} md={6}>
-                    <Card>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                Most Common Issues
-                            </Typography>
-                            <TableContainer>
-                                <Table size="small">
-                                    <TableHead>
-                                        <TableRow>
-                                            <TableCell>Issue</TableCell>
-                                            <TableCell>Count</TableCell>
-                                            <TableCell>Percentage</TableCell>
-                                        </TableRow>
-                                    </TableHead>
-                                    <TableBody>
-                                        {alert_analytics.most_common_issues.map((issue, index) => (
-                                            <TableRow key={index}>
-                                                <TableCell>{issue.issue}</TableCell>
-                                                <TableCell>{issue.count}</TableCell>
-                                                <TableCell>{issue.percentage.toFixed(1)}%</TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </TableContainer>
-                        </CardContent>
-                    </Card>
-                </Grid>
-
-                {/* Alert Frequency by Type */}
-                <Grid item xs={12}>
-                    <Card>
-                        <CardContent>
-                            <Typography variant="h6" gutterBottom>
-                                Alert Frequency by Type
-                            </Typography>
-                            <Box height={300}>
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={Object.entries(alert_analytics.alert_frequency_by_type).map(([type, count]) => ({
-                                        type: type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-                                        count
-                                    }))}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="type" />
-                                        <YAxis />
-                                        <RechartsTooltip />
-                                        <Bar dataKey="count" fill="#ff7300" />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </Box>
-                        </CardContent>
-                    </Card>
-                </Grid>
-            </Grid>
-        );
-    };
-
-    if (loading && !analytics) {
-        return (
-            <Box display="flex" justifyContent="center" alignItems="center" minHeight="400px">
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
                 <CircularProgress />
             </Box>
         );
     }
 
+    if (error) {
+        return <Alert severity="error">{error}</Alert>;
+    }
+
+    if (!analytics) {
+        return <Alert severity="info">No analytics data available.</Alert>;
+    }
+
     return (
         <Box>
-            {/* Header */}
-            <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-                <Typography variant="h4" component="h1">
-                    Comprehensive Analytics Dashboard
+            {/* Header and Filters */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                <Typography variant="h5" gutterBottom>
+                    Comprehensive Analytics
                 </Typography>
-                <Box display="flex" gap={2} alignItems="center">
-                    <FormControlLabel
-                        control={
-                            <Switch
-                                checked={autoRefresh}
-                                onChange={(e) => setAutoRefresh(e.target.checked)}
-                            />
-                        }
-                        label="Auto Refresh"
-                    />
-                    <FormControl size="small" sx={{ minWidth: 120 }}>
+                <Stack direction="row" spacing={2}>
+                    <FormControl size="small">
                         <InputLabel>Timeframe</InputLabel>
                         <Select
                             value={timeframe}
                             label="Timeframe"
                             onChange={(e) => setTimeframe(e.target.value)}
                         >
-                            {TIMEFRAMES.map((tf) => (
-                                <MenuItem key={tf.value} value={tf.value}>
-                                    {tf.label}
-                                </MenuItem>
-                            ))}
+                            <MenuItem value="7d">Last 7 Days</MenuItem>
+                            <MenuItem value="30d">Last 30 Days</MenuItem>
+                            <MenuItem value="90d">Last 90 Days</MenuItem>
                         </Select>
                     </FormControl>
-                    <Tooltip title="Refresh Data">
-                        <IconButton onClick={fetchAnalytics} disabled={loading}>
-                            <RefreshIcon />
-                        </IconButton>
-                    </Tooltip>
-                    <Tooltip title="Export Report">
-                        <IconButton onClick={handleExport}>
-                            <DownloadIcon />
-                        </IconButton>
-                    </Tooltip>
-                </Box>
+                    <FormControl size="small">
+                        <InputLabel>Provider</InputLabel>
+                        <Select
+                            value={providerFilter}
+                            label="Provider"
+                            onChange={(e) => setProviderFilter(e.target.value)}
+                        >
+                            <MenuItem value="all">All Providers</MenuItem>
+                            <MenuItem value="aws">AWS</MenuItem>
+                            <MenuItem value="azure">Azure</MenuItem>
+                            <MenuItem value="gcp">GCP</MenuItem>
+                        </Select>
+                    </FormControl>
+                </Stack>
             </Box>
 
-            {/* Last Updated */}
-            {lastUpdated && (
-                <Typography variant="body2" color="text.secondary" mb={2}>
-                    Last updated: {lastUpdated.toLocaleString()}
-                </Typography>
-            )}
-
-            {/* Error Alert */}
-            {error && (
-                <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-                    {error}
-                </Alert>
-            )}
-
-            {/* Loading Indicator */}
-            {loading && (
-                <LinearProgress sx={{ mb: 2 }} />
-            )}
+            {/* Key Metrics */}
+            <Grid container spacing={3} sx={{ mb: 3 }}>
+                <Grid item xs={12} sm={6} md={4}>
+                    <Card>
+                        <CardContent>
+                            <Typography variant="h6" gutterBottom>
+                                Overall Performance
+                            </Typography>
+                            <Stack direction="row" alignItems="center" spacing={1}>
+                                <Typography variant="h4" color="primary">
+                                    {analytics.overall_performance.score}
+                                </Typography>
+                                {analytics.overall_performance.trend === 'up' ? (
+                                    <TrendingUp color="success" />
+                                ) : (
+                                    <TrendingDown color="error" />
+                                )}
+                            </Stack>
+                            <LinearProgress
+                                variant="determinate"
+                                value={analytics.overall_performance.score}
+                                sx={{ mt: 1 }}
+                            />
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                    <Card>
+                        <CardContent>
+                            <Typography variant="h6" gutterBottom>
+                                Cost Efficiency
+                            </Typography>
+                            <Stack direction="row" alignItems="center" spacing={1}>
+                                <Typography variant="h4" color="secondary">
+                                    {analytics.cost_efficiency.score}
+                                </Typography>
+                                {analytics.cost_efficiency.trend === 'up' ? (
+                                    <TrendingUp color="success" />
+                                ) : (
+                                    <TrendingDown color="error" />
+                                )}
+                            </Stack>
+                            <LinearProgress
+                                variant="determinate"
+                                value={analytics.cost_efficiency.score}
+                                color="secondary"
+                                sx={{ mt: 1 }}
+                            />
+                        </CardContent>
+                    </Card>
+                </Grid>
+                <Grid item xs={12} sm={6} md={4}>
+                    <Card>
+                        <CardContent>
+                            <Typography variant="h6" gutterBottom>
+                                Security & Compliance
+                            </Typography>
+                            <Stack direction="row" alignItems="center" spacing={1}>
+                                <Typography variant="h4" color="success">
+                                    {analytics.security_compliance.score}
+                                </Typography>
+                                {analytics.security_compliance.trend === 'up' ? (
+                                    <TrendingUp color="success" />
+                                ) : (
+                                    <TrendingDown color="error" />
+                                )}
+                            </Stack>
+                            <LinearProgress
+                                variant="determinate"
+                                value={analytics.security_compliance.score}
+                                color="success"
+                                sx={{ mt: 1 }}
+                            />
+                        </CardContent>
+                    </Card>
+                </Grid>
+            </Grid>
 
             {/* Tabs */}
             <Paper sx={{ mb: 3 }}>
-                <Tabs
-                    value={activeTab}
-                    onChange={(_, newValue) => setActiveTab(newValue)}
-                    variant="scrollable"
-                    scrollButtons="auto"
-                >
-                    <Tab label="Overview" />
-                    <Tab label="User Analytics" />
-                    <Tab label="Recommendation Quality" />
-                    <Tab label="System Performance" />
-                    <Tab label="Alerts" />
-                    <Tab label="Business Metrics" />
-                    <Tab label="Predictive Analytics" />
+                <Tabs value={activeTab} onChange={handleTabChange} centered>
+                    <Tab label="Operational Insights" />
+                    <Tab label="Performance Analysis" />
+                    <Tab label="Cost Breakdown" />
+                    <Tab label="Feature Usage" />
                 </Tabs>
             </Paper>
 
-            {/* Tab Content */}
-            <Box>
-                {activeTab === 0 && renderOverviewTab()}
-                {activeTab === 1 && renderUserAnalyticsTab()}
-                {activeTab === 2 && (
-                    <Typography>Recommendation Quality tab content would go here</Typography>
-                )}
-                {activeTab === 3 && renderSystemPerformanceTab()}
-                {activeTab === 4 && renderAlertsTab()}
-                {activeTab === 5 && (
-                    <Typography>Business Metrics tab content would go here</Typography>
-                )}
-                {activeTab === 6 && (
-                    <Typography>Predictive Analytics tab content would go here</Typography>
-                )}
-            </Box>
+            {/* Tab Panels */}
+            {activeTab === 0 && (
+                <Card>
+                    <CardContent>
+                        <Typography variant="h6" gutterBottom>
+                            Operational Insights
+                        </Typography>
+                        <List>
+                            {(analytics.operational_insights || []).slice(0, 3).map((insight, index) => (
+                                <React.Fragment key={insight.id}>
+                                    <ListItem>
+                                        <ListItemIcon>
+                                            <Chip
+                                                label={insight.severity}
+                                                size="small"
+                                                color={
+                                                    insight.severity === 'high' ? 'error' :
+                                                        insight.severity === 'medium' ? 'warning' : 'info'
+                                                }
+                                            />
+                                        </ListItemIcon>
+                                        <ListItemText
+                                            primary={insight.insight}
+                                            secondary={insight.recommendation}
+                                        />
+                                    </ListItem>
+                                    {index < 2 && <Divider />}
+                                </React.Fragment>
+                            ))}
+                        </List>
+                    </CardContent>
+                </Card>
+            )}
+
+            {activeTab === 1 && (
+                <Card>
+                    <CardContent>
+                        <Typography variant="h6" gutterBottom>
+                            Performance by Service
+                        </Typography>
+                        <RecommendationScoreChart
+                            data={filteredPerformanceData.map(d => ({
+                                service: d.service,
+                                provider: d.provider,
+                                performance: d.score,
+                                color: d.provider === 'AWS' ? '#FF9900' : d.provider === 'Azure' ? '#0078D4' : '#4285F4'
+                            }))}
+                            title=""
+                        />
+                    </CardContent>
+                </Card>
+            )}
+
+            {activeTab === 2 && (
+                <Card>
+                    <CardContent>
+                        <Typography variant="h6" gutterBottom>
+                            Cost Breakdown by Provider
+                        </Typography>
+                        <CostComparisonChart
+                            data={[
+                                { provider: 'AWS', total: analytics.cost_breakdown.aws, color: '#FF9900' },
+                                { provider: 'Azure', total: analytics.cost_breakdown.azure, color: '#0078D4' },
+                                { provider: 'GCP', total: analytics.cost_breakdown.gcp, color: '#4285F4' },
+                            ]}
+                            title=""
+                            showBreakdown={false}
+                        />
+                    </CardContent>
+                </Card>
+            )}
+
+            {activeTab === 3 && (
+                <Card>
+                    <CardContent>
+                        <Typography variant="h6" gutterBottom>
+                            Feature Usage & Engagement
+                        </Typography>
+                        <Grid container spacing={2}>
+                            {analytics.feature_usage.map((feature) => (
+                                <Grid item xs={12} sm={6} key={feature.feature}>
+                                    <Typography variant="body2" fontWeight="medium">
+                                        {feature.feature.charAt(0).toUpperCase() + feature.feature.slice(1)}
+                                    </Typography>
+                                    <Stack direction="row" spacing={2} alignItems="center">
+                                        <Box sx={{ width: '100%' }}>
+                                            <LinearProgress
+                                                variant="determinate"
+                                                value={feature.user_engagement_score}
+                                            />
+                                        </Box>
+                                        <Typography variant="body2" color="text.secondary">
+                                            {feature.user_engagement_score}%
+                                        </Typography>
+                                    </Stack>
+                                </Grid>
+                            ))}
+                        </Grid>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Alerts Summary */}
+            <Card sx={{ mt: 3 }}>
+                <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                        Alerts Summary
+                    </Typography>
+                    <Grid container spacing={2}>
+                        {Object.entries(analytics.alerts_by_severity).map(([severity, count]) => (
+                            <Grid item xs={6} sm={3} key={severity}>
+                                <Paper
+                                    variant="outlined"
+                                    sx={{ p: 2, textAlign: 'center' }}
+                                >
+                                    <Typography variant="h5" color={
+                                        severity === 'critical' ? 'error' :
+                                            severity === 'high' ? 'error' :
+                                                severity === 'medium' ? 'warning' : 'info'
+                                    }>
+                                        {count}
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary">
+                                        {severity.charAt(0).toUpperCase() + severity.slice(1)}
+                                    </Typography>
+                                </Paper>
+                            </Grid>
+                        ))}
+                    </Grid>
+                </CardContent>
+            </Card>
+
+            {/* Loading state for sections */}
+            {loading && <LinearProgress sx={{ mb: 2 }} value={0} />}
         </Box>
     );
-};
-
-export default ComprehensiveAnalyticsDashboard;
+}

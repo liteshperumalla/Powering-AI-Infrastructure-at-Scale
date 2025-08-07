@@ -334,8 +334,7 @@ async def create_production_indexes() -> None:
         # === ASSESSMENTS COLLECTION INDEXES ===
         logger.info("📋 Creating assessment indexes...")
         try:
-            # Primary assessment lookup indexes
-            await db.database.assessments.create_index([("assessment_id", 1)], unique=True, name="idx_assessments_id_unique")
+            # Primary assessment lookup indexes (using MongoDB _id field - unique by default)
             await db.database.assessments.create_index([("user_id", 1), ("status", 1)], name="idx_assessments_user_status")
             await db.database.assessments.create_index([("user_id", 1), ("created_at", -1)], name="idx_assessments_user_created")
             
@@ -371,8 +370,8 @@ async def create_production_indexes() -> None:
         # === RECOMMENDATIONS COLLECTION INDEXES ===
         logger.info("💡 Creating recommendation indexes...")
         try:
-            # Primary recommendation lookup indexes
-            await db.database.recommendations.create_index([("recommendation_id", 1)], unique=True, name="idx_recommendations_id_unique")
+            # Primary recommendation lookup indexes - removed unique constraint on nullable field
+            # await db.database.recommendations.create_index([("recommendation_id", 1)], unique=True, name="idx_recommendations_id_unique")
             await db.database.recommendations.create_index([("assessment_id", 1), ("agent_name", 1)], name="idx_recommendations_assessment_agent")
             await db.database.recommendations.create_index([("assessment_id", 1), ("confidence_score", -1)], name="idx_recommendations_assessment_confidence")
             

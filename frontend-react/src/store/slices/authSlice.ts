@@ -110,6 +110,32 @@ export const updateProfile = createAsyncThunk(
     }
 );
 
+export const initializeAuth = createAsyncThunk(
+    'auth/initialize',
+    async (_, { dispatch }) => {
+        try {
+            // Check if there's a stored token
+            const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+            if (token) {
+                // Set the token in Redux state, which will trigger the middleware to sync with API client
+                dispatch(setToken(token));
+                
+                // Try to get current user to validate the token
+                const response = await apiClient.getCurrentUser();
+                return { token, user: response };
+            }
+            return null;
+        } catch (error) {
+            // Token is invalid, clear it
+            if (typeof window !== 'undefined') {
+                localStorage.removeItem('auth_token');
+            }
+            dispatch(clearAuth());
+            return null;
+        }
+    }
+);
+
 const authSlice = createSlice({
     name: 'auth',
     initialState,
@@ -265,6 +291,33 @@ const authSlice = createSlice({
             .addCase(updateProfile.rejected, (state, action) => {
                 state.loading = false;
                 state.error = action.payload as string;
+            })
+            // Initialize auth
+            .addCase(initializeAuth.pending, (state) => {
+                state.loading = true;
+            })
+            .addCase(initializeAuth.fulfilled, (state, action) => {
+                state.loading = false;
+                if (action.payload) {
+                    state.token = action.payload.token;
+                    state.user = {
+                        id: action.payload.user.id,
+                        email: action.payload.user.email,
+                        full_name: action.payload.user.full_name,
+                        role: action.payload.user.role,
+                        created_at: action.payload.user.created_at,
+                        last_login: new Date().toISOString()
+                    };
+                    state.isAuthenticated = true;
+                }
+                state.error = null;
+            })
+            .addCase(initializeAuth.rejected, (state) => {
+                state.loading = false;
+                state.token = null;
+                state.user = null;
+                state.isAuthenticated = false;
+                state.error = null;
             });
     },
 });

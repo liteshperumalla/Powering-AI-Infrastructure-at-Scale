@@ -3,7 +3,7 @@
 # build dependencies from runtime dependencies
 
 # Build stage
-FROM python:3.11-slim as builder
+FROM python:3.11-slim AS builder
 
 # Set build arguments for security scanning
 ARG BUILD_DATE
@@ -35,22 +35,20 @@ ENV PATH="/opt/venv/bin:$PATH"
 COPY pyproject.toml requirements.txt ./
 COPY README.md ./
 
-# Install uv, a fast Python package installer
-RUN pip install --upgrade pip && pip install uv
-
-# Create a virtual environment using uv and install dependencies
-RUN uv venv /opt/venv && \
-    uv pip install --no-cache -r requirements.txt .
+# Install uv and use it to create venv and install dependencies
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    /root/.local/bin/uv venv /opt/venv && \
+    /root/.local/bin/uv pip install --no-cache -r requirements.txt .
 
 
 # Security scanning stage (optional)
-FROM builder as security-scan
+FROM builder AS security-scan
 RUN pip install --no-cache-dir safety bandit \
     && safety check \
     && bandit -r /opt/venv/lib/python3.11/site-packages/ -f json -o /tmp/bandit-report.json || true
 
 # Production stage
-FROM python:3.11-slim as production
+FROM python:3.11-slim AS production
 
 # Set build metadata labels
 LABEL maintainer="Infra Mind Team" \

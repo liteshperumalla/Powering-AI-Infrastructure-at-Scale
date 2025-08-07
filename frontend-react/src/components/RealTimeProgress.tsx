@@ -94,9 +94,19 @@ export default function RealTimeProgress({
 
             switch (message.type) {
                 case 'workflow_progress':
-                    setProgress(message.data);
+                    const progressData = {
+                        id: message.data.workflow_id || assessmentId,
+                        status: message.data.status,
+                        progress: message.data.progress_percentage || 0,
+                        current_step: message.data.current_step,
+                        steps: message.data.steps || [],
+                        created_at: message.data.timestamp,
+                        updated_at: message.data.timestamp
+                    };
+                    setProgress(progressData);
+                    
                     if (message.data.status === 'completed') {
-                        onComplete?.(message.data);
+                        onComplete?.(progressData);
                     } else if (message.data.status === 'failed') {
                         setError(message.data.error || 'Workflow failed');
                         onError?.(message.data.error || 'Workflow failed');
@@ -120,13 +130,13 @@ export default function RealTimeProgress({
                     break;
 
                 case 'notification':
-                    setNotifications(prev => [message.data, ...prev.slice(0, 4)]); // Keep last 5
+                    setNotifications(prev => [message.data, ...(prev || []).slice(0, 4)]); // Keep last 5
                     break;
 
                 case 'alert':
                     setNotifications(prev => [
                         { ...message.data, type: 'alert' },
-                        ...prev.slice(0, 4)
+                        ...(prev || []).slice(0, 4)
                     ]);
                     break;
 
@@ -149,10 +159,14 @@ export default function RealTimeProgress({
 
     // Subscribe to workflow updates when connected
     useEffect(() => {
-        if (isConnected && workflowId) {
-            sendTypedMessage('subscribe', { workflow_id: workflowId });
+        if (isConnected) {
+            if (workflowId) {
+                sendTypedMessage('subscribe', { workflow_id: workflowId });
+            } else if (assessmentId) {
+                sendTypedMessage('subscribe', { assessment_id: assessmentId });
+            }
         }
-    }, [isConnected, workflowId, sendTypedMessage]);
+    }, [isConnected, workflowId, assessmentId, sendTypedMessage]);
 
     // Handle WebSocket errors
     useEffect(() => {
@@ -160,6 +174,61 @@ export default function RealTimeProgress({
             setError(`Connection error: ${wsError}`);
         }
     }, [wsError]);
+
+    // Fallback polling for progress updates when WebSocket is not available
+    useEffect(() => {
+        let pollInterval: NodeJS.Timeout;
+        
+        const pollForProgress = async () => {
+            if (!isConnected && assessmentId) {
+                try {
+                    // Poll assessment status from API
+                    const response = await fetch(`/api/assessments/${assessmentId}`);
+                    if (response.ok) {
+                        const assessment = await response.json();
+                        
+                        if (assessment.progress) {
+                            const progressData = {
+                                id: assessmentId,
+                                status: assessment.status === 'completed' ? 'completed' : 
+                                       assessment.status === 'failed' ? 'failed' : 'running',
+                                progress: assessment.progress.progress_percentage || 0,
+                                current_step: assessment.progress.current_step || 'created',
+                                steps: assessment.progress.steps || [],
+                                created_at: assessment.created_at,
+                                updated_at: assessment.updated_at
+                            };
+                            
+                            setProgress(progressData);
+                            
+                            // Check for completion
+                            if (assessment.status === 'completed') {
+                                onComplete?.(progressData);
+                                clearInterval(pollInterval);
+                            } else if (assessment.status === 'failed') {
+                                setError(assessment.progress?.message || 'Assessment failed');
+                                onError?.(assessment.progress?.message || 'Assessment failed');
+                                clearInterval(pollInterval);
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to poll assessment progress:', error);
+                }
+            }
+        };
+        
+        // Start polling if WebSocket is not connected and we have an assessment ID
+        if (!isConnected && assessmentId) {
+            pollInterval = setInterval(pollForProgress, 2000); // Poll every 2 seconds
+        }
+        
+        return () => {
+            if (pollInterval) {
+                clearInterval(pollInterval);
+            }
+        };
+    }, [isConnected, assessmentId, onComplete, onError]);
 
     const getStepIcon = (step: WorkflowStep) => {
         switch (step.status) {

@@ -50,6 +50,34 @@ const RecommendationScoreChart: React.FC<RecommendationScoreChartProps> = ({
         }
     };
 
+    // Handle empty data state
+    if (!data || data.length === 0) {
+        return (
+            <Card>
+                <CardContent>
+                    <Typography variant="h6" gutterBottom>
+                        {title}
+                    </Typography>
+                    <Box sx={{ 
+                        display: 'flex', 
+                        flexDirection: 'column', 
+                        alignItems: 'center', 
+                        justifyContent: 'center',
+                        py: 6,
+                        textAlign: 'center'
+                    }}>
+                        <Typography variant="h6" color="text.secondary" gutterBottom>
+                            No Performance Scores Available
+                        </Typography>
+                        <Typography variant="body2" color="text.secondary">
+                            Complete an assessment to see service performance comparisons.
+                        </Typography>
+                    </Box>
+                </CardContent>
+            </Card>
+        );
+    }
+
     // Transform data for radar chart
     const radarData = [
         { subject: 'Cost Efficiency', ...data.reduce((acc, item) => ({ ...acc, [item.service]: item.costEfficiency }), {}) },

@@ -30,8 +30,8 @@ class BaseSchema(BaseModel):
     behavior for JSON serialization and validation.
     """
     model_config = ConfigDict(
-        # Allow extra fields for flexibility
-        extra="forbid",
+        # Allow extra fields for flexibility - changed from forbid to allow for metadata
+        extra="allow",
         # Use enum values instead of names
         use_enum_values=True,
         # Validate assignment after model creation
@@ -129,6 +129,33 @@ class RecommendationConfidence(str, Enum):
     MEDIUM = "medium"
     HIGH = "high"
     VERY_HIGH = "very_high"
+
+
+class ReportType(str, Enum):
+    """Types of reports that can be generated."""
+    EXECUTIVE = "executive"
+    TECHNICAL = "technical"
+    FINANCIAL = "financial"
+    COMPLIANCE = "compliance"
+    COMPREHENSIVE = "comprehensive"
+
+
+class ReportFormat(str, Enum):
+    """Supported report output formats."""
+    PDF = "pdf"
+    DOCX = "docx"
+    HTML = "html"
+    JSON = "json"
+    MARKDOWN = "markdown"
+
+
+class ReportStatus(str, Enum):
+    """Status of report generation."""
+    PENDING = "pending"
+    GENERATING = "generating"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 # Common response models

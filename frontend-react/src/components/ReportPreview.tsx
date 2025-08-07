@@ -207,7 +207,7 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                             Key Findings
                         </Typography>
                         <List dense>
-                            {report.keyFindings.slice(0, 3).map((finding, index) => (
+                            {(report.keyFindings || []).slice(0, 3).map((finding, index) => (
                                 <ListItem key={index} sx={{ pl: 0 }}>
                                     <ListItemText
                                         primary={
@@ -229,7 +229,7 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                             Top Recommendations
                         </Typography>
                         <List dense>
-                            {report.recommendations.slice(0, 3).map((rec, index) => (
+                            {(report.recommendations || []).slice(0, 3).map((rec, index) => (
                                 <ListItem key={index} sx={{ pl: 0 }}>
                                     <ListItemText
                                         primary={

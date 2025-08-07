@@ -1,31 +1,82 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { apiClient } from '../../services/api';
 
+// Business Goals structure matching backend
+export interface BusinessGoal {
+    goal: string;
+    priority: 'low' | 'medium' | 'high';
+    timeline_months?: number;
+    success_metrics: string[];
+}
+
+// Growth Projection structure matching backend  
+export interface GrowthProjection {
+    current_users: number;
+    projected_users_6m?: number;
+    projected_users_12m?: number;
+    projected_users_24m?: number;
+    current_revenue?: number;
+    projected_revenue_12m?: number;
+}
+
+// Budget Constraints structure matching backend
+export interface BudgetConstraints {
+    total_budget_range: string;
+    preferred_budget: number;
+    budget_flexibility: 'low' | 'medium' | 'high';
+    cost_optimization_priority: 'low' | 'medium' | 'high';
+}
+
+// Team Structure matching backend
+export interface TeamStructure {
+    total_developers: number;
+    senior_developers: number;
+    devops_engineers: number;
+    data_engineers: number;
+    cloud_expertise_level: number; // 1-5 scale
+    kubernetes_expertise?: number;
+    database_expertise?: number;
+    preferred_technologies?: string[];
+}
+
 export interface BusinessRequirements {
-    companySize: string;
+    company_size: 'startup' | 'small' | 'medium' | 'large' | 'enterprise';
     industry: string;
-    budgetRange: string;
-    timeline: string;
-    complianceNeeds: string[];
-    businessGoals: string[];
+    business_goals: BusinessGoal[];
+    growth_projection: GrowthProjection;
+    budget_constraints: BudgetConstraints;
+    team_structure: TeamStructure;
+    compliance_requirements?: string[];
+    project_timeline_months: number;
+    urgency_level?: 'low' | 'medium' | 'high';
+    current_pain_points?: string[];
+    success_criteria?: string[];
 }
 
 export interface TechnicalRequirements {
-    currentInfrastructure: Record<string, unknown>;
-    workloadCharacteristics: Record<string, unknown>;
-    performanceRequirements: Record<string, unknown>;
-    scalabilityNeeds: Record<string, unknown>;
-    integrationRequirements: string[];
+    current_infrastructure: string;
+    workload_types: string[];
+    performance_requirements: Record<string, unknown>;
+    scalability_requirements: Record<string, unknown>;
+    security_requirements: Record<string, unknown>;
+    integration_requirements: Record<string, unknown>;
 }
 
 export interface Assessment {
     id: string;
-    businessRequirements: BusinessRequirements;
-    technicalRequirements: TechnicalRequirements;
+    businessRequirements?: BusinessRequirements;
+    technicalRequirements?: TechnicalRequirements;
     status: 'draft' | 'in_progress' | 'completed' | 'failed';
-    progress: number;
-    createdAt: string;
-    updatedAt: string;
+    progress_percentage: number;
+    title: string;
+    company_size: string;
+    industry: string;
+    budget_range: string;
+    workload_types: string[];
+    recommendations_generated: boolean;
+    reports_generated: boolean;
+    created_at: string;
+    updated_at: string;
 }
 
 interface AssessmentState {
@@ -159,6 +210,10 @@ const assessmentSlice = createSlice({
                 state.loading = false;
                 state.assessments.push(action.payload);
                 state.currentAssessment = action.payload;
+                // Set workflowId if returned from backend
+                if (action.payload.workflow_id) {
+                    state.workflowId = action.payload.workflow_id;
+                }
             })
             .addCase(createAssessment.rejected, (state, action) => {
                 state.loading = false;

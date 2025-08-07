@@ -12,6 +12,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 import time
 import json
+import asyncio
 from loguru import logger
 
 from .core.config import settings
@@ -69,7 +70,7 @@ def create_app() -> FastAPI:
     setup_middleware(app)
     
     # Add routes
-    app.include_router(api_router, prefix=settings.api_prefix)
+    app.include_router(api_router, prefix="/api")
     
     # Add WebSocket endpoint
     setup_websocket(app)
@@ -85,56 +86,146 @@ def setup_websocket(app: FastAPI) -> None:
     Configure WebSocket endpoints.
     """
     
+    # Store active WebSocket connections
+    websocket_connections = {}
+    
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket, token: str = None):
         """
         General WebSocket endpoint for real-time updates.
         """
+        connection_id = f"conn_{int(time.time())}_{id(websocket)}"
+        
         try:
             await websocket.accept()
             logger.info(f"WebSocket connection accepted with token: {token[:20] if token else 'None'}...")
+            
+            # Store connection for broadcasting
+            websocket_connections[connection_id] = {
+                "websocket": websocket,
+                "token": token,
+                "connected_at": time.time()
+            }
             
             # Send welcome message
             await websocket.send_text(json.dumps({
                 "type": "connection",
                 "message": "Connected to Infra Mind WebSocket",
                 "authenticated": token is not None,
+                "connection_id": connection_id,
                 "timestamp": time.time()
             }))
             
-            while True:
-                try:
-                    # Wait for messages from client
-                    data = await websocket.receive_text()
-                    message = json.loads(data)
-                    
-                    # Echo back for now - this can be extended with proper message handling
-                    response = {
-                        "type": "echo",
-                        "received": message,
-                        "timestamp": time.time()
-                    }
-                    await websocket.send_text(json.dumps(response))
-                    
-                except WebSocketDisconnect:
-                    logger.info("WebSocket client disconnected")
-                    break
-                except json.JSONDecodeError:
-                    await websocket.send_text(json.dumps({
-                        "type": "error",
-                        "message": "Invalid JSON format",
-                        "timestamp": time.time()
-                    }))
-                except Exception as e:
-                    logger.error(f"WebSocket error: {e}")
-                    await websocket.send_text(json.dumps({
-                        "type": "error",
-                        "message": str(e),
-                        "timestamp": time.time()
-                    }))
+            try:
+                while True:
+                    # Wait for messages from client with timeout to prevent hanging
+                    try:
+                        data = await asyncio.wait_for(websocket.receive_text(), timeout=30.0)
+                        message = json.loads(data)
+                        
+                        logger.info(f"Received WebSocket message: {message}")
+                        
+                        # Handle different message types
+                        if message.get("type") == "heartbeat":
+                            await websocket.send_text(json.dumps({
+                                "type": "heartbeat_response",
+                                "timestamp": time.time()
+                            }))
+                        elif message.get("type") == "subscribe":
+                            # Handle workflow/assessment subscription
+                            data = message.get("data", {})
+                            workflow_id = data.get("workflow_id")
+                            assessment_id = data.get("assessment_id")
+                            
+                            if workflow_id:
+                                websocket_connections[connection_id]["subscribed_workflow"] = workflow_id
+                                await websocket.send_text(json.dumps({
+                                    "type": "subscription_confirmed",
+                                    "workflow_id": workflow_id,
+                                    "timestamp": time.time()
+                                }))
+                            elif assessment_id:
+                                websocket_connections[connection_id]["subscribed_assessment"] = assessment_id
+                                await websocket.send_text(json.dumps({
+                                    "type": "subscription_confirmed",
+                                    "assessment_id": assessment_id,
+                                    "timestamp": time.time()
+                                }))
+                        else:
+                            # Echo back other messages
+                            response = {
+                                "type": "echo",
+                                "received": message,
+                                "timestamp": time.time()
+                            }
+                            await websocket.send_text(json.dumps(response))
+                            
+                    except asyncio.TimeoutError:
+                        # Send ping to keep connection alive
+                        await websocket.send_text(json.dumps({
+                            "type": "ping",
+                            "timestamp": time.time()
+                        }))
+                        
+            except WebSocketDisconnect:
+                logger.info(f"WebSocket client disconnected: {connection_id}")
+            except json.JSONDecodeError:
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": "Invalid JSON format",
+                    "timestamp": time.time()
+                }))
+            except Exception as e:
+                logger.error(f"WebSocket error: {e}")
+                await websocket.send_text(json.dumps({
+                    "type": "error",
+                    "message": str(e),
+                    "timestamp": time.time()
+                }))
                     
         except Exception as e:
             logger.error(f"WebSocket connection error: {e}")
+        finally:
+            # Clean up connection
+            if connection_id in websocket_connections:
+                del websocket_connections[connection_id]
+                logger.info(f"Cleaned up WebSocket connection: {connection_id}")
+    
+    # Helper function to broadcast workflow updates
+    async def broadcast_workflow_update(assessment_id: str, update_data: dict):
+        """Broadcast workflow updates to subscribed clients."""
+        if not websocket_connections:
+            return
+            
+        message = json.dumps({
+            "type": "workflow_progress",
+            "assessment_id": assessment_id,
+            "data": update_data,
+            "timestamp": time.time()
+        })
+        
+        # Send to all subscribed connections
+        disconnected = []
+        for conn_id, conn_info in websocket_connections.items():
+            try:
+                # Send to connections subscribed to this assessment or workflow
+                subscribed_assessment = conn_info.get("subscribed_assessment")
+                subscribed_workflow = conn_info.get("subscribed_workflow")
+                workflow_id = update_data.get("workflow_id")
+                
+                if (subscribed_assessment == assessment_id or 
+                    (workflow_id and subscribed_workflow == workflow_id)):
+                    await conn_info["websocket"].send_text(message)
+            except Exception as e:
+                logger.error(f"Failed to send to WebSocket {conn_id}: {e}")
+                disconnected.append(conn_id)
+        
+        # Clean up disconnected connections
+        for conn_id in disconnected:
+            websocket_connections.pop(conn_id, None)
+    
+    # Make broadcast function available to other modules
+    app.state.broadcast_workflow_update = broadcast_workflow_update
 
 
 def setup_middleware(app: FastAPI) -> None:

@@ -29,7 +29,7 @@ from ...core.audit import audit_logger, AuditEventType, AuditSeverity
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/compliance", tags=["compliance"])
+router = APIRouter(tags=["compliance"])
 
 
 # Request/Response Models
@@ -133,20 +133,34 @@ async def get_consent_status(
 ):
     """Get current consent status for the user."""
     try:
+        # Check if user is valid
+        if not current_user or not hasattr(current_user, 'id'):
+            logger.error("Invalid user object in get_consent_status")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required"
+            )
+        
         consent_summary = compliance_manager.get_consent_summary(str(current_user.id))
         
         # Log access
-        audit_logger.log_data_access(
-            user_id=str(current_user.id),
-            resource_type="consent_status",
-            resource_id=f"consent_{current_user.id}",
-            action="view_consent_status"
-        )
+        try:
+            audit_logger.log_data_access(
+                user_id=str(current_user.id),
+                resource_type="consent_status",
+                resource_id=f"consent_{current_user.id}",
+                action="view_consent_status"
+            )
+        except Exception as audit_error:
+            logger.warning(f"Failed to log audit event: {audit_error}")
         
         return consent_summary
         
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Failed to get consent status for user {current_user.id}: {str(e)}")
+        user_id = getattr(current_user, 'id', 'unknown') if current_user else 'unknown'
+        logger.error(f"Failed to get consent status for user {user_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve consent status"
