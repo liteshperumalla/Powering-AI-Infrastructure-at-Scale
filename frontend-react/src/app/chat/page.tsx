@@ -50,36 +50,21 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import Navigation from '@/components/Navigation';
 import ProtectedRoute from '@/components/ProtectedRoute';
-import { useAppSelector } from '@/store/hooks';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import {
+    startConversation,
+    getConversations,
+    getConversation,
+    sendMessage,
+    addMessageOptimistically,
+    removeMessageOptimistically,
+    clearChatError,
+    Conversation,
+    ConversationDetail,
+    ChatMessage,
+} from '@/store/slices/chatSlice';
 import Link from 'next/link';
 import { apiClient } from '@/services/api';
-
-interface ChatMessage {
-    id: string;
-    role: 'user' | 'assistant' | 'system';
-    content: string;
-    timestamp: string;
-    metadata?: any;
-}
-
-interface Conversation {
-    id: string;
-    title: string;
-    status: string;
-    context: string;
-    message_count: number;
-    started_at: string;
-    last_activity: string;
-    assessment_id?: string;
-    report_id?: string;
-    escalated: boolean;
-}
-
-interface ConversationDetail extends Conversation {
-    messages: ChatMessage[];
-    total_tokens_used: number;
-    topics_discussed: string[];
-}
 
 const CONVERSATION_CONTEXTS = [
     { value: 'general_inquiry', label: 'General Questions', icon: '💬' },
@@ -92,15 +77,19 @@ const CONVERSATION_CONTEXTS = [
 
 export default function ChatPage() {
     const { user, isAuthenticated, loading: authLoading } = useAppSelector(state => state.auth);
+    const {
+        conversations,
+        currentConversation,
+        loading: isLoading,
+        error,
+        sendingMessage: isSending,
+    } = useAppSelector(state => state.chat);
+    const dispatch = useAppDispatch();
+
+    const messages = currentConversation?.messages || [];
     
     // State management
-    const [conversations, setConversations] = useState<Conversation[]>([]);
-    const [currentConversation, setCurrentConversation] = useState<ConversationDetail | null>(null);
-    const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [newMessage, setNewMessage] = useState('');
-    const [isLoading, setIsLoading] = useState(false);
-    const [isSending, setIsSending] = useState(false);
-    const [error, setError] = useState<string | null>(null);
     
     // UI state
     const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -182,88 +171,37 @@ export default function ChatPage() {
         }
     }, [isSending, currentConversation]);
     
-    const loadConversations = async () => {
-        if (!isAuthenticated) return;
-        
-        try {
-            setIsLoading(true);
-            const response = await apiClient.getConversations({ limit: 50 });
-            setConversations(response.conversations);
-            
-            // Auto-select most recent conversation
-            if (response.conversations.length > 0 && !currentConversation) {
-                await loadConversation(response.conversations[0].id);
-            }
-        } catch (error) {
-            console.error('Failed to load conversations:', error);
-            setError('Failed to load conversations');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-    
-    const loadConversation = async (conversationId: string) => {
-        try {
-            setIsLoading(true);
-            const conversation = await apiClient.getConversation(conversationId);
-            setCurrentConversation(conversation);
-            setMessages(conversation.messages);
-            setError(null);
-        } catch (error) {
-            console.error('Failed to load conversation:', error);
-            setError('Failed to load conversation');
-        } finally {
-            setIsLoading(false);
-        }
-    };
-    
-    const startNewConversation = async (context?: string, title?: string, initialMessage?: string) => {
-        try {
-            setIsLoading(true);
-            const conversation = await apiClient.startConversation({
-                title: title || 'New Chat',
-                context: context || selectedContext,
-                assessment_id: selectedAssessmentId || undefined,
-                report_id: selectedReportId || undefined,
-                initial_message: initialMessage
+    const loadConversations = useCallback(() => {
+        if (isAuthenticated) {
+            dispatch(getConversations({ limit: 50 })).then(action => {
+                if (getConversations.fulfilled.match(action) && action.payload.conversations.length > 0 && !currentConversation) {
+                    dispatch(getConversation(action.payload.conversations[0].id));
+                }
             });
-            
-            setCurrentConversation(conversation);
-            setMessages(conversation.messages);
-            setConversations(prev => [
-                {
-                    id: conversation.id,
-                    title: conversation.title,
-                    status: conversation.status,
-                    context: conversation.context,
-                    message_count: conversation.message_count,
-                    started_at: conversation.started_at,
-                    last_activity: conversation.last_activity,
-                    assessment_id: conversation.assessment_id,
-                    report_id: conversation.report_id,
-                    escalated: conversation.escalated
-                },
-                ...prev
-            ]);
-            
-            setNewChatDialog(false);
-            setError(null);
-        } catch (error) {
-            console.error('Failed to start conversation:', error);
-            setError('Failed to start new conversation');
-        } finally {
-            setIsLoading(false);
         }
-    };
+    }, [isAuthenticated, dispatch, currentConversation]);
     
-    const sendMessage = async () => {
+    const loadConversation = useCallback((conversationId: string) => {
+        dispatch(getConversation(conversationId));
+    }, [dispatch]);
+    
+    const startNewConversation = useCallback((context?: string, title?: string, initialMessage?: string) => {
+        dispatch(startConversation({
+            title: title || 'New Chat',
+            context: context || selectedContext,
+            assessment_id: selectedAssessmentId || undefined,
+            report_id: selectedReportId || undefined,
+            initial_message: initialMessage
+        }));
+        setNewChatDialog(false);
+    }, [dispatch, selectedContext, selectedAssessmentId, selectedReportId]);
+    
+    const sendMessage = () => {
         if (!newMessage.trim() || isSending || !currentConversation) return;
         
         const messageContent = newMessage.trim();
         setNewMessage('');
-        setIsSending(true);
         
-        // Add user message to UI immediately
         const userMessage: ChatMessage = {
             id: `temp-${Date.now()}`,
             role: 'user',
@@ -271,36 +209,19 @@ export default function ChatPage() {
             timestamp: new Date().toISOString()
         };
         
-        setMessages(prev => [...prev, userMessage]);
+        dispatch(addMessageOptimistically(userMessage));
         
-        try {
-            // Send message to API
-            const botResponse = await apiClient.sendMessage(currentConversation.id, {
+        dispatch(sendMessage({
+            conversationId: currentConversation.id,
+            request: {
                 content: messageContent,
                 context: currentConversation.context,
                 assessment_id: currentConversation.assessment_id,
                 report_id: currentConversation.report_id
-            });
-            
-            // Add bot response to messages
-            setMessages(prev => [...prev, botResponse]);
-            
-            // Update conversation in sidebar
-            setConversations(prev => prev.map(conv => 
-                conv.id === currentConversation.id 
-                    ? { ...conv, message_count: conv.message_count + 2, last_activity: new Date().toISOString() }
-                    : conv
-            ));
-            
-        } catch (error) {
-            console.error('Failed to send message:', error);
-            setError('Failed to send message');
-            
-            // Remove the temporary user message on error
-            setMessages(prev => prev.filter(msg => msg.id !== userMessage.id));
-        } finally {
-            setIsSending(false);
-        }
+            }
+        })).unwrap().catch(() => {
+            dispatch(removeMessageOptimistically(userMessage.id));
+        });
     };
     
     const handleKeyPress = (event: React.KeyboardEvent) => {
@@ -310,50 +231,17 @@ export default function ChatPage() {
         }
     };
     
-    const deleteConversation = async (conversationId: string) => {
-        try {
-            await apiClient.deleteConversation(conversationId);
-            
-            // Remove from conversations list
-            setConversations(prev => prev.filter(conv => conv.id !== conversationId));
-            
-            // If this was the current conversation, clear it
-            if (currentConversation?.id === conversationId) {
-                setCurrentConversation(null);
-                setMessages([]);
-                
-                // Load the next conversation if available
-                const remainingConversations = conversations.filter(conv => conv.id !== conversationId);
-                if (remainingConversations.length > 0) {
-                    await loadConversation(remainingConversations[0].id);
-                }
-            }
-        } catch (error) {
-            console.error('Failed to delete conversation:', error);
-            setError('Failed to delete conversation');
-        }
-    };
+    const deleteConversation = useCallback((conversationId: string) => {
+        dispatch(deleteConversation(conversationId));
+    }, [dispatch]);
     
-    const endConversation = async () => {
+    const endConversation = useCallback(() => {
         if (!currentConversation) return;
         
-        try {
-            await apiClient.endConversation(currentConversation.id, satisfactionRating || undefined);
-            
-            // Update conversation status
-            setConversations(prev => prev.map(conv => 
-                conv.id === currentConversation.id 
-                    ? { ...conv, status: 'resolved' }
-                    : conv
-            ));
-            
-            setEndChatDialog(false);
-            setSatisfactionRating(null);
-        } catch (error) {
-            console.error('Failed to end conversation:', error);
-            setError('Failed to end conversation');
-        }
-    };
+        dispatch(endConversation({ conversationId: currentConversation.id, rating: satisfactionRating || undefined }));
+        setEndChatDialog(false);
+        setSatisfactionRating(null);
+    }, [dispatch, currentConversation, satisfactionRating]);
     
     const formatMessageTime = (timestamp: string) => {
         return formatDistanceToNow(new Date(timestamp), { addSuffix: true });

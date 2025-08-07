@@ -1672,22 +1672,24 @@ async def update_assessment(assessment_id: str, update_data: AssessmentUpdate):
     Allows updating assessment details, requirements, and status.
     """
     try:
-        # TODO: Implement database update
-        # assessment = await Assessment.get(assessment_id)
-        # if not assessment:
-        #     raise HTTPException(status_code=404, detail="Assessment not found")
-        # 
-        # # Update fields
-        # if update_data.title is not None:
-        #     assessment.title = update_data.title
-        # # ... update other fields
-        # 
-        # assessment.updated_at = datetime.utcnow()
-        # await assessment.save()
+        assessment = await Assessment.get(assessment_id)
+        if not assessment:
+            raise HTTPException(status_code=404, detail="Assessment not found")
+
+        update_payload = update_data.model_dump(exclude_unset=True)
+
+        if update_payload:
+            await assessment.update({"$set": update_payload})
+
+        assessment.updated_at = datetime.utcnow()
+        await assessment.save()
         
         logger.info(f"Updated assessment: {assessment_id}")
         
-        # Return updated assessment (mock for now)
+        # We need to refetch the assessment to get the updated data
+        updated_assessment = await Assessment.get(assessment_id)
+
+        # Return the updated assessment
         return await get_assessment(assessment_id)
         
     except HTTPException:
@@ -1708,12 +1710,11 @@ async def delete_assessment(assessment_id: str):
     Permanently removes the assessment and all associated data.
     """
     try:
-        # TODO: Implement database deletion
-        # assessment = await Assessment.get(assessment_id)
-        # if not assessment:
-        #     raise HTTPException(status_code=404, detail="Assessment not found")
-        # 
-        # await assessment.delete()
+        assessment = await Assessment.get(assessment_id)
+        if not assessment:
+            raise HTTPException(status_code=404, detail="Assessment not found")
+
+        await assessment.delete()
         
         logger.info(f"Deleted assessment: {assessment_id}")
         

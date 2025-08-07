@@ -4,6 +4,7 @@ import assessmentReducer from './slices/assessmentSlice';
 import reportReducer from './slices/reportSlice';
 import scenarioReducer from './slices/scenarioSlice';
 import uiReducer from './slices/uiSlice';
+import chatReducer from './slices/chatSlice';
 import { apiSyncMiddleware } from './middleware/apiSyncMiddleware';
 
 export const store = configureStore({
@@ -13,6 +14,7 @@ export const store = configureStore({
         report: reportReducer,
         scenario: scenarioReducer,
         ui: uiReducer,
+        chat: chatReducer,
     },
     middleware: (getDefaultMiddleware) =>
         getDefaultMiddleware({

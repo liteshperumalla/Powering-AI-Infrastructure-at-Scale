@@ -785,7 +785,7 @@ class ApiClient {
         return this.request('/admin/metrics');
     }
 
-    // Chat API methods - TEMPORARILY DISABLED - Backend endpoints not implemented yet
+    // Chat API methods
     async startConversation(request: {
         title?: string;
         context?: string;
@@ -813,13 +813,10 @@ class ApiClient {
         total_tokens_used: number;
         topics_discussed: string[];
     }> {
-        // Temporary fallback since chat endpoints are not yet implemented
-        throw new Error('AI Assistant feature is not yet available. Chat endpoints are being implemented.');
-        
-        // return this.request('/chat/conversations', {
-        //     method: 'POST',
-        //     body: JSON.stringify(request),
-        // });
+        return this.request('/chat/conversations', {
+            method: 'POST',
+            body: JSON.stringify(request),
+        });
     }
 
     async getConversations(params?: {
