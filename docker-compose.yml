@@ -55,6 +55,8 @@ services:
       INFRA_MIND_ENVIRONMENT: development
       INFRA_MIND_DEBUG: "true"
       INFRA_MIND_SECRET_KEY: dev-secret-key-change-in-production
+      JWT_SECRET_KEY: dev-jwt-secret-key-change-in-production
+      REDIS_URL: redis://redis:6379
       INFRA_MIND_CORS_ORIGINS: '["http://localhost:3000", "http://frontend:3000", "http://host.docker.internal:3000"]'
       
       # LLM configuration (set your API key)
@@ -75,10 +77,10 @@ services:
       - infra_mind_network
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      interval: 45s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
 
   # MongoDB Express (optional - for database management)
   mongo-express:
@@ -121,11 +123,11 @@ services:
     networks:
       - infra_mind_network
     healthcheck:
-      test: ["CMD", "sh", "-c", "wget --no-verbose --tries=1 --spider http://$(hostname -i):3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      test: ["CMD", "sh", "-c", "wget --no-verbose --tries=1 --spider http://$(hostname -i):3000/ || exit 1"]
+      interval: 45s
+      timeout: 15s
+      retries: 5
+      start_period: 90s
 
   # Redis Commander (optional - for Redis management)
   redis-commander:

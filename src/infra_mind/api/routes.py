@@ -48,6 +48,18 @@ api_v1_router.include_router(
     tags=["Performance Monitoring"]
 )
 
+api_v1_router.include_router(
+    admin.router,
+    prefix="/admin",
+    tags=["Admin"]
+)
+
+api_v1_router.include_router(
+    chat.router,
+    prefix="/chat",
+    tags=["Chat"]
+)
+
 # V2 API Routes (Enhanced with new features)
 api_v2_router.include_router(
     auth.router,

@@ -268,7 +268,18 @@ export function useProgressSteps() {
                 } else if (step.id === 'visualization') {
                     progress = progressPercentage > 95 ? Math.min((progressPercentage - 95) * 20, 100) : 0;
                 } else {
-                    progress = 50; // Default progress for current step
+                    // Calculate progress based on overall progress and step position
+                    const stepStartPercent = (index / workflowSteps.length) * 100;
+                    const stepEndPercent = ((index + 1) / workflowSteps.length) * 100;
+                    const stepRange = stepEndPercent - stepStartPercent;
+                    
+                    if (progressPercentage >= stepStartPercent && progressPercentage <= stepEndPercent) {
+                        progress = ((progressPercentage - stepStartPercent) / stepRange) * 100;
+                    } else if (progressPercentage > stepEndPercent) {
+                        progress = 100;
+                    } else {
+                        progress = 0;
+                    }
                 }
             } else if (currentStep === 'failed' && index === workflowSteps.length - 1) {
                 status = 'error';

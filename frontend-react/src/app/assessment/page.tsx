@@ -57,6 +57,7 @@ interface AssessmentFormData extends Record<string, unknown> {
     industry: string;
     companySize: string;
     currentAIMaturity: string;
+    businessGoal: string;
 
     // Current Infrastructure
     currentCloudProvider: string[];
@@ -93,6 +94,7 @@ const initialFormData: AssessmentFormData = {
     industry: '',
     companySize: '',
     currentAIMaturity: '',
+    businessGoal: '',
     currentCloudProvider: [],
     currentServices: [],
     monthlyBudget: '',
@@ -280,6 +282,7 @@ function AssessmentPageInner() {
                 const assessmentData = {
                     title: `${formData.companyName} Infrastructure Assessment`,
                     description: `AI infrastructure assessment for ${formData.companyName} in the ${formData.industry} industry`,
+                    business_goal: formData.businessGoal,
                     priority: "medium",
                     business_requirements: {
                         company_size: formData.companySize,
@@ -646,6 +649,18 @@ function AssessmentPageInner() {
                                 />
                             )}
                         </FormControl>
+
+                        <TextField
+                            fullWidth
+                            label="Primary Business Goal"
+                            multiline
+                            rows={3}
+                            value={formData.businessGoal}
+                            onChange={(e) => handleInputChange('businessGoal', e.target.value)}
+                            error={!!errors.businessGoal}
+                            helperText={errors.businessGoal || "Describe your primary business objective for this infrastructure assessment"}
+                            placeholder="e.g., Reduce infrastructure costs by 30%, Scale to handle 10x user growth, Improve system reliability and uptime"
+                        />
                     </Box>
                 );
 

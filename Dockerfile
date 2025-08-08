@@ -47,6 +47,45 @@ RUN pip install --no-cache-dir safety bandit \
     && safety check \
     && bandit -r /opt/venv/lib/python3.11/site-packages/ -f json -o /tmp/bandit-report.json || true
 
+# Development stage
+FROM python:3.11-slim AS development
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/app/src" \
+    INFRA_MIND_ENVIRONMENT=development
+
+# Install runtime dependencies and development tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Copy virtual environment from builder stage
+COPY --from=builder /opt/venv /opt/venv
+
+# Create application directory
+WORKDIR /app
+
+# Copy application code
+COPY src/ ./src/
+COPY README.md ./
+
+# Create directories for development
+RUN mkdir -p logs tmp cache
+
+# Expose port
+EXPOSE 8000
+
+# Use a simple command for development with hot reload
+CMD ["/opt/venv/bin/uvicorn", "src.infra_mind.main:app", \
+     "--host", "0.0.0.0", \
+     "--port", "8000", \
+     "--reload", \
+     "--log-level", "debug"]
+
 # Production stage
 FROM python:3.11-slim AS production
 

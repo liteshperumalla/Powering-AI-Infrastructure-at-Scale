@@ -24,14 +24,100 @@ from ...models.assessment import Assessment
 from ...models.report import Report
 from ...agents.chatbot_agent import ChatbotAgent
 from ...agents.base import AgentConfig, AgentRole
-from ..auth import get_current_user
+from ...core.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat"])
 
 
-# Request/Response Models
+class SimpleChatRequest(BaseModel):
+    """Simple chat request without authentication."""
+    message: str = Field(description="User message", min_length=1, max_length=4000)
+    session_id: Optional[str] = Field(default=None, description="Optional session identifier")
+
+
+class SimpleChatResponse(BaseModel):
+    """Simple chat response."""
+    response: str = Field(description="AI assistant response")
+    session_id: str = Field(description="Session identifier for conversation continuity")
+    timestamp: datetime = Field(description="Response timestamp")
+
+
+# Simple Chat Endpoints (No Authentication Required)
+
+@router.post("/simple", response_model=SimpleChatResponse)
+async def simple_chat(request: SimpleChatRequest):
+    """
+    Simple chat endpoint without authentication using LLM.
+    
+    Provides dynamic AI assistant functionality powered by LLM without requiring user authentication.
+    Perfect for testing and public-facing chat interfaces.
+    """
+    try:
+        from infra_mind.llm.manager import LLMManager
+        from infra_mind.llm.interface import LLMRequest
+        
+        # Generate or use provided session ID
+        session_id = request.session_id or f"session_{uuid.uuid4()}"
+        
+        # Initialize LLM manager
+        llm_manager = LLMManager()
+        
+        # Create LLM request with infrastructure-focused system prompt
+        llm_request = LLMRequest(
+            prompt=request.message,
+            model="gpt-3.5-turbo",  # Use standard OpenAI model
+            system_prompt="""You are an expert AI infrastructure consultant and cloud architect with deep expertise in:
+
+• Cloud platforms (AWS, Azure, GCP)
+• Infrastructure as Code (Terraform, CloudFormation, ARM templates)
+• Container orchestration (Kubernetes, Docker, EKS, AKS, GKE)
+• DevOps and CI/CD pipelines
+• Database technologies (SQL, NoSQL, data warehousing)
+• Monitoring, logging, and observability
+• Security best practices and compliance
+• Cost optimization strategies
+• Network architecture and design
+• Serverless and microservices architectures
+
+You provide practical, actionable advice with specific recommendations, best practices, and real-world examples. Always consider scalability, security, cost-effectiveness, and operational simplicity in your responses.
+
+Keep responses concise but comprehensive, focusing on practical implementation details when appropriate.""",
+            max_tokens=1000,
+            temperature=0.7,
+            context={
+                "agent_name": "infrastructure_assistant",
+                "session_id": session_id,
+                "domain": "cloud_infrastructure"
+            }
+        )
+        
+        # Generate response using LLM
+        llm_response = await llm_manager.generate_response(
+            llm_request,
+            validate_response=True,
+            agent_name="infrastructure_assistant"
+        )
+        
+        response = llm_response.content
+        
+        return SimpleChatResponse(
+            response=response,
+            session_id=session_id,
+            timestamp=datetime.utcnow()
+        )
+        
+    except Exception as e:
+        logger.error(f"Simple chat error: {str(e)}")
+        return SimpleChatResponse(
+            response="I apologize, but I'm experiencing some technical difficulties. Please try again in a moment.",
+            session_id=request.session_id or f"session_{uuid.uuid4()}",
+            timestamp=datetime.utcnow()
+        )
+
+
+# Authenticated Chat Endpoints
 
 class SendMessageRequest(BaseModel):
     """Request model for sending a message."""

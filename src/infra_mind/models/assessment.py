@@ -36,6 +36,10 @@ class Assessment(Document):
         default_factory=dict,
         description="Technical requirements and constraints"
     )
+    business_goal: Optional[str] = Field(
+        default=None,
+        description="Primary business goal or objective for the infrastructure assessment"
+    )
     
     # Assessment state
     status: AssessmentStatus = Field(

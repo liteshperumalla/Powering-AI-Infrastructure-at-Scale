@@ -96,6 +96,10 @@ class Settings(BaseSettings):
         description="Azure OpenAI API key"
     )
     azure_openai_endpoint: Optional[str] = None
+    azure_openai_api_version: str = Field(
+        default="2024-10-21",
+        description="Azure OpenAI API version"
+    )
     
     llm_model: str = Field(
         default="gpt-4",

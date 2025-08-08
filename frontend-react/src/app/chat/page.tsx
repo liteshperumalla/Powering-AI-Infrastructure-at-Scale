@@ -220,6 +220,8 @@ export default function ChatPage() {
     const startNewConversation = async (context?: string, title?: string, initialMessage?: string) => {
         try {
             setIsLoading(true);
+            setError(null);
+            
             const conversation = await apiClient.startConversation({
                 title: title || 'New Chat',
                 context: context || selectedContext,
@@ -250,7 +252,13 @@ export default function ChatPage() {
             setError(null);
         } catch (error) {
             console.error('Failed to start conversation:', error);
-            setError('Failed to start new conversation');
+            
+            // Handle specific AI Assistant not available error
+            if (error instanceof Error && error.message.includes('AI Assistant feature is not yet available')) {
+                setError('🚧 AI Assistant is currently under development. This feature will be available soon! Please check back later.');
+            } else {
+                setError('Failed to start new conversation. Please try again later.');
+            }
         } finally {
             setIsLoading(false);
         }
@@ -294,10 +302,27 @@ export default function ChatPage() {
             
         } catch (error) {
             console.error('Failed to send message:', error);
-            setError('Failed to send message');
             
-            // Remove the temporary user message on error
-            setMessages(prev => prev.filter(msg => msg.id !== userMessage.id));
+            // Fallback to simple chat if conversational chat fails
+            try {
+                const simpleResponse = await apiClient.sendSimpleMessage(messageContent);
+                const botResponse = {
+                    id: `bot_${Date.now()}`,
+                    role: 'assistant' as const,
+                    content: simpleResponse.response,
+                    timestamp: new Date().toISOString(),
+                    metadata: { fallback: true }
+                };
+                
+                setMessages(prev => [...prev, botResponse]);
+                setError(null); // Clear error if fallback works
+            } catch (fallbackError) {
+                console.error('Simple chat fallback also failed:', fallbackError);
+                setError('I apologize, but I\'m experiencing technical difficulties. Please try again in a moment, or contact our support team if you need immediate assistance.');
+                
+                // Remove the temporary user message on error
+                setMessages(prev => prev.filter(msg => msg.id !== userMessage.id));
+            }
         } finally {
             setIsSending(false);
         }

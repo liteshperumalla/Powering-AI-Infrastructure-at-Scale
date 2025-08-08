@@ -329,103 +329,22 @@ export default function DashboardPage() {
                         });
                         setRecommendationScores(scoresData);
                     } else {
-                        // Show demo data when no recommendations exist
-                        setRecommendationScores([
-                            {
-                                service: 'Compute Engine',
-                                costEfficiency: 85,
-                                performance: 92,
-                                scalability: 89,
-                                security: 94,
-                                compliance: 88,
-                                businessAlignment: 91,
-                                provider: 'GCP',
-                                color: '#4285F4'
-                            },
-                            {
-                                service: 'EC2',
-                                costEfficiency: 78,
-                                performance: 88,
-                                scalability: 95,
-                                security: 91,
-                                compliance: 85,
-                                businessAlignment: 87,
-                                provider: 'AWS',
-                                color: '#FF9900'
-                            },
-                            {
-                                service: 'Virtual Machines',
-                                costEfficiency: 82,
-                                performance: 85,
-                                scalability: 87,
-                                security: 89,
-                                compliance: 92,
-                                businessAlignment: 84,
-                                provider: 'AZURE',
-                                color: '#0078D4'
-                            }
-                        ]);
+                        // No recommendations - show empty data
+                        setRecommendationScores([]);
                     }
                 } catch (error) {
                     console.error('Failed to load recommendations for scores:', error);
-                    // Show demo data on API error
-                    setRecommendationScores([
-                        {
-                            service: 'Compute Engine',
-                            costEfficiency: 85,
-                            performance: 92,
-                            scalability: 89,
-                            security: 94,
-                            compliance: 88,
-                            businessAlignment: 91,
-                            provider: 'GCP',
-                            color: '#4285F4'
-                        },
-                        {
-                            service: 'EC2',
-                            costEfficiency: 78,
-                            performance: 88,
-                            scalability: 95,
-                            security: 91,
-                            compliance: 85,
-                            businessAlignment: 87,
-                            provider: 'AWS',
-                            color: '#FF9900'
-                        }
-                    ]);
+                    // No demo data - show empty array on API error
+                    setRecommendationScores([]);
                 }
             } else {
-                // Show demo data when no assessments exist
-                setRecommendationScores([
-                    {
-                        service: 'Start your first assessment',
-                        costEfficiency: 0,
-                        performance: 0,
-                        scalability: 0,
-                        security: 0,
-                        compliance: 0,
-                        businessAlignment: 0,
-                        provider: 'DEMO',
-                        color: '#8884d8'
-                    }
-                ]);
+                // No assessments - show empty data
+                setRecommendationScores([]);
             }
         } catch (error) {
             console.error('Failed to load recommendation scores:', error);
-            // Show demo data on error
-            setRecommendationScores([
-                {
-                    service: 'Demo Service',
-                    costEfficiency: 75,
-                    performance: 80,
-                    scalability: 85,
-                    security: 90,
-                    compliance: 85,
-                    businessAlignment: 80,
-                    provider: 'DEMO',
-                    color: '#8884d8'
-                }
-            ]);
+            // No demo data - show empty array on error
+            setRecommendationScores([]);
         }
         setLoadingRecommendationScores(false);
     };
@@ -455,85 +374,19 @@ export default function DashboardPage() {
                         const results = await calculateAssessmentResultsFallback(latestAssessment);
                         setAssessmentResults(results);
                     } catch (fallbackError) {
-                        console.error('Fallback calculation failed, using demo data:', fallbackError);
-                        // Show demo data if everything fails
-                        setAssessmentResults([
-                            {
-                                category: 'Infrastructure Readiness',
-                                currentScore: 75,
-                                targetScore: 90,
-                                improvement: 15,
-                                color: '#8884d8'
-                            },
-                            {
-                                category: 'Security & Compliance',
-                                currentScore: 82,
-                                targetScore: 95,
-                                improvement: 13,
-                                color: '#82ca9d'
-                            },
-                            {
-                                category: 'Cost Optimization',
-                                currentScore: 68,
-                                targetScore: 85,
-                                improvement: 17,
-                                color: '#ffc658'
-                            },
-                            {
-                                category: 'Scalability',
-                                currentScore: 71,
-                                targetScore: 88,
-                                improvement: 17,
-                                color: '#ff7300'
-                            },
-                            {
-                                category: 'Performance',
-                                currentScore: 79,
-                                targetScore: 92,
-                                improvement: 13,
-                                color: '#00ff88'
-                            }
-                        ]);
+                        console.error('Fallback calculation failed:', fallbackError);
+                        // No demo data - show empty results
+                        setAssessmentResults([]);
                     }
                 }
             } else {
-                // Show demo data when no assessments exist
-                setAssessmentResults([
-                    {
-                        category: 'Infrastructure Readiness',
-                        currentScore: 0,
-                        targetScore: 90,
-                        improvement: 90,
-                        color: '#8884d8'
-                    },
-                    {
-                        category: 'Complete an Assessment',
-                        currentScore: 0,
-                        targetScore: 100,
-                        improvement: 100,
-                        color: '#82ca9d'
-                    }
-                ]);
+                // No assessments - show empty results
+                setAssessmentResults([]);
             }
         } catch (error) {
             console.error('Failed to load assessment results:', error);
-            // Show demo data on error
-            setAssessmentResults([
-                {
-                    category: 'Infrastructure Readiness',
-                    currentScore: 70,
-                    targetScore: 90,
-                    improvement: 20,
-                    color: '#8884d8'
-                },
-                {
-                    category: 'System Status',
-                    currentScore: 85,
-                    targetScore: 95,
-                    improvement: 10,
-                    color: '#82ca9d'
-                }
-            ]);
+            // Only show real data - no demo data fallback
+            setAssessmentResults([]);
         }
         setLoadingAssessmentResults(false);
     };

@@ -113,6 +113,11 @@ class Assessment(BaseSchema, TimestampMixin):
     technical_requirements: TechnicalRequirements = Field(
         description="Technical specifications and constraints"
     )
+    business_goal: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="Primary business goal or objective for the infrastructure assessment"
+    )
     
     # Status and progress
     status: AssessmentStatus = Field(
@@ -198,6 +203,11 @@ class AssessmentCreate(BaseSchema):
     business_requirements: BusinessRequirements
     technical_requirements: TechnicalRequirements
     priority: Priority = Field(default=Priority.MEDIUM)
+    business_goal: Optional[str] = Field(
+        default=None,
+        max_length=500,
+        description="Primary business goal or objective for the infrastructure assessment"
+    )
     
     # Optional metadata
     tags: List[str] = Field(default_factory=list)
@@ -212,6 +222,7 @@ class AssessmentUpdate(BaseSchema):
     technical_requirements: Optional[TechnicalRequirements] = None
     priority: Optional[Priority] = None
     status: Optional[AssessmentStatus] = None
+    business_goal: Optional[str] = Field(default=None, max_length=500)
     tags: Optional[List[str]] = None
 
 

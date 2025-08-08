@@ -19,6 +19,8 @@ from .core.config import settings
 from .core.database import init_database, close_database
 from .core.logging import setup_logging
 from .api.routes import api_router
+from .orchestration.events import EventManager
+from .orchestration.monitoring import initialize_workflow_monitoring
 
 
 @asynccontextmanager
@@ -37,6 +39,12 @@ async def lifespan(app: FastAPI):
     
     # Initialize database
     await init_database()
+    
+    # Initialize EventManager and workflow monitoring
+    logger.info("📡 Initializing EventManager and workflow monitoring...")
+    event_manager = EventManager()
+    await initialize_workflow_monitoring(event_manager)
+    logger.success("✅ EventManager and workflow monitoring initialized")
     
     logger.success("✅ Application startup complete")
     

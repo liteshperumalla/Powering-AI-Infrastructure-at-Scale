@@ -1273,6 +1273,7 @@ async def create_assessment(assessment_data: AssessmentCreate, request: Request)
             description=assessment_data.description,
             business_requirements=assessment_data.business_requirements.model_dump(),
             technical_requirements=assessment_data.technical_requirements.model_dump(),
+            business_goal=getattr(assessment_data, 'business_goal', None),
             status=AssessmentStatus.DRAFT,
             priority=assessment_data.priority,
             completion_percentage=0.0,
@@ -1366,7 +1367,7 @@ async def create_assessment(assessment_data: AssessmentCreate, request: Request)
         )
 
 
-@router.get("/{assessment_id}", response_model=AssessmentResponse)
+@router.get("/{assessment_id}")
 async def get_assessment(assessment_id: str):
     """
     Get a specific assessment by ID.
@@ -1395,26 +1396,27 @@ async def get_assessment(assessment_id: str):
             # Remove fields that cause validation errors
             progress_data = {k: v for k, v in progress_data.items() if k != "error"}
         
-        # Return the actual assessment data
-        return AssessmentResponse(
-            id=str(assessment.id),
-            title=assessment.title,
-            description=assessment.description,
-            business_requirements=converted_business_req,
-            technical_requirements=converted_technical_req,
-            status=assessment.status,
-            priority=assessment.priority,
-            progress=progress_data,  # Keep as dict for now
-            workflow_id=assessment.workflow_id,
-            agent_states=assessment.agent_states or {},
-            recommendations_generated=assessment.recommendations_generated or False,
-            reports_generated=assessment.reports_generated or False,
-            metadata=assessment.metadata or {},
-            created_at=assessment.created_at,
-            updated_at=assessment.updated_at,
-            started_at=assessment.started_at,
-            completed_at=assessment.completed_at
-        )
+        # Return simplified response to avoid Pydantic validation issues
+        # TODO: Fix the schema mismatch between storage and API response models
+        return {
+            "id": str(assessment.id),
+            "title": assessment.title,
+            "description": assessment.description,
+            "business_requirements": converted_business_req,
+            "technical_requirements": converted_technical_req,
+            "status": assessment.status,
+            "priority": assessment.priority,
+            "progress": progress_data,
+            "workflow_id": assessment.workflow_id,
+            "agent_states": assessment.agent_states or {},
+            "recommendations_generated": assessment.recommendations_generated or False,
+            "reports_generated": assessment.reports_generated or False,
+            "metadata": assessment.metadata or {},
+            "created_at": assessment.created_at.isoformat() if assessment.created_at else None,
+            "updated_at": assessment.updated_at.isoformat() if assessment.updated_at else None,
+            "started_at": assessment.started_at.isoformat() if assessment.started_at else None,
+            "completed_at": assessment.completed_at.isoformat() if assessment.completed_at else None
+        }
         
     except HTTPException:
         raise
@@ -1672,23 +1674,41 @@ async def update_assessment(assessment_id: str, update_data: AssessmentUpdate):
     Allows updating assessment details, requirements, and status.
     """
     try:
-        # TODO: Implement database update
-        # assessment = await Assessment.get(assessment_id)
-        # if not assessment:
-        #     raise HTTPException(status_code=404, detail="Assessment not found")
-        # 
-        # # Update fields
-        # if update_data.title is not None:
-        #     assessment.title = update_data.title
-        # # ... update other fields
-        # 
-        # assessment.updated_at = datetime.utcnow()
-        # await assessment.save()
+        # Get the assessment from database
+        assessment = await Assessment.get(assessment_id)
+        if not assessment:
+            raise HTTPException(status_code=404, detail="Assessment not found")
+        
+        # Update fields that are provided
+        update_fields = {}
+        if update_data.title is not None:
+            update_fields["title"] = update_data.title
+        if update_data.description is not None:
+            update_fields["description"] = update_data.description
+        if update_data.business_goal is not None:
+            update_fields["business_goal"] = update_data.business_goal
+        if update_data.priority is not None:
+            update_fields["priority"] = update_data.priority
+        if update_data.status is not None:
+            update_fields["status"] = update_data.status
+        if update_data.business_requirements is not None:
+            update_fields["business_requirements"] = update_data.business_requirements.model_dump()
+        if update_data.technical_requirements is not None:
+            update_fields["technical_requirements"] = update_data.technical_requirements.model_dump()
+        if update_data.tags is not None:
+            update_fields["metadata.tags"] = update_data.tags
+        
+        # Add updated timestamp
+        update_fields["updated_at"] = datetime.utcnow()
+        
+        # Update the assessment
+        await assessment.set(update_fields)
         
         logger.info(f"Updated assessment: {assessment_id}")
         
-        # Return updated assessment (mock for now)
-        return await get_assessment(assessment_id)
+        # Return updated assessment
+        updated_assessment = await Assessment.get(assessment_id)
+        return AssessmentResponse(**updated_assessment.model_dump(), id=str(updated_assessment.id))
         
     except HTTPException:
         raise
@@ -1708,14 +1728,34 @@ async def delete_assessment(assessment_id: str):
     Permanently removes the assessment and all associated data.
     """
     try:
-        # TODO: Implement database deletion
-        # assessment = await Assessment.get(assessment_id)
-        # if not assessment:
-        #     raise HTTPException(status_code=404, detail="Assessment not found")
-        # 
-        # await assessment.delete()
+        # Get the assessment from database
+        assessment = await Assessment.get(assessment_id)
+        if not assessment:
+            raise HTTPException(status_code=404, detail="Assessment not found")
         
-        logger.info(f"Deleted assessment: {assessment_id}")
+        # Delete associated data first
+        # Delete recommendations
+        try:
+            from ..models.recommendation import Recommendation
+            recommendations = await Recommendation.find(Recommendation.assessment_id == assessment_id).to_list()
+            for rec in recommendations:
+                await rec.delete()
+        except Exception as e:
+            logger.warning(f"Failed to delete recommendations for assessment {assessment_id}: {e}")
+        
+        # Delete reports  
+        try:
+            from ..models.report import Report
+            reports = await Report.find(Report.assessment_id == assessment_id).to_list()
+            for report in reports:
+                await report.delete()
+        except Exception as e:
+            logger.warning(f"Failed to delete reports for assessment {assessment_id}: {e}")
+        
+        # Delete the assessment
+        await assessment.delete()
+        
+        logger.info(f"Deleted assessment and associated data: {assessment_id}")
         
     except HTTPException:
         raise

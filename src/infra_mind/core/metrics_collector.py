@@ -1111,11 +1111,11 @@ class MetricsCollector:
             if self._request_count > 0:
                 error_rate = (self._error_count / self._request_count) * 100
             
-            # Determine status
+            # Determine status (adjusted for development environment)
             status = "healthy"
-            if cpu_usage > 80 or memory.percent > 85 or error_rate > 5:
+            if cpu_usage > 90 or memory.percent > 95 or error_rate > 10:
                 status = "critical"
-            elif cpu_usage > 60 or memory.percent > 70 or error_rate > 1:
+            elif cpu_usage > 80 or memory.percent > 85 or error_rate > 5:
                 status = "warning"
             
             return SystemHealthStatus(

@@ -42,7 +42,7 @@ import NotificationSystem from './NotificationSystem';
 const navigationItems = [
     { text: 'Dashboard', icon: <Dashboard />, path: '/dashboard' },
     { text: 'Assessment', icon: <Assessment />, path: '/assessment' },
-    { text: 'AI Assistant', icon: <ChatIcon />, path: '/chat' },
+    { text: 'AI Assistant', icon: <ChatIcon />, path: '/chat', badge: '🚧 DEV' },
     { text: 'Cloud Services', icon: <CloudQueue />, path: '/cloud-services' },
     { text: 'Compliance', icon: <Security />, path: '/compliance' },
     { text: 'Reports', icon: <Analytics />, path: '/reports' },
@@ -134,7 +134,20 @@ export default function Navigation({ title = 'Dashboard', children }: Navigation
                             {item.icon}
                         </ListItemIcon>
                         <ListItemText
-                            primary={item.text}
+                            primary={
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <span>{item.text}</span>
+                                    {(item as any).badge && (
+                                        <Chip
+                                            label={(item as any).badge}
+                                            size="small"
+                                            color="warning"
+                                            variant="outlined"
+                                            sx={{ fontSize: '0.7rem', height: '18px' }}
+                                        />
+                                    )}
+                                </Box>
+                            }
                             sx={{
                                 color: pathname === item.path ? 'primary.main' : 'inherit',
                                 fontWeight: pathname === item.path ? 'bold' : 'normal'

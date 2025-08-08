@@ -368,16 +368,23 @@ async def list_cloud_services(
     information including pricing, features, compliance, and availability.
     """
     try:
-        # Start with all services
-        filtered_services = CLOUD_SERVICES_DB.copy()
+        # Start with all services and convert to safe format immediately
+        filtered_services = []
+        for service in CLOUD_SERVICES_DB:
+            service_copy = service.copy()
+            service_copy["provider"] = service_copy["provider"].value
+            service_copy["category"] = service_copy["category"].value
+            filtered_services.append(service_copy)
         
-        # Apply provider filter
+        # Apply provider filter (now comparing strings)
         if provider:
-            filtered_services = [s for s in filtered_services if s["provider"] == provider]
+            provider_str = provider.value if hasattr(provider, 'value') else str(provider)
+            filtered_services = [s for s in filtered_services if s["provider"] == provider_str]
         
-        # Apply category filter
+        # Apply category filter (now comparing strings)
         if category:
-            filtered_services = [s for s in filtered_services if s["category"] == category]
+            category_str = category.value if hasattr(category, 'value') else str(category)
+            filtered_services = [s for s in filtered_services if s["category"] == category_str]
         
         # Apply search filter
         if search:
@@ -391,11 +398,6 @@ async def list_cloud_services(
         total_count = len(filtered_services)
         paginated_services = filtered_services[offset:offset + limit]
         
-        # Convert enum values to strings for JSON serialization
-        for service in paginated_services:
-            service["provider"] = service["provider"].value
-            service["category"] = service["category"].value
-        
         logger.info(f"Retrieved {len(paginated_services)} cloud services (total: {total_count})")
         
         return {
@@ -407,8 +409,8 @@ async def list_cloud_services(
                 "has_more": offset + limit < total_count
             },
             "filters": {
-                "provider": provider.value if provider else None,
-                "category": category.value if category else None,
+                "provider": provider_str if provider else None,
+                "category": category_str if category else None,
                 "search": search
             }
         }
@@ -427,7 +429,7 @@ async def list_providers() -> Dict[str, Any]:
     providers = {}
     
     for service in CLOUD_SERVICES_DB:
-        provider = service["provider"].value
+        provider = service["provider"].value if hasattr(service["provider"], 'value') else str(service["provider"])
         if provider not in providers:
             providers[provider] = {
                 "name": provider,
@@ -436,7 +438,8 @@ async def list_providers() -> Dict[str, Any]:
             }
         
         providers[provider]["service_count"] += 1
-        providers[provider]["categories"].add(service["category"].value)
+        category = service["category"].value if hasattr(service["category"], 'value') else str(service["category"])
+        providers[provider]["categories"].add(category)
     
     # Convert sets to lists for JSON serialization
     for provider_data in providers.values():
@@ -454,7 +457,7 @@ async def list_categories() -> Dict[str, Any]:
     categories = {}
     
     for service in CLOUD_SERVICES_DB:
-        category = service["category"].value
+        category = service["category"].value if hasattr(service["category"], 'value') else str(service["category"])
         if category not in categories:
             categories[category] = {
                 "name": category,
@@ -463,7 +466,8 @@ async def list_categories() -> Dict[str, Any]:
             }
         
         categories[category]["service_count"] += 1
-        categories[category]["providers"].add(service["provider"].value)
+        provider = service["provider"].value if hasattr(service["provider"], 'value') else str(service["provider"])
+        categories[category]["providers"].add(provider)
     
     # Convert sets to lists for JSON serialization
     for category_data in categories.values():
@@ -498,8 +502,8 @@ async def get_service_details(service_id: str) -> Dict[str, Any]:
         
         # Convert enum values to strings
         service_copy = service.copy()
-        service_copy["provider"] = service_copy["provider"].value
-        service_copy["category"] = service_copy["category"].value
+        service_copy["provider"] = service_copy["provider"].value if hasattr(service_copy["provider"], 'value') else str(service_copy["provider"])
+        service_copy["category"] = service_copy["category"].value if hasattr(service_copy["category"], 'value') else str(service_copy["category"])
         
         logger.info(f"Retrieved details for service: {service_id}")
         
@@ -549,8 +553,8 @@ async def compare_services(service_ids: str) -> Dict[str, Any]:
             if service:
                 # Convert enum values to strings
                 service_copy = service.copy()
-                service_copy["provider"] = service_copy["provider"].value
-                service_copy["category"] = service_copy["category"].value
+                service_copy["provider"] = service_copy["provider"].value if hasattr(service_copy["provider"], 'value') else str(service_copy["provider"])
+                service_copy["category"] = service_copy["category"].value if hasattr(service_copy["category"], 'value') else str(service_copy["category"])
                 services.append(service_copy)
         
         if not services:
@@ -697,8 +701,8 @@ async def get_service_statistics() -> Dict[str, Any]:
         compliance_stats = {}
         
         for service in CLOUD_SERVICES_DB:
-            provider = service["provider"].value
-            category = service["category"].value
+            provider = service["provider"].value if hasattr(service["provider"], 'value') else str(service["provider"])
+            category = service["category"].value if hasattr(service["category"], 'value') else str(service["category"])
             
             # Provider stats
             if provider not in provider_stats:

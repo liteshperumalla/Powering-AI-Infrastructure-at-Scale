@@ -23,6 +23,7 @@ from .interface import (
 )
 from .openai_provider import OpenAIProvider
 from .gemini_provider import GeminiProvider
+from .azure_openai_provider import AzureOpenAIProvider
 from .cost_tracker import CostTracker
 from .response_validator import ResponseValidator, ValidationResult
 from .prompt_formatter import prompt_formatter
@@ -143,7 +144,7 @@ class LLMManager:
             try:
                 gemini_provider = GeminiProvider(
                     api_key=gemini_key,
-                    model=self.settings.get("gemini_model", "gemini-1.5-pro"),
+                    model="gemini-1.5-pro",  # Use default Gemini model
                     temperature=self.settings.llm_temperature,
                     max_tokens=self.settings.llm_max_tokens,
                     timeout=self.settings.llm_timeout
@@ -155,7 +156,28 @@ class LLMManager:
             except Exception as e:
                 logger.error(f"Failed to initialize Gemini provider: {str(e)}")
         
-        # TODO: Add other providers (Anthropic, Azure OpenAI, etc.)
+        # Azure OpenAI Provider
+        azure_openai_key = self.settings.azure_openai_api_key
+        azure_openai_endpoint = self.settings.azure_openai_endpoint
+        if azure_openai_key and azure_openai_endpoint:
+            try:
+                azure_openai_provider = AzureOpenAIProvider(
+                    api_key=azure_openai_key.get_secret_value() if hasattr(azure_openai_key, 'get_secret_value') else azure_openai_key,
+                    azure_endpoint=azure_openai_endpoint,
+                    api_version=getattr(self.settings, 'azure_openai_api_version', '2024-10-21'),
+                    model=self.settings.llm_model,
+                    temperature=self.settings.llm_temperature,
+                    max_tokens=self.settings.llm_max_tokens,
+                    timeout=self.settings.llm_timeout
+                )
+                self.providers[LLMProvider.AZURE_OPENAI] = azure_openai_provider
+                self._provider_health[LLMProvider.AZURE_OPENAI] = True
+                self._provider_performance[LLMProvider.AZURE_OPENAI] = 1.0
+                logger.info("Azure OpenAI provider initialized")
+            except Exception as e:
+                logger.error(f"Failed to initialize Azure OpenAI provider: {str(e)}")
+        
+        # TODO: Add other providers (Anthropic, etc.)
         # anthropic_key = self.settings.anthropic_api_key
         # if anthropic_key:
         #     # Initialize Anthropic provider

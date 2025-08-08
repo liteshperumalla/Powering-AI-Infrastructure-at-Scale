@@ -1,19 +1,18 @@
 services:
   mongodb:
     image: mongo:7.0
-    container_name: infra-mind-mongodb
+    container_name: infra-mind-mongodb-dev
     restart: unless-stopped
     ports:
       - "27017:27017"
     environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: password
       MONGO_INITDB_DATABASE: infra_mind
     volumes:
       - mongodb_data:/data/db
       - ./init-mongo.js:/docker-entrypoint-initdb.d/init-mongo.js:ro
     networks:
       - infra-mind-network
+    command: mongod --noauth
 
   redis:
     image: redis:7.2-alpine
@@ -28,17 +27,63 @@ services:
 
   mongo-express:
     image: mongo-express:1.0.0
-    container_name: infra-mind-mongo-express
+    container_name: infra-mind-mongo-express-dev
     restart: unless-stopped
     ports:
       - "8081:8081"
     environment:
-      ME_CONFIG_MONGODB_ADMINUSERNAME: admin
-      ME_CONFIG_MONGODB_ADMINPASSWORD: password
-      ME_CONFIG_MONGODB_URL: mongodb://admin:password@mongodb:27017/
+      ME_CONFIG_MONGODB_URL: mongodb://mongodb:27017/
       ME_CONFIG_BASICAUTH: false
     depends_on:
       - mongodb
+    networks:
+      - infra-mind-network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: infra-mind-api-dev
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      INFRA_MIND_MONGODB_URL: mongodb://mongodb:27017/infra_mind
+      INFRA_MIND_REDIS_URL: redis://redis:6379
+      INFRA_MIND_ENVIRONMENT: development
+      INFRA_MIND_DEBUG: "true"
+      INFRA_MIND_SECRET_KEY: dev-secret-key-change-in-production
+      JWT_SECRET_KEY: dev-jwt-secret-key-change-in-production
+      INFRA_MIND_CORS_ORIGINS: '["http://localhost:3000", "http://frontend:3000"]'
+    env_file:
+      - .env
+    depends_on:
+      - mongodb
+      - redis
+    volumes:
+      - .:/app
+      - ./logs:/app/logs
+    networks:
+      - infra-mind-network
+
+  frontend:
+    build:
+      context: ./frontend-react
+      dockerfile: Dockerfile
+      target: development
+    container_name: infra-mind-frontend-dev
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      NODE_ENV: development
+    depends_on:
+      - api
+    volumes:
+      - ./frontend-react:/app
+      - /app/node_modules
     networks:
       - infra-mind-network
 

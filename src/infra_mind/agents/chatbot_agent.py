@@ -642,8 +642,10 @@ class ChatbotAgent(BaseAgent):
             FAQ response if found, None otherwise
         """
         try:
-            # Import FAQ service
-            from ..services.faq_service import faq_service
+            # FAQ service not implemented yet, skip FAQ search
+            # from ..services.faq_service import faq_service
+            logger.debug("FAQ service not available, skipping FAQ search")
+            return None
             
             # Map conversation context to FAQ category
             category_mapping = {
@@ -1184,7 +1186,7 @@ class ChatbotAgent(BaseAgent):
             search_query = await self._create_contextual_search_query(message, intent, context)
             
             # Search for relevant real-time information
-            search_results = await self.web_search_client.search(search_query, num_results=3)
+            search_results = await self.web_search_client.search(search_query, max_results=3)
             
             # Process and structure the results
             real_time_info = {
@@ -1233,7 +1235,7 @@ class ChatbotAgent(BaseAgent):
             Respond with only the key terms separated by spaces.
             """
             
-            response = await self.llm_client.generate_completion(extract_prompt)
+            response = await self.llm_client.generate_response(extract_prompt)
             return response.strip()
             
         except Exception as e:
@@ -1267,7 +1269,7 @@ class ChatbotAgent(BaseAgent):
             Provide a concise summary in 2-3 sentences.
             """
             
-            summary = await self.llm_client.generate_completion(summary_prompt)
+            summary = await self.llm_client.generate_response(summary_prompt)
             return summary.strip()
             
         except Exception as e:
@@ -1309,7 +1311,7 @@ class ChatbotAgent(BaseAgent):
             )
             
             # Generate response
-            response = await self.llm_client.generate_completion(llm_request)
+            response = await self.llm_client.generate_response(llm_request)
             
             return response.strip()
             

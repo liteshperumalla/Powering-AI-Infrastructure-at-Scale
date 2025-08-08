@@ -26,6 +26,32 @@ router = APIRouter()
 security = HTTPBearer()
 
 
+async def get_monitoring_components():
+    """
+    Get workflow monitoring components, initializing EventManager if needed.
+    
+    Returns tuple of (workflow_monitor, workflow_dashboard, analytics_dashboard)
+    """
+    try:
+        workflow_monitor = get_workflow_monitor()
+    except ValueError as em_error:
+        if "EventManager required" in str(em_error):
+            logger.warning("EventManager not initialized, initializing now...")
+            from ...orchestration.events import EventManager
+            from ...orchestration.monitoring import initialize_workflow_monitoring
+            event_manager = EventManager()
+            await initialize_workflow_monitoring(event_manager)
+            workflow_monitor = get_workflow_monitor()
+            logger.info("✅ EventManager initialized for admin endpoint")
+        else:
+            raise em_error
+    
+    workflow_dashboard = get_workflow_dashboard()
+    analytics_dashboard = get_analytics_dashboard(workflow_monitor, workflow_dashboard)
+    
+    return workflow_monitor, workflow_dashboard, analytics_dashboard
+
+
 # Admin Models
 class SystemStatus(str, Enum):
     """System status levels."""
@@ -1305,9 +1331,7 @@ async def get_dashboard_summary(
     Requires admin privileges.
     """
     try:
-        workflow_monitor = get_workflow_monitor()
-        workflow_dashboard = get_workflow_dashboard()
-        analytics_dashboard = get_analytics_dashboard(workflow_monitor, workflow_dashboard)
+        workflow_monitor, workflow_dashboard, analytics_dashboard = await get_monitoring_components()
         
         summary = analytics_dashboard.get_dashboard_summary()
         
