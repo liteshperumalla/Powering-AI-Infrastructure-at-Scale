@@ -1311,7 +1311,7 @@ class ApiClient {
         session_id: string;
         timestamp: string;
     }> {
-        const url = `${API_BASE_URL}/api/chat/simple`;
+        const url = `${API_BASE_URL}/api/v1/chat/simple`;
         const payload = {
             message,
             session_id: sessionId || `simple_${Date.now()}`
