@@ -1,28 +1,37 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
+import { apiClient } from '../../services/api';
 
-export interface ReportSection {
-    title: string;
-    content: string;
-    type: 'executive' | 'technical' | 'financial' | 'compliance';
-}
-
+// Backend report structure matching actual API response
 export interface Report {
     id: string;
+    assessment_id: string;
+    user_id: string;
     title: string;
-    assessmentId: string;
-    generatedDate: string;
-    status: 'draft' | 'generating' | 'final' | 'error';
-    sections: ReportSection[];
-    keyFindings: string[];
-    recommendations: string[];
-    estimatedSavings: number;
-    complianceScore: number;
-    exportFormats: ('pdf' | 'json' | 'csv' | 'markdown')[];
-    shareSettings: {
-        isPublic: boolean;
-        sharedWith: string[];
-        expiresAt?: string;
-    };
+    description: string;
+    report_type: string;
+    format: string;
+    status: 'completed' | 'generating' | 'failed' | 'pending';
+    progress_percentage: number;
+    sections: string[];
+    total_pages: number;
+    word_count: number;
+    file_path: string;
+    file_size_bytes: number;
+    generated_by: string[];
+    generation_time_seconds: number;
+    completeness_score: number;
+    confidence_score: number;
+    priority: string;
+    tags: string[];
+    error_message?: string;
+    retry_count: number;
+    created_at: string;
+    updated_at: string;
+    completed_at: string;
+    // Additional frontend fields for compatibility
+    assessmentId?: string;
+    generated_at?: string;
+    estimated_savings?: number;
 }
 
 interface ReportState {
@@ -47,54 +56,38 @@ const initialState: ReportState = {
 export const generateReport = createAsyncThunk(
     'report/generate',
     async (assessmentId: string) => {
-        // Simulate API call
+        // Simulate API call with correct backend structure
         const response = await new Promise<Report>((resolve) => {
             setTimeout(() => {
                 resolve({
                     id: Date.now().toString(),
+                    assessment_id: assessmentId,
+                    user_id: 'user_123',
                     title: `AI Infrastructure Strategy Report - ${new Date().toLocaleDateString()}`,
-                    assessmentId,
-                    generatedDate: new Date().toISOString(),
-                    status: 'final',
-                    sections: [
-                        {
-                            title: 'Executive Summary',
-                            content: 'This report provides comprehensive recommendations for scaling AI infrastructure...',
-                            type: 'executive',
-                        },
-                        {
-                            title: 'Technical Architecture',
-                            content: 'Detailed technical specifications and implementation roadmap...',
-                            type: 'technical',
-                        },
-                        {
-                            title: 'Cost Analysis',
-                            content: 'Financial projections and ROI calculations for the proposed infrastructure...',
-                            type: 'financial',
-                        },
-                        {
-                            title: 'Compliance Assessment',
-                            content: 'Regulatory compliance analysis and recommendations...',
-                            type: 'compliance',
-                        },
-                    ],
-                    keyFindings: [
-                        'Multi-cloud strategy can reduce costs by 23%',
-                        'Current infrastructure is over-provisioned by 35%',
-                        'Compliance gaps identified in data storage',
-                    ],
-                    recommendations: [
-                        'Implement hybrid AWS-Azure architecture',
-                        'Migrate to containerized workloads',
-                        'Establish automated compliance monitoring',
-                    ],
-                    estimatedSavings: 45000,
-                    complianceScore: 98,
-                    exportFormats: ['pdf', 'json', 'markdown'],
-                    shareSettings: {
-                        isPublic: false,
-                        sharedWith: [],
-                    },
+                    description: 'High-level strategic report for executive decision-making',
+                    report_type: 'executive_summary',
+                    format: 'pdf',
+                    status: 'completed',
+                    progress_percentage: 100,
+                    sections: ['executive_summary', 'strategic_recommendations', 'investment_analysis'],
+                    total_pages: 12,
+                    word_count: 3500,
+                    file_path: '/reports/mock_report.pdf',
+                    file_size_bytes: 2400000,
+                    generated_by: ['report_generator_agent'],
+                    generation_time_seconds: 45.2,
+                    completeness_score: 0.95,
+                    confidence_score: 0.89,
+                    priority: 'high',
+                    tags: ['executive', 'strategic'],
+                    retry_count: 0,
+                    created_at: new Date().toISOString(),
+                    updated_at: new Date().toISOString(),
+                    completed_at: new Date().toISOString(),
+                    // Compatibility fields
+                    assessmentId: assessmentId,
+                    generated_at: new Date().toISOString(),
+                    estimated_savings: 45000,
                 });
             }, 2000);
         });
@@ -124,7 +117,7 @@ export const exportReport = createAsyncThunk(
 
 export const shareReport = createAsyncThunk(
     'report/share',
-    async ({ reportId, settings }: { reportId: string; settings: Report['shareSettings'] }) => {
+    async ({ reportId }: { reportId: string }) => {
         // Simulate API call
         const response = await new Promise<{ shareUrl: string }>((resolve) => {
             setTimeout(() => {
@@ -141,9 +134,23 @@ export const fetchReports = createAsyncThunk(
     'report/fetchAll',
     async (_, { rejectWithValue }) => {
         try {
+            console.log('🔄 Fetching all reports...');
             const response = await apiClient.getReports();
-            return response;
+            console.log('📊 Raw API response:', response);
+            
+            // Transform the response to ensure compatibility with frontend
+            const transformedReports = response.map((report: Report) => ({
+                ...report,
+                // Add compatibility fields
+                assessmentId: report.assessment_id || report.assessmentId,
+                generated_at: report.completed_at || report.created_at,
+                estimated_savings: report.estimated_savings || 0,
+            }));
+            
+            console.log('✅ Transformed reports:', transformedReports);
+            return transformedReports;
         } catch (error) {
+            console.error('❌ Failed to fetch reports:', error);
             return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch reports');
         }
     }
@@ -156,13 +163,13 @@ const reportSlice = createSlice({
         setCurrentReport: (state, action: PayloadAction<Report | null>) => {
             state.currentReport = action.payload;
         },
-        updateReportShareSettings: (state, action: PayloadAction<{ reportId: string; settings: Report['shareSettings'] }>) => {
+        updateReportStatus: (state, action: PayloadAction<{ reportId: string; status: Report['status'] }>) => {
             const report = state.reports.find(r => r.id === action.payload.reportId);
             if (report) {
-                report.shareSettings = action.payload.settings;
+                report.status = action.payload.status;
             }
             if (state.currentReport?.id === action.payload.reportId) {
-                state.currentReport.shareSettings = action.payload.settings;
+                state.currentReport.status = action.payload.status;
             }
         },
         setExportProgress: (state, action: PayloadAction<number>) => {
@@ -233,7 +240,7 @@ const reportSlice = createSlice({
 
 export const {
     setCurrentReport,
-    updateReportShareSettings,
+    updateReportStatus,
     setExportProgress,
     clearShareUrl,
     clearError,

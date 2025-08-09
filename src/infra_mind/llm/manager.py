@@ -23,7 +23,6 @@ from .interface import (
 )
 from .openai_provider import OpenAIProvider
 from .gemini_provider import GeminiProvider
-from .azure_openai_provider import AzureOpenAIProvider
 from .cost_tracker import CostTracker
 from .response_validator import ResponseValidator, ValidationResult
 from .prompt_formatter import prompt_formatter
@@ -119,71 +118,52 @@ class LLMManager:
         logger.info(f"LLM Manager initialized with {len(self.providers)} providers")
     
     def _initialize_providers(self) -> None:
-        """Initialize available LLM providers based on configuration."""
-        # OpenAI Provider
-        openai_key = self.settings.get_openai_api_key()
-        if openai_key:
-            try:
-                openai_provider = OpenAIProvider(
-                    api_key=openai_key,
-                    model=self.settings.llm_model,
-                    temperature=self.settings.llm_temperature,
-                    max_tokens=self.settings.llm_max_tokens,
-                    timeout=self.settings.llm_timeout
-                )
-                self.providers[LLMProvider.OPENAI] = openai_provider
-                self._provider_health[LLMProvider.OPENAI] = True
-                self._provider_performance[LLMProvider.OPENAI] = 1.0
-                logger.info("OpenAI provider initialized")
-            except Exception as e:
-                logger.error(f"Failed to initialize OpenAI provider: {str(e)}")
+        """Initialize LLM providers based on configuration - prioritize specified provider."""
+        # Get preferred provider from multiple sources
+        preferred_provider = None
         
-        # Gemini Provider
-        gemini_key = self.settings.get_gemini_api_key()
-        if gemini_key:
-            try:
-                gemini_provider = GeminiProvider(
-                    api_key=gemini_key,
-                    model="gemini-1.5-pro",  # Use default Gemini model
-                    temperature=self.settings.llm_temperature,
-                    max_tokens=self.settings.llm_max_tokens,
-                    timeout=self.settings.llm_timeout
-                )
-                self.providers[LLMProvider.GEMINI] = gemini_provider
-                self._provider_health[LLMProvider.GEMINI] = True
-                self._provider_performance[LLMProvider.GEMINI] = 1.0
-                logger.info("Gemini provider initialized")
-            except Exception as e:
-                logger.error(f"Failed to initialize Gemini provider: {str(e)}")
+        # 1. Check config passed to manager
+        if self.config and "preferred_provider" in self.config:
+            preferred_provider = self.config["preferred_provider"]
         
-        # Azure OpenAI Provider
-        azure_openai_key = self.settings.azure_openai_api_key
-        azure_openai_endpoint = self.settings.azure_openai_endpoint
-        if azure_openai_key and azure_openai_endpoint:
-            try:
-                azure_openai_provider = AzureOpenAIProvider(
-                    api_key=azure_openai_key.get_secret_value() if hasattr(azure_openai_key, 'get_secret_value') else azure_openai_key,
-                    azure_endpoint=azure_openai_endpoint,
-                    api_version=getattr(self.settings, 'azure_openai_api_version', '2024-10-21'),
-                    model=self.settings.llm_model,
-                    temperature=self.settings.llm_temperature,
-                    max_tokens=self.settings.llm_max_tokens,
-                    timeout=self.settings.llm_timeout
-                )
-                self.providers[LLMProvider.AZURE_OPENAI] = azure_openai_provider
-                self._provider_health[LLMProvider.AZURE_OPENAI] = True
-                self._provider_performance[LLMProvider.AZURE_OPENAI] = 1.0
-                logger.info("Azure OpenAI provider initialized")
-            except Exception as e:
-                logger.error(f"Failed to initialize Azure OpenAI provider: {str(e)}")
+        # 2. Check settings llm_provider
+        if not preferred_provider:
+            preferred_provider = getattr(self.settings, 'llm_provider', None)
         
-        # TODO: Add other providers (Anthropic, etc.)
-        # anthropic_key = self.settings.anthropic_api_key
-        # if anthropic_key:
-        #     # Initialize Anthropic provider
+        # 3. Default to openai
+        if not preferred_provider:
+            preferred_provider = 'openai'
+        
+        # Ensure it's a string and lowercase
+        if preferred_provider is None:
+            preferred_provider = 'openai'
+        preferred_provider = str(preferred_provider).lower()
+        
+        # Initialize only OpenAI provider for this system
+        if preferred_provider == 'openai':
+            openai_key = self.settings.get_openai_api_key()
+            if openai_key:
+                try:
+                    openai_provider = OpenAIProvider(
+                        api_key=openai_key,
+                        model=self.settings.llm_model,
+                        temperature=self.settings.llm_temperature,
+                        max_tokens=self.settings.llm_max_tokens,
+                        timeout=self.settings.llm_timeout
+                    )
+                    self.providers[LLMProvider.OPENAI] = openai_provider
+                    self._provider_health[LLMProvider.OPENAI] = True
+                    self._provider_performance[LLMProvider.OPENAI] = 1.0
+                    logger.info("OpenAI provider initialized as primary")
+                except Exception as e:
+                    logger.error(f"Failed to initialize OpenAI provider: {str(e)}")
+            else:
+                logger.error("OpenAI API key not found - cannot initialize OpenAI provider")
+        else:
+            logger.warning(f"Unsupported LLM provider: {preferred_provider}. Only OpenAI is supported.")
         
         if not self.providers:
-            logger.warning("No LLM providers initialized - check API key configuration")
+            logger.error("No LLM providers initialized - check API key configuration")
     
     async def generate_response(
         self, 
@@ -330,7 +310,9 @@ class LLMManager:
                 continue
                 
             except Exception as e:
+                import traceback
                 logger.error(f"{provider_type.value} request failed: {str(e)}")
+                logger.error(f"Full traceback: {traceback.format_exc()}")
                 self._update_provider_performance(provider_type, 0, False)
                 last_exception = e
                 continue
@@ -691,7 +673,8 @@ class LLMManager:
                 current_model = provider.model
                 
                 # Check if using expensive models for potentially simple tasks
-                if "gpt-4" in current_model.lower() or "gemini-1.5-pro" in current_model.lower():
+                current_model_lower = (current_model or "").lower()
+                if "gpt-4" in current_model_lower or "gemini-1.5-pro" in current_model_lower:
                     recommendations["model_recommendations"].append({
                         "type": "model_downgrade",
                         "provider": provider_type.value,
@@ -699,7 +682,7 @@ class LLMManager:
                         "recommendation": "Consider using cheaper models for simple tasks",
                         "suggested_models": [
                             model for model in supported_models 
-                            if "3.5" in model or "flash" in model.lower()
+                            if "3.5" in model or "flash" in (model or "").lower()
                         ][:3],
                         "potential_savings_percentage": 50
                     })

@@ -219,32 +219,43 @@ export function useProgressSteps() {
         const completedSteps = assessmentProgress.completed_steps || [];
         const progressPercentage = assessmentProgress.progress_percentage || 0;
         
-        // Define the correct workflow order matching the backend
+        // Define the correct workflow order matching the backend assessments.py
         const workflowSteps = [
             {
                 id: 'created',
                 label: 'Assessment Created',
                 description: 'Initial assessment setup and requirements collection',
+                targetProgress: 5
+            },
+            {
+                id: 'initializing',
+                label: 'Initializing Workflow',
+                description: 'Setting up AI agents and preparing analysis pipeline',
+                targetProgress: 20
             },
             {
                 id: 'analysis',
-                label: 'AI Agent Analysis',
-                description: 'Multi-agent analysis including CTO, Cloud Engineer, Infrastructure, Security, and Research agents',
+                label: 'Multi-Agent Analysis',
+                description: 'CTO, Cloud Engineer, Infrastructure, AI Consultant, MLOps, Compliance, Research, Web Research, Simulation and Chatbot agents analyzing requirements',
+                targetProgress: 40
             },
             {
                 id: 'recommendations',
-                label: 'Recommendations Generation',
-                description: 'Generating personalized cloud infrastructure recommendations',
+                label: 'Generating Recommendations',
+                description: 'AI agents generating personalized cloud infrastructure recommendations',
+                targetProgress: 60
             },
             {
-                id: 'reports',
+                id: 'report_generation',
                 label: 'Report Generation',
                 description: 'Creating executive summary, technical roadmap, and cost analysis reports',
+                targetProgress: 80
             },
             {
-                id: 'visualization',
-                label: 'Data Visualization',
-                description: 'Generating charts and visual representations of recommendations',
+                id: 'completed',
+                label: 'Analysis Complete',
+                description: 'Assessment workflow completed with recommendations and reports ready',
+                targetProgress: 100
             }
         ];
 
@@ -252,37 +263,42 @@ export function useProgressSteps() {
             let status: ProgressStep['status'] = 'pending';
             let progress = 0;
 
-            if (completedSteps.includes(step.id)) {
+            // Check if this step is completed
+            if (completedSteps.includes(step.id) || progressPercentage >= step.targetProgress) {
                 status = 'completed';
                 progress = 100;
-            } else if (currentStep === step.id) {
+            }
+            // Check if this is the current active step
+            else if (currentStep === step.id || 
+                     (currentStep.includes(step.id)) ||
+                     (step.id === 'analysis' && (currentStep.includes('agent') || currentStep.includes('llm'))) ||
+                     (step.id === 'initializing' && (currentStep.includes('initializ') || currentStep.includes('workflow'))) ||
+                     (step.id === 'report_generation' && currentStep.includes('report'))) {
                 status = 'active';
-                // Calculate progress within current step
-                if (step.id === 'analysis') {
-                    // Agent analysis is 80% of total progress (10 agents)
-                    progress = Math.min(progressPercentage * 1.25, 100); // Scale 0-80% to 0-100%
-                } else if (step.id === 'recommendations') {
-                    progress = progressPercentage > 80 ? Math.min((progressPercentage - 80) * 5, 100) : 0;
-                } else if (step.id === 'reports') {
-                    progress = progressPercentage > 85 ? Math.min((progressPercentage - 85) * 6.67, 100) : 0;
-                } else if (step.id === 'visualization') {
-                    progress = progressPercentage > 95 ? Math.min((progressPercentage - 95) * 20, 100) : 0;
+                
+                // Calculate progress within the current step based on overall progress
+                const prevTargetProgress = index > 0 ? workflowSteps[index - 1].targetProgress : 0;
+                const stepRange = step.targetProgress - prevTargetProgress;
+                const stepProgress = progressPercentage - prevTargetProgress;
+                
+                if (stepProgress > 0 && stepRange > 0) {
+                    progress = Math.min(Math.max((stepProgress / stepRange) * 100, 0), 100);
                 } else {
-                    // Calculate progress based on overall progress and step position
-                    const stepStartPercent = (index / workflowSteps.length) * 100;
-                    const stepEndPercent = ((index + 1) / workflowSteps.length) * 100;
-                    const stepRange = stepEndPercent - stepStartPercent;
-                    
-                    if (progressPercentage >= stepStartPercent && progressPercentage <= stepEndPercent) {
-                        progress = ((progressPercentage - stepStartPercent) / stepRange) * 100;
-                    } else if (progressPercentage > stepEndPercent) {
-                        progress = 100;
-                    } else {
-                        progress = 0;
-                    }
+                    progress = 10; // Show some progress for active step
                 }
-            } else if (currentStep === 'failed' && index === workflowSteps.length - 1) {
-                status = 'error';
+            }
+            // Check for failed state
+            else if (currentStep === 'failed' || currentStep.includes('failed') || assessmentProgress.error) {
+                if (index <= workflowSteps.findIndex(s => s.id === currentStep.replace('_failed', ''))) {
+                    status = 'error';
+                } else {
+                    status = 'pending';
+                }
+                progress = 0;
+            }
+            // Step is pending (future step)
+            else {
+                status = 'pending';
                 progress = 0;
             }
 

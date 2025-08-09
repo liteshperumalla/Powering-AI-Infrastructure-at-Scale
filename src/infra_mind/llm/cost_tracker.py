@@ -472,9 +472,9 @@ class CostTracker:
                    (not end_time or entry.timestamp <= end_time)
             ]
         
-        if format.lower() == "json":
+        if (format or "").lower() == "json":
             return json.dumps([entry.to_dict() for entry in entries_to_export], indent=2)
-        elif format.lower() == "csv":
+        elif (format or "").lower() == "csv":
             if not entries_to_export:
                 return "No data to export"
             

@@ -133,9 +133,13 @@ export const fetchAssessments = createAsyncThunk(
     'assessment/fetchAll',
     async (_, { rejectWithValue }) => {
         try {
+            console.log('🔄 Fetching assessments...');
             const response = await apiClient.getAssessments();
+            console.log('📊 Assessments API response:', response);
+            console.log('📊 Assessments array:', response.assessments);
             return response;
         } catch (error) {
+            console.error('❌ Failed to fetch assessments:', error);
             return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch assessments');
         }
     }
@@ -245,7 +249,8 @@ const assessmentSlice = createSlice({
             })
             .addCase(fetchAssessments.fulfilled, (state, action) => {
                 state.loading = false;
-                state.assessments = action.payload;
+                // Extract the assessments array from the API response
+                state.assessments = action.payload.assessments || [];
             })
             .addCase(fetchAssessments.rejected, (state, action) => {
                 state.loading = false;

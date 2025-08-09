@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Token Debug Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        .result { margin: 10px 0; padding: 10px; border-radius: 5px; }
+        .success { background-color: #d4edda; color: #155724; }
+        .error { background-color: #f8d7da; color: #721c24; }
+        .info { background-color: #d1ecf1; color: #0c5460; }
+        button { padding: 10px 15px; margin: 5px; cursor: pointer; }
+        pre { background: #f8f9fa; padding: 10px; border-radius: 5px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Token & API Debug Test</h1>
+    
+    <div id="results"></div>
+    
+    <h2>Debug Steps</h2>
+    <button onclick="step1_login()">Step 1: Login & Get Token</button>
+    <button onclick="step2_checkToken()">Step 2: Check Stored Token</button>
+    <button onclick="step3_testAssessments()">Step 3: Test Assessments API</button>
+    <button onclick="step4_testReports()">Step 4: Test Reports API</button>
+    <button onclick="runAllSteps()">Run All Steps</button>
+
+    <script>
+        const API_BASE_URL = 'http://localhost:8000';
+        const results = document.getElementById('results');
+        let currentToken = null;
+        
+        function addResult(message, type = 'info', data = null) {
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = message;
+            if (data) {
+                div.innerHTML += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            }
+            results.appendChild(div);
+            results.scrollTop = results.scrollHeight;
+        }
+        
+        async function step1_login() {
+            addResult('🔐 Step 1: Testing login and token storage...', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Origin': 'http://localhost:3000'
+                    },
+                    body: JSON.stringify({
+                        email: 'liteshperumalla@gmail.com',
+                        password: 'Litesh@#12345'
+                    })
+                });
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    currentToken = data.access_token;
+                    
+                    // Store in localStorage like the frontend does
+                    localStorage.setItem('auth_token', data.access_token);
+                    
+                    addResult('✅ Login successful, token stored', 'success', {
+                        user_id: data.user_id,
+                        email: data.email,
+                        token_preview: data.access_token.substring(0, 50) + '...'
+                    });
+                } else {
+                    const error = await response.json();
+                    addResult('❌ Login failed', 'error', error);
+                }
+            } catch (error) {
+                addResult('💥 Login request failed: ' + error.message, 'error');
+            }
+        }
+        
+        async function step2_checkToken() {
+            addResult('🔍 Step 2: Checking stored token...', 'info');
+            
+            const storedToken = localStorage.getItem('auth_token');
+            const memoryToken = currentToken;
+            
+            addResult('Token status check', 'info', {
+                stored_in_localStorage: storedToken ? 'Present' : 'Missing',
+                stored_in_memory: memoryToken ? 'Present' : 'Missing',
+                tokens_match: storedToken === memoryToken,
+                token_preview: storedToken ? storedToken.substring(0, 50) + '...' : 'None'
+            });
+        }
+        
+        async function step3_testAssessments() {
+            addResult('📊 Step 3: Testing assessments API with token...', 'info');
+            
+            const token = localStorage.getItem('auth_token') || currentToken;
+            
+            if (!token) {
+                addResult('❌ No token available - run Step 1 first', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/v1/assessments/`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                        'Origin': 'http://localhost:3000',
+                        'X-Client-Version': '2.0.0',
+                        'X-Request-ID': `req_${Date.now()}_test`
+                    }
+                });
+                
+                addResult(`Response status: ${response.status}`, response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult('✅ Assessments API working', 'success', data);
+                } else {
+                    const error = await response.json();
+                    addResult('❌ Assessments API failed', 'error', error);
+                }
+            } catch (error) {
+                addResult('💥 Assessments request failed: ' + error.message, 'error');
+            }
+        }
+        
+        async function step4_testReports() {
+            addResult('📋 Step 4: Testing reports API with token...', 'info');
+            
+            const token = localStorage.getItem('auth_token') || currentToken;
+            
+            if (!token) {
+                addResult('❌ No token available - run Step 1 first', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/v1/reports/`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Content-Type': 'application/json',
+                        'Origin': 'http://localhost:3000',
+                        'X-Client-Version': '2.0.0',
+                        'X-Request-ID': `req_${Date.now()}_test`
+                    }
+                });
+                
+                addResult(`Response status: ${response.status}`, response.ok ? 'success' : 'error');
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    addResult('✅ Reports API working', 'success', data);
+                } else {
+                    const error = await response.json();
+                    addResult('❌ Reports API failed', 'error', error);
+                }
+            } catch (error) {
+                addResult('💥 Reports request failed: ' + error.message, 'error');
+            }
+        }
+        
+        async function runAllSteps() {
+            results.innerHTML = '';
+            addResult('🚀 Running all debug steps...', 'info');
+            await step1_login();
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+            await step2_checkToken();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await step3_testAssessments();
+            await new Promise(resolve => setTimeout(resolve, 500));
+            await step4_testReports();
+            addResult('🏁 All steps completed!', 'info');
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Frontend Reports API</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 4px; }
+        .error { background: #ffebee; color: #c62828; }
+        .success { background: #e8f5e8; color: #2e7d32; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        pre { white-space: pre-wrap; font-size: 12px; }
+        .debug { background: #e3f2fd; color: #1976d2; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Frontend Reports API Test</h1>
+    
+    <button onclick="testDirectFrontendCall()">Test Frontend API Client</button>
+    <button onclick="testFrontendReportsPage()">Test Reports Page Logic</button>
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <div id="results"></div>
+
+    <script>
+        function addResult(title, content, type = 'success') {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `result ${type}`;
+            div.innerHTML = `<h3>${title}</h3><pre>${content}</pre><small>${new Date().toLocaleTimeString()}</small>`;
+            results.appendChild(div);
+        }
+
+        async function testDirectFrontendCall() {
+            try {
+                addResult('Testing Direct Frontend API Call', 'Simulating frontend API client behavior...', 'debug');
+                
+                // Simulate what the frontend apiClient.getReports() does
+                const API_BASE_URL = 'http://localhost:8000/api/v1';
+                
+                // Step 1: Get all assessments
+                addResult('Step 1', 'Fetching assessments...', 'debug');
+                const assessmentsResponse = await fetch(`${API_BASE_URL}/assessments/`);
+                
+                if (!assessmentsResponse.ok) {
+                    addResult('Assessments API Error', `HTTP ${assessmentsResponse.status}: ${assessmentsResponse.statusText}`, 'error');
+                    return;
+                }
+                
+                const assessmentsData = await assessmentsResponse.json();
+                const assessments = assessmentsData.assessments || [];
+                
+                addResult('Assessments Fetched', `Found ${assessments.length} assessments`, 'success');
+                
+                // Step 2: Get reports for each assessment
+                addResult('Step 2', 'Fetching reports for each assessment...', 'debug');
+                let allReports = [];
+                
+                for (const assessment of assessments) {
+                    try {
+                        const reportsResponse = await fetch(`${API_BASE_URL}/reports/${assessment.id}?t=${Date.now()}`, {
+                            headers: {
+                                'Cache-Control': 'no-cache'
+                            }
+                        });
+                        
+                        if (reportsResponse.ok) {
+                            const reportsData = await reportsResponse.json();
+                            const reports = reportsData.reports || [];
+                            
+                            // Transform reports to match frontend expectations
+                            const transformedReports = reports.map(report => ({
+                                ...report,
+                                assessmentId: report.assessment_id || report.assessmentId,
+                                generated_at: report.completed_at || report.created_at,
+                                estimated_savings: report.estimated_savings || 0,
+                            }));
+                            
+                            allReports.push(...transformedReports);
+                            addResult(`Reports for ${assessment.title}`, `Found ${reports.length} reports`, 'success');
+                        } else {
+                            addResult(`Reports Error for ${assessment.id}`, `HTTP ${reportsResponse.status}`, 'error');
+                        }
+                    } catch (error) {
+                        addResult(`Reports Network Error for ${assessment.id}`, error.message, 'error');
+                    }
+                }
+                
+                // Step 3: Show final results
+                addResult('Final Results', `Total reports: ${allReports.length}\n\nReports:\n${allReports.map(r => `• ${r.title} (${r.status}) - ${r.assessment_id}`).join('\n')}\n\nSample report structure:\n${JSON.stringify(allReports[0] || {}, null, 2)}`, 'success');
+                
+            } catch (error) {
+                addResult('Frontend API Test Error', `Error: ${error.message}`, 'error');
+            }
+        }
+
+        async function testFrontendReportsPage() {
+            addResult('Frontend Reports Page Test', 'Testing the exact logic used by reports page...', 'debug');
+            
+            try {
+                // This simulates what happens when the reports page loads
+                
+                // 1. Check if we can reach the frontend
+                const frontendUrl = 'http://localhost:3000/api/reports'; // This would be the frontend's API route
+                
+                addResult('Frontend Health Check', 'Frontend should be accessible at http://localhost:3000/reports', 'debug');
+                
+                // 2. Test the exact API call pattern from frontend
+                const response = await testDirectFrontendCall();
+                
+            } catch (error) {
+                addResult('Frontend Page Test Error', `Error: ${error.message}`, 'error');
+            }
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+
+        // Auto-run on load
+        window.onload = function() {
+            setTimeout(() => {
+                addResult('Auto Test Started', 'Running automatic tests...', 'debug');
+                testDirectFrontendCall();
+            }, 500);
+        };
+    </script>
+</body>
+</html>

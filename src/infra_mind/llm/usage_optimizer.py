@@ -440,7 +440,7 @@ class LLMUsageOptimizer:
         if not request.model:
             return None
         
-        current_model = request.model.lower()
+        current_model = (request.model or "").lower()
         suggested_model = None
         cost_savings = 0.0
         
@@ -569,7 +569,7 @@ class LLMUsageOptimizer:
         """
         # Create a normalized representation of the request
         cache_key_data = {
-            "prompt": request.prompt.strip().lower(),
+            "prompt": (request.prompt or "").strip().lower(),
             "system_prompt": (request.system_prompt or "").strip().lower(),
             "model": request.model or "",
             "temperature": request.temperature or 0.7,
@@ -609,7 +609,7 @@ class LLMUsageOptimizer:
         try:
             # Simple similarity check based on prompt text
             # In a production system, you might use embeddings for better similarity
-            request_words = set(request.prompt.lower().split())
+            request_words = set((request.prompt or "").lower().split())
             
             best_similarity = 0.0
             best_response = None
@@ -620,7 +620,7 @@ class LLMUsageOptimizer:
                 
                 # Get original request from cache entry
                 cached_prompt = cache_entry.response.metadata.get("original_prompt", "")
-                cached_words = set(cached_prompt.lower().split())
+                cached_words = set((cached_prompt or "").lower().split())
                 
                 # Calculate Jaccard similarity
                 if len(request_words) > 0 and len(cached_words) > 0:

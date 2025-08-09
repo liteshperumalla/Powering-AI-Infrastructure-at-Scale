@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports Debug Tool</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .result { background: #f5f5f5; padding: 15px; margin: 10px 0; border-radius: 4px; }
+        .error { background: #ffebee; color: #c62828; }
+        .success { background: #e8f5e8; color: #2e7d32; }
+        button { padding: 10px 20px; margin: 5px; cursor: pointer; }
+        pre { white-space: pre-wrap; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h1>🔍 Reports Debug Tool</h1>
+    
+    <button onclick="testDirectAPI()">Test Direct API</button>
+    <button onclick="testFrontendAPI()">Test Frontend API</button>
+    <button onclick="testAssessments()">Test Assessments</button>
+    <button onclick="clearResults()">Clear Results</button>
+    
+    <div id="results"></div>
+
+    <script>
+        function addResult(title, content, isError = false) {
+            const results = document.getElementById('results');
+            const div = document.createElement('div');
+            div.className = `result ${isError ? 'error' : 'success'}`;
+            div.innerHTML = `<h3>${title}</h3><pre>${content}</pre><small>${new Date().toLocaleTimeString()}</small>`;
+            results.appendChild(div);
+        }
+
+        async function testDirectAPI() {
+            try {
+                addResult('Testing Direct API', 'Fetching reports directly from API...');
+                
+                // Test MedSync assessment
+                const response = await fetch('http://localhost:8000/api/v1/reports/68966daba9d98781bdf799a0');
+                
+                if (!response.ok) {
+                    addResult('Direct API Error', `HTTP ${response.status}: ${response.statusText}`, true);
+                    return;
+                }
+                
+                const data = await response.json();
+                addResult('Direct API Success', `Found ${data.reports?.length || 0} reports:\n${JSON.stringify(data, null, 2)}`);
+                
+            } catch (error) {
+                addResult('Direct API Network Error', `Error: ${error.message}`, true);
+            }
+        }
+
+        async function testFrontendAPI() {
+            try {
+                addResult('Testing Frontend API', 'Using frontend API client approach...');
+                
+                // Simulate what the frontend does
+                const API_BASE_URL = 'http://localhost:8000/api/v1';
+                
+                // First get all assessments
+                const assessmentsResponse = await fetch(`${API_BASE_URL}/assessments/`);
+                const assessments = await assessmentsResponse.json();
+                
+                addResult('Assessments Fetched', `Found ${assessments.assessments?.length || 0} assessments:\n${JSON.stringify(assessments.assessments?.map(a => ({id: a.id, title: a.title, status: a.status})) || [], null, 2)}`);
+                
+                // Then get reports for each assessment
+                let allReports = [];
+                for (const assessment of assessments.assessments || []) {
+                    try {
+                        const reportsResponse = await fetch(`${API_BASE_URL}/reports/${assessment.id}`);
+                        if (reportsResponse.ok) {
+                            const reportsData = await reportsResponse.json();
+                            allReports.push(...(reportsData.reports || []));
+                        }
+                    } catch (e) {
+                        console.warn('Failed to fetch reports for', assessment.id);
+                    }
+                }
+                
+                addResult('Frontend API Success', `Total reports found: ${allReports.length}\n${JSON.stringify(allReports.map(r => ({id: r.id, title: r.title, status: r.status})), null, 2)}`);
+                
+            } catch (error) {
+                addResult('Frontend API Error', `Error: ${error.message}`, true);
+            }
+        }
+
+        async function testAssessments() {
+            try {
+                addResult('Testing Assessments', 'Fetching assessment data...');
+                
+                const response = await fetch('http://localhost:8000/api/v1/assessments/');
+                
+                if (!response.ok) {
+                    addResult('Assessments API Error', `HTTP ${response.status}: ${response.statusText}`, true);
+                    return;
+                }
+                
+                const data = await response.json();
+                const assessments = data.assessments || [];
+                
+                addResult('Assessments Success', `Found ${assessments.length} assessments:\n${assessments.map(a => 
+                    `• ${a.title} (${a.status}) - Progress: ${a.progress_percentage}%`
+                ).join('\n')}\n\nFull data:\n${JSON.stringify(assessments, null, 2)}`);
+                
+            } catch (error) {
+                addResult('Assessments Network Error', `Error: ${error.message}`, true);
+            }
+        }
+
+        function clearResults() {
+            document.getElementById('results').innerHTML = '';
+        }
+
+        // Auto-run tests
+        window.onload = function() {
+            setTimeout(() => {
+                testAssessments();
+                setTimeout(testDirectAPI, 1000);
+            }, 500);
+        };
+    </script>
+</body>
+</html>

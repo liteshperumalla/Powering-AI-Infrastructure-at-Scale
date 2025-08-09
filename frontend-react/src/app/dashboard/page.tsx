@@ -145,7 +145,7 @@ export default function DashboardPage() {
 
     const loadDraftAssessments = async () => {
         try {
-            if (isAuthenticated && assessments) {
+            if (isAuthenticated && Array.isArray(assessments)) {
                 // Filter for draft assessments from the assessments list
                 const drafts = assessments.filter(assessment => assessment.status === 'draft');
                 setDraftAssessments(drafts);
@@ -228,9 +228,11 @@ export default function DashboardPage() {
         forceRefresh();
         
         // Clear assessment-specific caches
-        assessments?.forEach(assessment => {
-            clearAssessmentCache(assessment.id);
-        });
+        if (Array.isArray(assessments)) {
+            assessments.forEach(assessment => {
+                clearAssessmentCache(assessment.id);
+            });
+        }
         
         // Re-fetch all data with fresh calls
         dispatch(fetchAssessments());
@@ -356,28 +358,30 @@ export default function DashboardPage() {
                 const latestAssessment = assessments[0];
                 
                 try {
-                    // Try to get visualization data from the new API endpoint
-                    const visualizationResponse = await apiClient.getAssessmentVisualizationData(latestAssessment.id);
+                    // Always use fallback calculation for now since the visualization API endpoint needs more work
+                    const results = await calculateAssessmentResultsFallback(latestAssessment);
+                    setAssessmentResults(results);
                     
-                    if (visualizationResponse && visualizationResponse.data && visualizationResponse.data.assessment_results) {
-                        // Use the visualization data from the backend
-                        setAssessmentResults(visualizationResponse.data.assessment_results);
-                    } else {
-                        // Fallback to manual calculation if no visualization data
-                        const results = await calculateAssessmentResultsFallback(latestAssessment);
-                        setAssessmentResults(results);
-                    }
-                } catch (apiError) {
-                    console.error('Failed to load visualization data, using fallback:', apiError);
-                    // Fallback to manual calculation
+                    // Optionally try to enhance with backend visualization data
                     try {
-                        const results = await calculateAssessmentResultsFallback(latestAssessment);
-                        setAssessmentResults(results);
-                    } catch (fallbackError) {
-                        console.error('Fallback calculation failed:', fallbackError);
-                        // No demo data - show empty results
-                        setAssessmentResults([]);
+                        const visualizationResponse = await apiClient.getAssessmentVisualizationData(latestAssessment.id);
+                        
+                        if (visualizationResponse && 
+                            visualizationResponse.data && 
+                            visualizationResponse.data.assessment_results && 
+                            visualizationResponse.data.assessment_results.length > 0) {
+                            // Use the backend visualization data if available and valid
+                            setAssessmentResults(visualizationResponse.data.assessment_results);
+                        }
+                        // Otherwise keep using the fallback calculation results
+                    } catch (vizError) {
+                        console.warn('Visualization API not available, using calculated results:', vizError);
+                        // Keep using fallback results
                     }
+                } catch (fallbackError) {
+                    console.error('Failed to calculate assessment results:', fallbackError);
+                    // Show empty results only if both methods fail
+                    setAssessmentResults([]);
                 }
             } else {
                 // No assessments - show empty results
@@ -393,51 +397,64 @@ export default function DashboardPage() {
 
     const calculateAssessmentResultsFallback = async (assessment: any) => {
         // Extract business and technical requirements to calculate scores
-        const businessReqs = assessment.businessRequirements;
-        const technicalReqs = assessment.technicalRequirements;
+        const businessReqs = assessment.business_requirements || assessment.businessRequirements;
+        const technicalReqs = assessment.technical_requirements || assessment.technicalRequirements;
         
-        // Calculate dynamic scores based on assessment data - only real data
+        // Get assessment progress to enhance scores
+        const assessmentProgress = assessment.progress?.progress_percentage || 0;
+        const isCompleted = assessment.status === 'completed';
+        const hasRecommendations = assessment.recommendations_generated;
+        const hasReports = assessment.reports_generated;
+        
+        // Calculate dynamic scores based on assessment data and progress
+        let baseScoreMultiplier = 0.7; // Start at 70%
+        if (assessmentProgress > 50) baseScoreMultiplier += 0.1;
+        if (isCompleted) baseScoreMultiplier += 0.15;
+        if (hasRecommendations) baseScoreMultiplier += 0.1;
+        if (hasReports) baseScoreMultiplier += 0.05;
+        
         const results = [
             {
-                category: 'Infrastructure Readiness',
-                currentScore: calculateInfrastructureReadiness(businessReqs, technicalReqs),
+                category: 'Strategic Planning',
+                currentScore: Math.min(calculateInfrastructureReadiness(businessReqs, technicalReqs) * baseScoreMultiplier, 95),
                 targetScore: 90,
                 improvement: 0,
-                color: '#8884d8'
+                color: '#1f77b4'
+            },
+            {
+                category: 'Technical Architecture',
+                currentScore: Math.min(calculateScalability(technicalReqs) * baseScoreMultiplier, 92),
+                targetScore: 88,
+                improvement: 0,
+                color: '#ff7f0e'
             },
             {
                 category: 'Security & Compliance',
-                currentScore: calculateSecurityCompliance(businessReqs),
+                currentScore: Math.min(calculateSecurityCompliance(businessReqs) * baseScoreMultiplier, 94),
                 targetScore: 95,
                 improvement: 0,
-                color: '#82ca9d'
+                color: '#2ca02c'
             },
             {
                 category: 'Cost Optimization',
-                currentScore: calculateCostOptimization(businessReqs),
+                currentScore: Math.min(calculateCostOptimization(businessReqs) * baseScoreMultiplier, 88),
                 targetScore: 85,
                 improvement: 0,
-                color: '#ffc658'
+                color: '#d62728'
             },
             {
-                category: 'Scalability',
-                currentScore: calculateScalability(technicalReqs),
-                targetScore: 88,
-                improvement: 0,
-                color: '#ff7300'
-            },
-            {
-                category: 'Performance',
-                currentScore: calculatePerformance(technicalReqs),
+                category: 'Performance & Reliability',
+                currentScore: Math.min(calculatePerformance(technicalReqs) * baseScoreMultiplier, 91),
                 targetScore: 92,
                 improvement: 0,
-                color: '#00ff88'
+                color: '#9467bd'
             }
         ];
         
-        // Calculate improvements
+        // Calculate improvements and round scores
         results.forEach(result => {
-            result.improvement = result.targetScore - result.currentScore;
+            result.currentScore = Math.round(result.currentScore);
+            result.improvement = Math.max(result.targetScore - result.currentScore, 0);
         });
 
         return results;

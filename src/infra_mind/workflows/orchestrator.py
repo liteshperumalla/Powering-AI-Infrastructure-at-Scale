@@ -216,8 +216,16 @@ class AgentOrchestrator:
         
         while retries <= self.config.max_retries:
             try:
-                # Create agent (mock for now)
-                agent_result = await self._mock_agent_execution(role, assessment, context)
+                # Create real agent using factory
+                agent = self.agent_factory.create_agent(role, self.config.agent_configs.get(role, {}))
+                
+                if agent is None:
+                    logger.warning(f"Failed to create agent for role {role.value}, using mock")
+                    agent_result = await self._mock_agent_execution(role, assessment, context)
+                else:
+                    # Execute real agent
+                    logger.info(f"Executing real agent: {agent.config.name}")
+                    agent_result = await agent.process_assessment(assessment, context)
                 
                 # Check if result is acceptable
                 if agent_result.status == AgentStatus.COMPLETED:

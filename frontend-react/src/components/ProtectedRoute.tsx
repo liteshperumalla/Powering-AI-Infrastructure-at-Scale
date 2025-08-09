@@ -61,7 +61,7 @@ export default function ProtectedRoute({
                 router.push('/unauthorized');
             }
         }
-    }, [isAuthenticated, user, allowedRoles, router]);
+    }, [isAuthenticated, user?.role, allowedRoles.join(','), router]); // Use user.role and join allowedRoles to prevent array reference issues
 
     // Show loading while initializing or authenticating
     if (!isInitialized || (requireAuth && loading)) {

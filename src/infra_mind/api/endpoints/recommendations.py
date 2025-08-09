@@ -4,7 +4,7 @@ Recommendation endpoints for Infra Mind.
 Handles AI agent recommendations and multi-cloud service suggestions.
 """
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, status, Depends
 from typing import List, Optional
 from loguru import logger
 from datetime import datetime
@@ -12,7 +12,10 @@ from decimal import Decimal
 import uuid
 
 from ...models.recommendation import Recommendation, ServiceRecommendation
+from ...models.assessment import Assessment
+from ...models.user import User
 from ...schemas.base import RecommendationConfidence, CloudProvider, Priority
+from ...core.rbac import require_permission, Permission, AccessControl
 
 router = APIRouter()
 
@@ -82,6 +85,7 @@ class GenerateRecommendationsRequest(BaseModel):
 async def get_recommendations(
     assessment_id: str,
     agent_filter: Optional[str] = Query(None, description="Filter by agent name"),
+    current_user: User = Depends(require_permission(Permission.READ_RECOMMENDATION)),
     confidence_min: Optional[float] = Query(None, ge=0.0, le=1.0, description="Minimum confidence score"),
     category_filter: Optional[str] = Query(None, description="Filter by category")
 ):

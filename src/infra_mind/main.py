@@ -249,8 +249,9 @@ def setup_middleware(app: FastAPI) -> None:
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=True,
-        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        allow_headers=["*"],  # Temporarily allow all headers to debug CORS issues
+        expose_headers=["X-Process-Time"],
     )
     
     # Trusted host middleware for security

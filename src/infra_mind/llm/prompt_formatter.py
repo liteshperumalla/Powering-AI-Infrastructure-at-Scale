@@ -335,7 +335,7 @@ class PromptFormatter:
         }
         
         # Get agent role
-        role = agent_roles.get(agent_name.lower(), f"You are an AI agent named {agent_name}.")
+        role = agent_roles.get((agent_name or "").lower(), f"You are an AI agent named {agent_name or 'Assistant'}.")
         
         # Build prompt parts
         prompt_parts = [role]

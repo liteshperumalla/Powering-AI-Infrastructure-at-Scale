@@ -305,6 +305,10 @@ class ResponseValidator:
         """Check for safety issues."""
         issues = []
         
+        # Handle None content gracefully
+        if not content:
+            return issues
+            
         content_lower = content.lower()
         
         # Check for safety keywords
@@ -334,6 +338,10 @@ class ResponseValidator:
         """Check for profanity."""
         issues = []
         
+        # Handle None content gracefully
+        if not content:
+            return issues
+            
         content_lower = content.lower()
         found_profanity = [word for word in self.profanity_words 
                           if word in content_lower]
@@ -355,10 +363,10 @@ class ResponseValidator:
         if not context:
             return issues
         
-        agent_name = context.get("agent_name", "")
+        agent_name = context.get("agent_name", "") or ""
         
         # CTO Agent specific validation
-        if "cto" in agent_name.lower():
+        if agent_name and "cto" in agent_name.lower():
             if not self._contains_business_terms(content):
                 issues.append(ValidationIssue(
                     severity=ValidationSeverity.WARNING,
@@ -368,7 +376,7 @@ class ResponseValidator:
                 ))
         
         # Cloud Engineer Agent specific validation
-        elif "cloud" in agent_name.lower() or "engineer" in agent_name.lower():
+        elif agent_name and ("cloud" in agent_name.lower() or "engineer" in agent_name.lower()):
             if not self._contains_technical_terms(content):
                 issues.append(ValidationIssue(
                     severity=ValidationSeverity.WARNING,
@@ -378,7 +386,7 @@ class ResponseValidator:
                 ))
         
         # Research Agent specific validation
-        elif "research" in agent_name.lower():
+        elif agent_name and "research" in agent_name.lower():
             if not self._contains_research_elements(content):
                 issues.append(ValidationIssue(
                     severity=ValidationSeverity.WARNING,
@@ -485,6 +493,10 @@ class ResponseValidator:
             'consequently', 'meanwhile', 'similarly', 'in contrast', 'for example'
         }
         
+
+        # Handle None content gracefully
+        if not content:
+            return False
         content_lower = content.lower()
         transition_count = sum(1 for word in transition_words if word in content_lower)
         
@@ -528,6 +540,10 @@ class ResponseValidator:
             'strategy', 'strategic', 'business', 'stakeholder', 'executive'
         }
         
+
+        # Handle None content gracefully
+        if not content:
+            return False
         content_lower = content.lower()
         return any(term in content_lower for term in business_terms)
     
@@ -538,6 +554,10 @@ class ResponseValidator:
             'api', 'microservice', 'container', 'kubernetes', 'docker'
         }
         
+
+        # Handle None content gracefully
+        if not content:
+            return False
         content_lower = content.lower()
         return any(term in content_lower for term in technical_terms)
     
@@ -548,6 +568,10 @@ class ResponseValidator:
             'trend', 'market', 'industry', 'benchmark', 'metric'
         }
         
+
+        # Handle None content gracefully
+        if not content:
+            return False
         content_lower = content.lower()
         return any(term in content_lower for term in research_terms)
     
@@ -576,6 +600,10 @@ class ResponseValidator:
             'action', 'step', 'next', 'plan', 'strategy'
         }
         
+
+        # Handle None content gracefully
+        if not content:
+            return False
         content_lower = content.lower()
         return any(word in content_lower for word in action_words)
     

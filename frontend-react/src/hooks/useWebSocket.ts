@@ -48,6 +48,7 @@ export const useWebSocket = (config: WebSocketConfig) => {
     const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
     const heartbeatTimeoutRef = useRef<NodeJS.Timeout>();
     const shouldReconnectRef = useRef(true);
+    const connectionAttemptedRef = useRef(false);
 
     // Get auth token from Redux store
     const authToken = useSelector((state: RootState) => state.auth.token);
@@ -130,6 +131,7 @@ export const useWebSocket = (config: WebSocketConfig) => {
 
     const disconnect = useCallback(() => {
         shouldReconnectRef.current = false;
+        connectionAttemptedRef.current = false; // Reset connection attempt flag
 
         if (reconnectTimeoutRef.current) {
             clearTimeout(reconnectTimeoutRef.current);
@@ -206,15 +208,32 @@ export const useWebSocket = (config: WebSocketConfig) => {
 
     // Auto-connect when component mounts and auth token is available
     useEffect(() => {
-        if (authToken) {
+        // Temporarily disable WebSocket to prevent infinite loops
+        const WEBSOCKET_ENABLED = process.env.NEXT_PUBLIC_WEBSOCKET_ENABLED !== 'false';
+        
+        console.log('🔗 WebSocket effect triggered:', {
+            authToken: !!authToken,
+            connectionAttempted: connectionAttemptedRef.current,
+            websocketEnabled: WEBSOCKET_ENABLED,
+            shouldConnect: WEBSOCKET_ENABLED && authToken && !connectionAttemptedRef.current
+        });
+        
+        if (WEBSOCKET_ENABLED && authToken && !connectionAttemptedRef.current) {
+            connectionAttemptedRef.current = true;
             shouldReconnectRef.current = true;
+            console.log('🔗 Initiating WebSocket connection...');
             connect();
+        } else if (!WEBSOCKET_ENABLED) {
+            console.log('🔗 WebSocket disabled - skipping connection');
         }
 
         return () => {
-            disconnect();
+            console.log('🔗 WebSocket effect cleanup...');
+            if (WEBSOCKET_ENABLED) {
+                disconnect();
+            }
         };
-    }, [authToken, connect, disconnect]);
+    }, [authToken]); // Only depend on authToken to prevent loops
 
     // Cleanup on unmount
     useEffect(() => {

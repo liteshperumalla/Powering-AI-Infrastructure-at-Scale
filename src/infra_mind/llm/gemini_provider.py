@@ -220,7 +220,7 @@ class GeminiProvider(LLMProviderInterface):
             if hasattr(response, 'candidates') and response.candidates:
                 candidate = response.candidates[0]
                 if hasattr(candidate, 'finish_reason'):
-                    finish_reason = str(candidate.finish_reason).lower()
+                    finish_reason = str(candidate.finish_reason).lower() if candidate.finish_reason is not None else ""
             
             # Create response
             llm_response = LLMResponse(
@@ -261,7 +261,8 @@ class GeminiProvider(LLMProviderInterface):
                     self.provider_name
                 )
             elif isinstance(e, google_exceptions.ResourceExhausted):
-                if "quota" in str(e).lower():
+                error_str = str(e) if e is not None else ""
+                if "quota" in error_str.lower():
                     raise LLMQuotaExceededError(
                         f"Gemini quota exceeded: {str(e)}",
                         self.provider_name
@@ -371,7 +372,8 @@ class GeminiProvider(LLMProviderInterface):
                     raise e
                 
                 # Don't retry on quota exceeded
-                if isinstance(e, google_exceptions.ResourceExhausted) and "quota" in str(e).lower():
+                error_str = str(e) if e is not None else ""
+                if isinstance(e, google_exceptions.ResourceExhausted) and "quota" in error_str.lower():
                     raise e
                 
                 # For rate limits and other errors, retry with backoff

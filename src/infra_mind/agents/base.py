@@ -422,10 +422,16 @@ class BaseAgent(ABC):
         """
         from ..llm.manager import LLMManager
         from ..llm.interface import LLMRequest
+        from ..core.config import get_settings
         
-        # Get or create LLM manager instance
+        # Get or create LLM manager instance with explicit configuration
         if not hasattr(self, '_llm_manager'):
-            self._llm_manager = LLMManager()
+            # Ensure we have fresh settings
+            settings = get_settings()
+            config = {
+                "preferred_provider": "openai"  # Force OpenAI as requested
+            }
+            self._llm_manager = LLMManager(config=config)
         
         # Create LLM request
         request = LLMRequest(

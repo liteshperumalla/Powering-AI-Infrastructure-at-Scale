@@ -184,6 +184,7 @@ class Report(Document):
     """
     
     # Report identification
+    report_id: str = Field(default_factory=lambda: f"report_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{hash(str(datetime.utcnow())) % 10000:04d}", description="Unique report identifier")
     assessment_id: str = Indexed()
     user_id: str = Indexed()
     title: str = Field(description="Report title")
@@ -271,6 +272,7 @@ class Report(Document):
         """Beanie document settings."""
         name = "reports"
         indexes = [
+            [("report_id", 1)],  # Query reports by report ID (unique)
             [("assessment_id", 1)],  # Query reports by assessment
             [("user_id", 1), ("status", 1)],  # Query user reports by status
             [("report_type", 1)],  # Query by report type

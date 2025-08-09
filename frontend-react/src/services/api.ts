@@ -5,13 +5,75 @@
  * including authentication, error handling, and request/response transformation.
  */
 
-import { Assessment, BusinessRequirements, TechnicalRequirements } from '@/store/slices/assessmentSlice';
-import { cacheBuster, getNoCacheHeaders } from '@/utils/cache-buster';
+import { Assessment, BusinessRequirements, TechnicalRequirements } from '../store/slices/assessmentSlice';
 
 // API Configuration
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+// Use different URLs for client-side (browser) vs server-side (SSR) requests
+const getApiBaseUrl = () => {
+    if (typeof window === 'undefined') {
+        // Server-side: use internal Docker service name
+        return process.env.API_URL || 'http://api:8000';
+    } else {
+        // Client-side: use public URL
+        // First try env var, then hardcoded fallback
+        const envUrl = process.env.NEXT_PUBLIC_API_URL;
+        if (envUrl) {
+            console.log('🔧 Using NEXT_PUBLIC_API_URL from env:', envUrl);
+            return envUrl;
+        }
+        
+        // Fallback to hardcoded localhost for now to resolve connection issue
+        const fallbackUrl = 'http://localhost:8000';
+        console.log('🔧 Using hardcoded fallback URL:', fallbackUrl);
+        return fallbackUrl;
+    }
+};
+
+const API_BASE_URL = getApiBaseUrl();
 const API_VERSION = 'v1';
 const API_PREFIX = `/api/${API_VERSION}`;
+
+// Debug environment variables with fallback check
+const debugEnvVars = {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+    API_URL: process.env.API_URL,
+    NODE_ENV: process.env.NODE_ENV,
+    // Check if env vars are available at all
+    processEnvKeys: typeof process !== 'undefined' && process.env ? Object.keys(process.env).filter(k => k.startsWith('NEXT_PUBLIC')).slice(0, 5) : 'process.env not available'
+};
+
+console.log('🔧 API Client Initialization:', {
+    API_BASE_URL,
+    environment: typeof window !== 'undefined' ? 'client' : 'server',
+    envVars: debugEnvVars,
+    // Alternative ways to get API URL for debugging
+    alternatives: {
+        hardcoded_localhost: 'http://localhost:8000',
+        from_getApiBaseUrl: getApiBaseUrl(),
+        window_location: typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:8000` : 'N/A'
+    }
+});
+
+// If env vars are missing, log a warning
+if (!process.env.NEXT_PUBLIC_API_URL) {
+    console.warn('⚠️ NEXT_PUBLIC_API_URL is not set! This may cause connection issues.');
+    console.log('🔍 Available environment variables:', typeof process !== 'undefined' && process.env ? Object.keys(process.env).filter(k => k.startsWith('NEXT')).slice(0, 10) : 'None');
+}
+
+// Cache busting utilities
+const cacheBuster = {
+    bustCache: (path: string, key?: string) => {
+        const timestamp = Date.now();
+        const separator = path.includes('?') ? '&' : '?';
+        return `${path}${separator}t=${timestamp}${key ? `&key=${key}` : ''}`;
+    }
+};
+
+const getNoCacheHeaders = () => ({
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0'
+});
 
 // WebSocket Configuration
 const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000';
@@ -102,21 +164,37 @@ export interface Recommendation {
     updated_at: string;
 }
 
+// Backend report structure matching actual API response
 export interface Report {
     id: string;
     assessment_id: string;
+    user_id: string;
     title: string;
-    status: 'generating' | 'completed' | 'failed';
-    sections: Array<{
-        title: string;
-        content: string;
-        type: 'executive' | 'technical' | 'financial';
-    }>;
-    key_findings: string[];
-    recommendations: string[];
-    estimated_savings: number;
-    compliance_score: number;
-    generated_at: string;
+    description: string;
+    report_type: string;
+    format: string;
+    status: 'completed' | 'generating' | 'failed' | 'pending';
+    progress_percentage: number;
+    sections: string[];
+    total_pages: number;
+    word_count: number;
+    file_path: string;
+    file_size_bytes: number;
+    generated_by: string[];
+    generation_time_seconds: number;
+    completeness_score: number;
+    confidence_score: number;
+    priority: string;
+    tags: string[];
+    error_message?: string;
+    retry_count: number;
+    created_at: string;
+    updated_at: string;
+    completed_at: string;
+    // Additional frontend fields for compatibility
+    assessmentId?: string;
+    generated_at?: string;
+    estimated_savings?: number;
 }
 
 export interface CloudService {
@@ -145,7 +223,8 @@ class ApiClient {
     private token: string | null = null;
 
     constructor() {
-        this.baseURL = API_BASE_URL + API_PREFIX;
+        // Set baseURL dynamically based on environment
+        this.baseURL = getApiBaseUrl() + API_PREFIX;
         this.token = this.getStoredToken();
     }
 
@@ -179,15 +258,21 @@ class ApiClient {
         const { useFullUrl, ...fetchOptions } = options;
         const url = useFullUrl ? endpoint : `${this.baseURL}${endpoint}`;
 
-        const headers: HeadersInit = {
+        // Ensure token is loaded from localStorage if not already set
+        if (!this.token) {
+            this.token = this.getStoredToken();
+        }
+
+        const headers: Record<string, string> = {
             'Content-Type': 'application/json',
-            'X-Client-Version': '2.0.0',
-            'X-Request-ID': this.generateRequestId(),
-            ...fetchOptions.headers,
+            // Temporarily remove custom headers to debug CORS issues
+            // 'X-Client-Version': '2.0.0',
+            // 'X-Request-ID': this.generateRequestId(),
+            ...(fetchOptions.headers as Record<string, string> || {}),
         };
 
         if (this.token) {
-            headers.Authorization = `Bearer ${this.token}`;
+            headers['Authorization'] = `Bearer ${this.token}`;
         }
 
         const config: RequestInit = {
@@ -270,7 +355,23 @@ class ApiClient {
                 
                 // Handle network connectivity issues
                 if (error.message.includes('fetch') || error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
-                    throw new Error('Connection failed - please check if the server is running at http://localhost:8000');
+                    const currentApiUrl = this.baseURL.replace('/api/v1', '');
+                    const debugInfo = {
+                        attemptedUrl: url,
+                        baseURL: this.baseURL,
+                        actualApiUrl: currentApiUrl,
+                        environment: typeof window !== 'undefined' ? 'client' : 'server',
+                        envVars: {
+                            NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+                            API_URL: process.env.API_URL,
+                            NODE_ENV: process.env.NODE_ENV
+                        },
+                        errorMessage: error.message,
+                        errorName: error.name,
+                        timestamp: new Date().toISOString()
+                    };
+                    console.error('API Connection Details:', debugInfo);
+                    throw new Error(`Connection failed - API server not reachable at ${currentApiUrl}. Check if the server is running and network connectivity is available.`);
                 }
                 
                 console.error(`API request failed: ${config.method || 'GET'} ${endpoint}`, error);
@@ -283,6 +384,64 @@ class ApiClient {
     // Generate unique request ID for tracking
     private generateRequestId(): string {
         return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    }
+
+    // Debug connection method
+    async debugConnection(): Promise<any> {
+        console.log('🔍 Starting connection debug...');
+        
+        const testUrls = [
+            'http://localhost:8000',
+            'http://127.0.0.1:8000',
+            'http://api:8000'
+        ];
+        
+        const debugInfo = {
+            currentConfig: {
+                baseURL: this.baseURL,
+                environment: typeof window !== 'undefined' ? 'client' : 'server',
+                envVars: {
+                    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
+                    API_URL: process.env.API_URL,
+                    NODE_ENV: process.env.NODE_ENV
+                }
+            },
+            testResults: {} as any
+        };
+        
+        // Test each URL
+        for (const testUrl of testUrls) {
+            try {
+                console.log(`🧪 Testing ${testUrl}/health...`);
+                const response = await fetch(`${testUrl}/health`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' },
+                    signal: AbortSignal.timeout(5000)
+                });
+                
+                debugInfo.testResults[testUrl] = {
+                    success: true,
+                    status: response.status,
+                    statusText: response.statusText,
+                    headers: Object.fromEntries(response.headers.entries())
+                };
+                
+                if (response.ok) {
+                    console.log(`✅ ${testUrl} - SUCCESS (${response.status})`);
+                } else {
+                    console.log(`⚠️ ${testUrl} - HTTP Error (${response.status})`);
+                }
+            } catch (error) {
+                console.log(`❌ ${testUrl} - FAILED: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                debugInfo.testResults[testUrl] = {
+                    success: false,
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                };
+            }
+        }
+        
+        console.log('🔍 Connection debug complete:', debugInfo);
+        return debugInfo;
     }
 
     // Authentication methods
@@ -340,15 +499,11 @@ class ApiClient {
         });
     }
 
-    async getAssessments(): Promise<Assessment[]> {
-        // Use cache buster to ensure fresh data
-        const url = cacheBuster.bustCache('/assessments/', 'assessments_list');
-        const response = await this.request<{assessments: Assessment[], total: number, page: number, limit: number, pages: number}>(url, {
-            headers: {
-                ...getNoCacheHeaders()
-            }
-        });
-        return response.assessments;
+    async getAssessments(): Promise<{assessments: Assessment[], total: number, page: number, limit: number, pages: number}> {
+        // Temporarily disable cache buster to debug CORS issues
+        const url = '/assessments/';
+        const response = await this.request<{assessments: Assessment[], total: number, page: number, limit: number, pages: number}>(url);
+        return response;
     }
 
     async getAssessment(id: string): Promise<Assessment> {
@@ -510,28 +665,79 @@ class ApiClient {
         });
     }
 
-    async getReports(assessmentId: string): Promise<Report[]> {
-        // Add cache-busting timestamp to ensure fresh data
-        const timestamp = Date.now();
-        const response = await this.request<{reports: Report[]}>(
-            `/reports/${assessmentId}?t=${timestamp}`, 
-            {
-                headers: {
-                    'Cache-Control': 'no-cache'
+    async getReports(assessmentId?: string): Promise<Report[]> {
+        if (assessmentId) {
+            // Get reports for specific assessment
+            const timestamp = Date.now();
+            const response = await this.request<{reports: Report[]}>(
+                `/reports/${assessmentId}?t=${timestamp}`, 
+                {
+                    headers: {
+                        'Cache-Control': 'no-cache'
+                    }
                 }
+            );
+            return response.reports || [];
+        } else {
+            // For now, return empty array to prevent infinite loops
+            // This avoids the recursive call chain that causes CORS issues
+            console.log('🔄 getReports() called without assessmentId - returning empty array to prevent loops');
+            return [];
+            
+            // TODO: Implement proper reports endpoint that doesn't require assessment iteration
+            /*
+            try {
+                const assessmentsResponse = await this.getAssessments();
+                const allReports: Report[] = [];
+                
+                for (const assessment of assessmentsResponse.assessments) {
+                    try {
+                        const reportsForAssessment = await this.getReports(assessment.id);
+                        allReports.push(...reportsForAssessment);
+                    } catch (error) {
+                        console.warn(`Failed to fetch reports for assessment ${assessment.id}:`, error);
+                        // Continue with other assessments
+                    }
+                }
+                
+                return allReports;
+            } catch (error) {
+                console.error('Failed to fetch assessments for reports:', error);
+                return [];
             }
-        );
-        return response.reports || [];
+            */
+        }
     }
 
-    async getReport(reportId: string): Promise<Report> {
+    async getReport(reportId: string, assessmentId?: string): Promise<Report> {
+        if (assessmentId) {
+            return this.request<Report>(`/reports/${assessmentId}/reports/${reportId}`);
+        }
+        // Fallback - try to get assessment ID from the report itself or use generic endpoint
         return this.request<Report>(`/reports/${reportId}`);
     }
 
-    async downloadReport(reportId: string, format: 'pdf' | 'docx' | 'html' = 'pdf'): Promise<Blob> {
-        const response = await fetch(`${this.baseURL}/reports/${reportId}/download?format=${format}`, {
+    async downloadReport(reportId: string, format: 'pdf' | 'docx' | 'html' = 'pdf', assessmentId?: string): Promise<Blob> {
+        let downloadUrl;
+        if (assessmentId) {
+            downloadUrl = `${this.baseURL}/reports/${assessmentId}/reports/${reportId}/download?format=${format}`;
+        } else {
+            // Try to get assessment ID from the report data first
+            try {
+                const report = await this.getReport(reportId);
+                if (report && (report as any).assessment_id) {
+                    downloadUrl = `${this.baseURL}/reports/${(report as any).assessment_id}/reports/${reportId}/download?format=${format}`;
+                } else {
+                    downloadUrl = `${this.baseURL}/reports/${reportId}/download?format=${format}`;
+                }
+            } catch {
+                downloadUrl = `${this.baseURL}/reports/${reportId}/download?format=${format}`;
+            }
+        }
+        
+        const response = await fetch(downloadUrl, {
             headers: {
-                Authorization: `Bearer ${this.token}`,
+                'Authorization': `Bearer ${this.token}`,
             },
         });
 
@@ -756,9 +962,10 @@ class ApiClient {
     }> {
         try {
             // Use the base URL directly for health endpoint (no API prefix needed)
-            const url = `${API_BASE_URL}/health`;
+            const healthUrl = `${getApiBaseUrl()}/health`;
+            console.log('Health check attempting to connect to:', healthUrl);
             
-            const response = await fetch(url, {
+            const response = await fetch(healthUrl, {
                 method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
@@ -768,15 +975,29 @@ class ApiClient {
             });
             
             if (!response.ok) {
+                console.error(`Health check HTTP error: ${response.status} ${response.statusText}`);
                 throw new Error(`Health check failed: ${response.status}`);
             }
             
-            return await response.json();
+            const healthData = await response.json();
+            console.log('Health check successful:', healthData);
+            return healthData;
         } catch (error) {
-            console.error('Health check error:', error);
+            console.error('Health check error details:', {
+                error: error,
+                message: error instanceof Error ? error.message : 'Unknown error',
+                healthUrl: `${getApiBaseUrl()}/health`,
+                baseURL: getApiBaseUrl(),
+                environment: typeof window !== 'undefined' ? 'client' : 'server',
+                envVars: {
+                    NEXT_PUBLIC_API_URL: typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_API_URL : 'N/A',
+                    API_URL: typeof window === 'undefined' ? process.env.API_URL : 'N/A'
+                }
+            });
             // Return a fallback response instead of throwing
             return {
-                status: 'unknown',
+                status: 'connection_failed',
+                error: error instanceof Error ? error.message : 'Unknown error',
                 timestamp: new Date().toISOString(),
                 system: {
                     cpu_usage_percent: 0,
@@ -819,7 +1040,7 @@ class ApiClient {
             ...options,
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': this.getStoredToken() ? `Bearer ${this.getStoredToken()}` : '',
+                ...(this.getStoredToken() && { 'Authorization': `Bearer ${this.getStoredToken()}` }),
                 ...getNoCacheHeaders(),
                 ...options?.headers,
             },
@@ -1006,20 +1227,123 @@ class ApiClient {
         return this.chatRequest(`/analytics?days=${days}`);
     }
 
+    // Network debugging utility
+    async debugConnection(): Promise<{
+        success: boolean;
+        details: any;
+        recommendations: string[];
+    }> {
+        const results = {
+            success: false,
+            details: {
+                environment: typeof window !== 'undefined' ? 'client' : 'server',
+                baseURL: getApiBaseUrl(),
+                apiPrefix: this.baseURL,
+                envVars: {
+                    NEXT_PUBLIC_API_URL: typeof window !== 'undefined' ? process.env.NEXT_PUBLIC_API_URL : 'N/A',
+                    API_URL: typeof window === 'undefined' ? process.env.API_URL : 'N/A'
+                },
+                tests: {} as any
+            },
+            recommendations: [] as string[]
+        };
+
+        // Test 1: Basic health check
+        try {
+            const healthResult = await this.checkHealth();
+            results.details.tests.healthCheck = {
+                success: healthResult.status !== 'connection_failed',
+                status: healthResult.status,
+                error: healthResult.error || null
+            };
+        } catch (error) {
+            results.details.tests.healthCheck = {
+                success: false,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            };
+        }
+
+        // Test 2: Try alternative URLs
+        const alternativeUrls = [
+            'http://localhost:8000',
+            'http://host.docker.internal:8000',
+            'http://127.0.0.1:8000',
+            'http://api:8000'
+        ];
+
+        for (const url of alternativeUrls) {
+            try {
+                const response = await fetch(`${url}/health`, {
+                    method: 'GET',
+                    signal: AbortSignal.timeout(5000)
+                });
+                results.details.tests[`alternative_${url.replace(/[^a-z0-9]/gi, '_')}`] = {
+                    success: response.ok,
+                    status: response.status
+                };
+                if (response.ok) {
+                    results.success = true;
+                    results.recommendations.push(`Working URL found: ${url}`);
+                }
+            } catch (error) {
+                results.details.tests[`alternative_${url.replace(/[^a-z0-9]/gi, '_')}`] = {
+                    success: false,
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                };
+            }
+        }
+
+        // Generate recommendations
+        if (!results.success) {
+            results.recommendations.push('1. Ensure the backend API server is running');
+            results.recommendations.push('2. Check if Docker containers are properly started');
+            results.recommendations.push('3. Verify network connectivity between containers');
+            results.recommendations.push('4. Check CORS configuration in backend');
+            results.recommendations.push('5. Validate environment variables are set correctly');
+        }
+
+        return results;
+    }
+
     // Simple chat without conversations (for quick questions)
     async sendSimpleMessage(message: string, sessionId?: string): Promise<{
         response: string;
         session_id: string;
         timestamp: string;
     }> {
-        return this.request(`${API_BASE_URL}/api/chat/simple`, {
-            method: 'POST',
-            body: JSON.stringify({
-                message,
-                session_id: sessionId || `simple_${Date.now()}`
-            }),
-            useFullUrl: true
-        });
+        const url = `${API_BASE_URL}/api/chat/simple`;
+        const payload = {
+            message,
+            session_id: sessionId || `simple_${Date.now()}`
+        };
+        
+        console.log('🔧 SendSimpleMessage called:', { url, payload, API_BASE_URL });
+        
+        try {
+            // Use direct fetch to avoid authentication and complex headers
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            });
+            
+            console.log('🔧 Response status:', response.status, response.statusText);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('❌ HTTP error response:', errorText);
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const result = await response.json();
+            console.log('✅ SendSimpleMessage success:', result);
+            return result;
+        } catch (error) {
+            console.error('❌ SendSimpleMessage failed:', error);
+            throw error;
+        }
     }
 
     // Intelligent Form Features

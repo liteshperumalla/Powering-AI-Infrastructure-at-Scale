@@ -91,16 +91,11 @@ class Settings(BaseSettings):
         default=None,
         description="Anthropic API key for Claude models"
     )
-    azure_openai_api_key: Optional[SecretStr] = Field(
-        default=None,
-        description="Azure OpenAI API key"
-    )
-    azure_openai_endpoint: Optional[str] = None
-    azure_openai_api_version: str = Field(
-        default="2024-10-21",
-        description="Azure OpenAI API version"
-    )
     
+    llm_provider: str = Field(
+        default="openai",
+        description="Primary LLM provider: openai, gemini, anthropic"
+    )
     llm_model: str = Field(
         default="gpt-4",
         description="Default LLM model for agents"
@@ -186,7 +181,16 @@ class Settings(BaseSettings):
     
     # CORS Settings
     cors_origins: List[str] = Field(
-        default=["http://localhost:3000", "http://localhost:8080"],
+        default=[
+            "http://localhost:3000",
+            "http://localhost:8080", 
+            "http://127.0.0.1:3000",
+            "http://127.0.0.1:8080",
+            "https://localhost:3000",
+            "https://127.0.0.1:3000",
+            "http://frontend:3000",
+            "http://host.docker.internal:3000"
+        ],
         description="Allowed CORS origins"
     )
     cors_allow_credentials: bool = True

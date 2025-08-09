@@ -135,6 +135,8 @@ export default function ChatPage() {
             loadConversations();
             loadAvailableData();
         }
+        // Initialize the chat even without authentication for simple chat mode
+        console.log('Chat page initialized. isAuthenticated:', isAuthenticated, 'authLoading:', authLoading);
     }, [isAuthenticated, authLoading]);
     
     const loadAvailableData = async () => {
@@ -222,6 +224,15 @@ export default function ChatPage() {
             setIsLoading(true);
             setError(null);
             
+            // Check if user is authenticated before trying to create a conversation
+            if (!isAuthenticated) {
+                console.log('🚫 User not authenticated, cannot start conversation');
+                setError('Please log in to start a conversation, or use simple chat mode below.');
+                setNewChatDialog(false);
+                return;
+            }
+            
+            console.log('🚀 Starting new conversation for authenticated user');
             const conversation = await apiClient.startConversation({
                 title: title || 'New Chat',
                 context: context || selectedContext,
@@ -250,23 +261,38 @@ export default function ChatPage() {
             
             setNewChatDialog(false);
             setError(null);
+            console.log('✅ Conversation started successfully:', conversation.id);
         } catch (error) {
-            console.error('Failed to start conversation:', error);
+            console.error('❌ Failed to start conversation:', error);
             
-            // Handle specific AI Assistant not available error
-            if (error instanceof Error && error.message.includes('AI Assistant feature is not yet available')) {
+            // Handle authentication errors gracefully
+            if (error instanceof Error && (
+                error.message.includes('401') || 
+                error.message.includes('unauthorized') || 
+                error.message.includes('authentication')
+            )) {
+                setError('Authentication required. Please log in to start conversations, or use simple chat mode below.');
+            } else if (error instanceof Error && error.message.includes('AI Assistant feature is not yet available')) {
                 setError('🚧 AI Assistant is currently under development. This feature will be available soon! Please check back later.');
             } else {
-                setError('Failed to start new conversation. Please try again later.');
+                setError('Failed to start new conversation. You can still use simple chat mode below.');
             }
+            
+            setNewChatDialog(false);
         } finally {
             setIsLoading(false);
         }
     };
     
     const sendMessage = async () => {
-        if (!newMessage.trim() || isSending || !currentConversation) return;
+        if (!newMessage.trim() || isSending) return;
         
+        console.log('🚀 sendMessage started');
+        console.log('📊 Current state:', { 
+            isAuthenticated, 
+            currentConversation: currentConversation?.id || 'none', 
+            messageLength: newMessage.trim().length 
+        });
         const messageContent = newMessage.trim();
         setNewMessage('');
         setIsSending(true);
@@ -282,30 +308,64 @@ export default function ChatPage() {
         setMessages(prev => [...prev, userMessage]);
         
         try {
-            // Send message to API
-            const botResponse = await apiClient.sendMessage(currentConversation.id, {
-                content: messageContent,
-                context: currentConversation.context,
-                assessment_id: currentConversation.assessment_id,
-                report_id: currentConversation.report_id
-            });
+            let botResponse: ChatMessage;
+            
+            // If authenticated and has conversation, use conversation mode
+            if (isAuthenticated && currentConversation) {
+                console.log('🗨️ Using conversation mode');
+                try {
+                    const response = await apiClient.sendMessage(currentConversation.id, {
+                        content: messageContent,
+                        context: currentConversation.context,
+                        assessment_id: currentConversation.assessment_id,
+                        report_id: currentConversation.report_id
+                    });
+                    
+                    botResponse = response;
+                    
+                    // Update conversation in sidebar
+                    setConversations(prev => prev.map(conv => 
+                        conv.id === currentConversation.id 
+                            ? { ...conv, message_count: conv.message_count + 2, last_activity: new Date().toISOString() }
+                            : conv
+                    ));
+                } catch (conversationError) {
+                    console.log('🔄 Conversation mode failed, falling back to simple chat');
+                    throw conversationError; // This will trigger the fallback below
+                }
+            } else {
+                // Use simple chat when not authenticated or no conversation
+                console.log('🤖 Using simple chat mode (auth:', isAuthenticated, ', conversation:', !!currentConversation, ')');
+                const simpleResponse = await apiClient.sendSimpleMessage(messageContent);
+                console.log('✅ Simple chat response received:', simpleResponse);
+                botResponse = {
+                    id: `bot_${Date.now()}`,
+                    role: 'assistant' as const,
+                    content: simpleResponse.response,
+                    timestamp: new Date().toISOString(),
+                    metadata: { simple_chat: true }
+                };
+            }
             
             // Add bot response to messages
-            setMessages(prev => [...prev, botResponse]);
-            
-            // Update conversation in sidebar
-            setConversations(prev => prev.map(conv => 
-                conv.id === currentConversation.id 
-                    ? { ...conv, message_count: conv.message_count + 2, last_activity: new Date().toISOString() }
-                    : conv
-            ));
+            console.log('🔄 Adding bot response to messages:', botResponse);
+            setMessages(prev => {
+                const newMessages = [...prev, botResponse];
+                console.log('✅ Messages state updated:', newMessages);
+                return newMessages;
+            });
+            console.log('🧹 Clearing error state...');
+            setError(null); // Clear any previous errors
+            console.log('✅ Error state cleared, message should be visible');
             
         } catch (error) {
-            console.error('Failed to send message:', error);
+            console.error('❌ Primary chat failed:', error);
             
             // Fallback to simple chat if conversational chat fails
             try {
+                console.log('🔄 Trying simple chat fallback...');
                 const simpleResponse = await apiClient.sendSimpleMessage(messageContent);
+                console.log('✅ Fallback simple chat worked:', simpleResponse);
                 const botResponse = {
                     id: `bot_${Date.now()}`,
                     role: 'assistant' as const,
@@ -317,7 +377,12 @@ export default function ChatPage() {
                 setMessages(prev => [...prev, botResponse]);
                 setError(null); // Clear error if fallback works
             } catch (fallbackError) {
-                console.error('Simple chat fallback also failed:', fallbackError);
+                console.error('❌ Simple chat fallback also failed:', fallbackError);
+                console.error('❌ Full error details:', {
+                    error: fallbackError,
+                    message: fallbackError?.message,
+                    stack: fallbackError?.stack
+                });
                 setError('I apologize, but I\'m experiencing technical difficulties. Please try again in a moment, or contact our support team if you need immediate assistance.');
                 
                 // Remove the temporary user message on error
@@ -360,9 +425,21 @@ export default function ChatPage() {
     };
     
     const endConversation = async () => {
-        if (!currentConversation) return;
+        if (!currentConversation) {
+            console.log('❌ No current conversation to end');
+            setEndChatDialog(false);
+            return;
+        }
+        
+        if (!isAuthenticated) {
+            console.log('❌ User not authenticated, cannot end conversation');
+            setError('Authentication required to end conversations');
+            setEndChatDialog(false);
+            return;
+        }
         
         try {
+            console.log('🔚 Ending conversation:', currentConversation.id);
             await apiClient.endConversation(currentConversation.id, satisfactionRating || undefined);
             
             // Update conversation status
@@ -372,11 +449,24 @@ export default function ChatPage() {
                     : conv
             ));
             
+            // Clear current conversation and messages
+            setCurrentConversation(null);
+            setMessages([]);
+            
             setEndChatDialog(false);
             setSatisfactionRating(null);
+            console.log('✅ Conversation ended successfully');
         } catch (error) {
-            console.error('Failed to end conversation:', error);
-            setError('Failed to end conversation');
+            console.error('❌ Failed to end conversation:', error);
+            
+            // Handle authentication errors
+            if (error instanceof Error && error.message.includes('401')) {
+                setError('Authentication required to end conversations');
+            } else {
+                setError('Failed to end conversation');
+            }
+            
+            setEndChatDialog(false);
         }
     };
     
@@ -462,79 +552,106 @@ export default function ChatPage() {
             {/* Header */}
             <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Typography variant="h6">Chat History</Typography>
-                    <IconButton
-                        size="small"
-                        onClick={() => setNewChatDialog(true)}
-                        color="primary"
-                    >
-                        <AddIcon />
-                    </IconButton>
+                    <Typography variant="h6">
+                        {isAuthenticated ? 'Chat History' : 'AI Assistant'}
+                    </Typography>
+                    {isAuthenticated && (
+                        <IconButton
+                            size="small"
+                            onClick={() => setNewChatDialog(true)}
+                            color="primary"
+                        >
+                            <AddIcon />
+                        </IconButton>
+                    )}
                 </Box>
             </Box>
             
             {/* Conversations List */}
             <List sx={{ flexGrow: 1, overflow: 'auto' }}>
-                {conversations.map((conversation) => (
-                    <ListItem
-                        key={conversation.id}
-                        button
-                        selected={currentConversation?.id === conversation.id}
-                        onClick={() => loadConversation(conversation.id)}
-                        sx={{
-                            flexDirection: 'column',
-                            alignItems: 'stretch',
-                            py: 1.5
-                        }}
-                    >
-                        <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                            <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                                <Typography
-                                    variant="subtitle2"
-                                    noWrap
-                                    sx={{ fontWeight: conversation.escalated ? 'bold' : 'normal' }}
-                                >
-                                    {conversation.title}
-                                </Typography>
-                                <Typography variant="caption" color="text.secondary">
-                                    {formatMessageTime(conversation.last_activity)} • {conversation.message_count} messages
-                                </Typography>
-                            </Box>
-                            <IconButton
-                                size="small"
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setMenuAnchor(e.currentTarget);
+                {isAuthenticated ? (
+                    <>
+                        {conversations.map((conversation) => (
+                            <ListItem
+                                key={conversation.id}
+                                button
+                                selected={currentConversation?.id === conversation.id}
+                                onClick={() => loadConversation(conversation.id)}
+                                sx={{
+                                    flexDirection: 'column',
+                                    alignItems: 'stretch',
+                                    py: 1.5
                                 }}
                             >
-                                <MoreVertIcon fontSize="small" />
-                            </IconButton>
-                        </Box>
+                                <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+                                    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
+                                        <Typography
+                                            variant="subtitle2"
+                                            noWrap
+                                            sx={{ fontWeight: conversation.escalated ? 'bold' : 'normal' }}
+                                        >
+                                            {conversation.title}
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            {formatMessageTime(conversation.last_activity)} • {conversation.message_count} messages
+                                        </Typography>
+                                    </Box>
+                                    <IconButton
+                                        size="small"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setMenuAnchor(e.currentTarget);
+                                        }}
+                                    >
+                                        <MoreVertIcon fontSize="small" />
+                                    </IconButton>
+                                </Box>
+                                
+                                <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, gap: 1 }}>
+                                    <Chip
+                                        label={getContextLabel(conversation.context)}
+                                        size="small"
+                                        variant="outlined"
+                                        sx={{ fontSize: '0.7rem' }}
+                                    />
+                                    {conversation.escalated && (
+                                        <Chip
+                                            label="Escalated"
+                                            size="small"
+                                            color="warning"
+                                            sx={{ fontSize: '0.7rem' }}
+                                        />
+                                    )}
+                                </Box>
+                            </ListItem>
+                        ))}
                         
-                        <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, gap: 1 }}>
-                            <Chip
-                                label={getContextLabel(conversation.context)}
-                                size="small"
-                                variant="outlined"
-                                sx={{ fontSize: '0.7rem' }}
-                            />
-                            {conversation.escalated && (
-                                <Chip
-                                    label="Escalated"
-                                    size="small"
-                                    color="warning"
-                                    sx={{ fontSize: '0.7rem' }}
+                        {conversations.length === 0 && !isLoading && (
+                            <ListItem>
+                                <ListItemText
+                                    primary="No conversations yet"
+                                    secondary="Start a new chat to begin"
                                 />
-                            )}
-                        </Box>
-                    </ListItem>
-                ))}
-                
-                {conversations.length === 0 && !isLoading && (
+                            </ListItem>
+                        )}
+                    </>
+                ) : (
                     <ListItem>
                         <ListItemText
-                            primary="No conversations yet"
-                            secondary="Start a new chat to begin"
+                            primary={
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <BotIcon color="primary" />
+                                    <Typography variant="subtitle2">
+                                        Simple Chat Mode
+                                    </Typography>
+                                </Box>
+                            }
+                            secondary={
+                                <Typography variant="caption" color="text.secondary">
+                                    Chat directly with our AI assistant! 
+                                    No login required for quick questions and help.
+                                </Typography>
+                            }
                         />
                     </ListItem>
                 )}
@@ -542,14 +659,20 @@ export default function ChatPage() {
             
             {/* Footer */}
             <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-                <Button
-                    fullWidth
-                    variant="outlined"
-                    startIcon={<SettingsIcon />}
-                    onClick={() => setSettingsDialog(true)}
-                >
-                    Chat Settings
-                </Button>
+                {isAuthenticated ? (
+                    <Button
+                        fullWidth
+                        variant="outlined"
+                        startIcon={<SettingsIcon />}
+                        onClick={() => setSettingsDialog(true)}
+                    >
+                        Chat Settings
+                    </Button>
+                ) : (
+                    <Typography variant="caption" color="text.secondary" textAlign="center">
+                        💡 Login for conversation history and advanced features
+                    </Typography>
+                )}
             </Box>
         </Box>
     );
@@ -576,7 +699,7 @@ export default function ChatPage() {
     }
 
     return (
-        <ProtectedRoute>
+        <ProtectedRoute requireAuth={false}>
             <Navigation title="AI Assistant">
                 <Box sx={{ display: 'flex', height: 'calc(100vh - 128px)', position: 'relative' }}>
                     {/* Sidebar Drawer */}
@@ -641,7 +764,7 @@ export default function ChatPage() {
                                     </IconButton>
                                 </Tooltip>
                                 
-                                {currentConversation && (
+                                {currentConversation ? (
                                     <>
                                         <Typography variant="h6">
                                             {currentConversation.title}
@@ -656,6 +779,21 @@ export default function ChatPage() {
                                                 label="Escalated to Human Support"
                                                 size="small"
                                                 color="warning"
+                                            />
+                                        )}
+                                    </>
+                                ) : (
+                                    <>
+                                        <AIIcon color="primary" sx={{ mr: 1 }} />
+                                        <Typography variant="h6">
+                                            AI Infrastructure Assistant
+                                        </Typography>
+                                        {!isAuthenticated && (
+                                            <Chip
+                                                label="Simple Chat Mode"
+                                                size="small"
+                                                variant="outlined"
+                                                color="primary"
                                             />
                                         )}
                                     </>
@@ -687,6 +825,7 @@ export default function ChatPage() {
                         >
                             {error && (
                                 <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
+                                    {console.log('🚨 Displaying error message:', error)}
                                     {error}
                                 </Alert>
                             )}
@@ -695,7 +834,7 @@ export default function ChatPage() {
                                 <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
                                     <CircularProgress />
                                 </Box>
-                            ) : !currentConversation ? (
+                            ) : (!currentConversation && messages.length === 0) ? (
                                 <Box
                                     sx={{
                                         display: 'flex',
@@ -708,20 +847,29 @@ export default function ChatPage() {
                                 >
                                     <AIIcon sx={{ fontSize: 80, color: 'primary.main', mb: 2 }} />
                                     <Typography variant="h4" gutterBottom>
-                                        Welcome to AI Assistant
+                                        {isAuthenticated ? 'Welcome to AI Assistant' : '👋 AI Infrastructure Assistant'}
                                     </Typography>
                                     <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: 600 }}>
-                                        I'm here to help you with infrastructure planning, assessments, reports, 
-                                        technical questions, and decision-making. Start a conversation to begin!
+                                        {isAuthenticated 
+                                            ? "I'm here to help you with infrastructure planning, assessments, reports, technical questions, and decision-making. Start a conversation to begin!"
+                                            : "Ask me anything about cloud infrastructure, DevOps, Kubernetes, AWS, Azure, GCP, and more! Type your question below to get started."
+                                        }
                                     </Typography>
-                                    <Button
-                                        variant="contained"
-                                        size="large"
-                                        startIcon={<AddIcon />}
-                                        onClick={() => setNewChatDialog(true)}
-                                    >
-                                        Start New Conversation
-                                    </Button>
+                                    {isAuthenticated && (
+                                        <Button
+                                            variant="contained"
+                                            size="large"
+                                            startIcon={<AddIcon />}
+                                            onClick={() => setNewChatDialog(true)}
+                                        >
+                                            Start New Conversation
+                                        </Button>
+                                    )}
+                                    {!isAuthenticated && (
+                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 2 }}>
+                                            💡 Simple chat mode - just type and press Enter!
+                                        </Typography>
+                                    )}
                                 </Box>
                             ) : (
                                 <>
@@ -732,7 +880,7 @@ export default function ChatPage() {
                         </Box>
                         
                         {/* Message Input */}
-                        {currentConversation && currentConversation.status !== 'resolved' && (
+                        {(!currentConversation || currentConversation.status !== 'resolved') && (
                             <Paper
                                 elevation={3}
                                 sx={{
@@ -748,7 +896,7 @@ export default function ChatPage() {
                                         fullWidth
                                         multiline
                                         maxRows={4}
-                                        placeholder="Type your message..."
+                                        placeholder={currentConversation ? "Type your message..." : "Ask me anything about cloud infrastructure..."}
                                         value={newMessage}
                                         onChange={(e) => setNewMessage(e.target.value)}
                                         onKeyPress={handleKeyPress}
@@ -765,6 +913,11 @@ export default function ChatPage() {
                                         {isSending ? <CircularProgress size={24} /> : <SendIcon />}
                                     </IconButton>
                                 </Box>
+                                {!currentConversation && (
+                                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                                        💡 You can ask general questions directly, or start a new conversation for more advanced features.
+                                    </Typography>
+                                )}
                             </Paper>
                         )}
                     </Box>
@@ -910,6 +1063,60 @@ export default function ChatPage() {
                         <Button onClick={() => setEndChatDialog(false)}>Cancel</Button>
                         <Button onClick={endConversation} variant="contained">
                             End Conversation
+                        </Button>
+                    </DialogActions>
+                </Dialog>
+                
+                {/* Chat Settings Dialog */}
+                <Dialog open={settingsDialog} onClose={() => setSettingsDialog(false)} maxWidth="sm" fullWidth>
+                    <DialogTitle>Chat Settings</DialogTitle>
+                    <DialogContent>
+                        <Typography variant="body1" sx={{ mb: 3 }}>
+                            Configure your chat preferences and settings.
+                        </Typography>
+                        
+                        <Box sx={{ mb: 3 }}>
+                            <Typography variant="h6" sx={{ mb: 2 }}>Chat Preferences</Typography>
+                            
+                            <FormControl fullWidth sx={{ mb: 2 }}>
+                                <InputLabel>Default Context</InputLabel>
+                                <Select
+                                    value={selectedContext}
+                                    onChange={(e) => setSelectedContext(e.target.value)}
+                                    label="Default Context"
+                                >
+                                    {CONVERSATION_CONTEXTS.map((context) => (
+                                        <MenuItem key={context.value} value={context.value}>
+                                            {context.icon} {context.label}
+                                        </MenuItem>
+                                    ))}
+                                </Select>
+                            </FormControl>
+                        </Box>
+                        
+                        <Box sx={{ mb: 3 }}>
+                            <Typography variant="h6" sx={{ mb: 2 }}>About</Typography>
+                            <Typography variant="body2" color="text.secondary">
+                                AI Infrastructure Assistant helps you with cloud architecture, DevOps, 
+                                and infrastructure planning. The assistant uses advanced AI to provide 
+                                expert guidance and recommendations.
+                            </Typography>
+                        </Box>
+                        
+                        <Box sx={{ mb: 2, p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
+                            <Typography variant="body2" color="info.contrastText">
+                                💡 <strong>Tip:</strong> For the best experience, provide detailed context 
+                                about your infrastructure needs and requirements.
+                            </Typography>
+                        </Box>
+                    </DialogContent>
+                    <DialogActions>
+                        <Button onClick={() => setSettingsDialog(false)}>Close</Button>
+                        <Button onClick={() => {
+                            setSettingsDialog(false);
+                            // You could add logic to save settings here
+                        }} variant="contained">
+                            Save Settings
                         </Button>
                     </DialogActions>
                 </Dialog>

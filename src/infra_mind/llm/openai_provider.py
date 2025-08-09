@@ -209,22 +209,23 @@ class OpenAIProvider(LLMProviderInterface):
             )
             
             # Convert to appropriate LLM error
-            if "authentication" in str(e).lower() or "api_key" in str(e).lower():
+            error_str = str(e) if e is not None else ""
+            if "authentication" in error_str.lower() or "api_key" in error_str.lower():
                 raise LLMAuthenticationError(
                     f"OpenAI authentication failed: {str(e)}",
                     self.provider_name
                 )
-            elif "rate_limit" in str(e).lower():
+            elif "rate_limit" in error_str.lower():
                 raise LLMRateLimitError(
                     f"OpenAI rate limit exceeded: {str(e)}",
                     self.provider_name
                 )
-            elif "quota" in str(e).lower() or "billing" in str(e).lower():
+            elif "quota" in error_str.lower() or "billing" in error_str.lower():
                 raise LLMQuotaExceededError(
                     f"OpenAI quota exceeded: {str(e)}",
                     self.provider_name
                 )
-            elif "timeout" in str(e).lower():
+            elif "timeout" in error_str.lower():
                 raise LLMTimeoutError(
                     f"OpenAI request timeout: {str(e)}",
                     self.provider_name
@@ -279,11 +280,12 @@ class OpenAIProvider(LLMProviderInterface):
                 last_exception = e
                 
                 # Don't retry on authentication errors
-                if "authentication" in str(e).lower() or "api_key" in str(e).lower():
+                error_str = str(e) if e is not None else ""
+                if "authentication" in error_str.lower() or "api_key" in error_str.lower():
                     raise e
                 
                 # Don't retry on quota exceeded
-                if "quota" in str(e).lower() or "billing" in str(e).lower():
+                if "quota" in error_str.lower() or "billing" in error_str.lower():
                     raise e
                 
                 # For rate limits and other errors, retry with backoff
