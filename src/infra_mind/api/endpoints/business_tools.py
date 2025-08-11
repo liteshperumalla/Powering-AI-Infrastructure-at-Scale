@@ -19,7 +19,7 @@ from ...integrations.business_tools import (
     SlackMessage,
     TeamsMessage
 )
-from ...core.auth import get_current_user
+from .auth import get_current_user
 from ...models.user import User
 
 logger = logging.getLogger(__name__)

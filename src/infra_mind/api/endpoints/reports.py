@@ -19,7 +19,7 @@ from ...models.user import User
 from ...services.report_service import ReportService
 from ...schemas.base import Priority
 from ...core.rbac import require_permission, Permission, AccessControl
-from ...api.auth import get_current_user
+from .auth import get_current_user
 from fastapi import Depends
 
 router = APIRouter()
@@ -880,7 +880,7 @@ async def create_report_version(
 async def compare_report_versions(
     report_id_1: str,
     report_id_2: str,
-    current_user: str = "current_user"  # TODO: Add proper auth dependency
+    current_user: User = Depends(get_current_user)
 ):
     """
     Compare two versions of a report.
@@ -892,7 +892,7 @@ async def compare_report_versions(
         comparison = await report_service.compare_report_versions(
             report_id_1=report_id_1,
             report_id_2=report_id_2,
-            user_id=current_user
+            user_id=str(current_user.id)
         )
         
         logger.info(f"Compared reports {report_id_1} and {report_id_2}")

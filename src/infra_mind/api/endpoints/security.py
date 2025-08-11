@@ -9,7 +9,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime, timezone
 import logging
 
-from ...core.auth import get_current_active_user
+from .auth import get_current_user
 from ...core.rbac import require_permission, Permission
 from ...core.security_audit import SecurityAuditor, run_security_audit, VulnerabilityLevel, SecurityTestType
 from ...core.incident_response import (

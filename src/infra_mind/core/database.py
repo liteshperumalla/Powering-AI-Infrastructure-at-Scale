@@ -265,20 +265,41 @@ async def _safe_create_index(collection, keys, **kwargs):
     Returns:
         bool: True if index was created or already exists, False on error
     """
+    index_name = kwargs.get('name', 'unnamed')
+    
     try:
+        # First check if index already exists
+        existing_indexes = await collection.list_indexes().to_list(length=None)
+        existing_names = [idx.get('name') for idx in existing_indexes]
+        
+        if index_name in existing_names:
+            logger.debug(f"Index '{index_name}' already exists, skipping creation")
+            return True
+        
+        # Create the index if it doesn't exist
         await collection.create_index(keys, **kwargs)
+        logger.debug(f"Created index '{index_name}' successfully")
         return True
+        
     except OperationFailure as e:
         error_code = e.details.get('code', 0)
         if error_code == 85:  # IndexOptionsConflict
-            index_name = kwargs.get('name', 'unnamed')
-            logger.debug(f"Index '{index_name}' already exists with different options, skipping")
-            return True
+            logger.warning(f"Index '{index_name}' already exists with different options")
+            # Try to drop and recreate the index
+            try:
+                logger.info(f"Dropping existing index '{index_name}' and recreating...")
+                await collection.drop_index(index_name)
+                await collection.create_index(keys, **kwargs)
+                logger.info(f"Successfully recreated index '{index_name}'")
+                return True
+            except Exception as drop_error:
+                logger.error(f"Failed to drop and recreate index '{index_name}': {drop_error}")
+                return False
         else:
-            logger.warning(f"Failed to create index '{kwargs.get('name', 'unnamed')}': {e}")
+            logger.warning(f"Failed to create index '{index_name}': {e}")
             return False
     except Exception as e:
-        logger.error(f"Unexpected error creating index '{kwargs.get('name', 'unnamed')}': {e}")
+        logger.error(f"Unexpected error creating index '{index_name}': {e}")
         return False
 
 
@@ -297,287 +318,162 @@ async def create_production_indexes() -> None:
         logger.warning("⚠️ Database not available - skipping index creation")
         return
     
-    try:
-        logger.info("📊 Creating production-optimized database indexes...")
-        
-        # Track index creation performance
-        start_time = datetime.utcnow()
-        created_indexes = []
-        
-        # === USERS COLLECTION INDEXES ===
-        logger.info("👥 Creating user indexes...")
-        try:
-            # Primary user lookup indexes
-            await _safe_create_index(db.database.users, [("email", 1)], unique=True, name="idx_users_email_unique")
-            await _safe_create_index(db.database.users, [("user_id", 1)], unique=True, sparse=True, name="idx_users_user_id")
-            
-            # User status and activity indexes
-            await db.database.users.create_index([("is_active", 1), ("last_login", -1)], name="idx_users_active_login")
-            await db.database.users.create_index([("created_at", -1)], name="idx_users_created_desc")
-            
-            # Business context indexes
-            await db.database.users.create_index([("company_size", 1), ("industry", 1)], name="idx_users_company_industry")
-            await db.database.users.create_index([("subscription_tier", 1), ("is_active", 1)], name="idx_users_subscription_active")
-            
-            # Partial index for premium users only
-            await db.database.users.create_index(
-                [("subscription_tier", 1), ("created_at", -1)],
-                partialFilterExpression={"subscription_tier": {"$in": ["premium", "enterprise"]}},
-                name="idx_users_premium_created"
-            )
-            
-            created_indexes.extend(["users_email_unique", "users_user_id", "users_active_login", "users_created_desc", "users_company_industry", "users_subscription_active", "users_premium_created"])
-            
-        except Exception as e:
-            logger.warning(f"⚠️ Error creating user indexes: {e}")
-        
-        # === ASSESSMENTS COLLECTION INDEXES ===
-        logger.info("📋 Creating assessment indexes...")
-        try:
-            # Primary assessment lookup indexes (using MongoDB _id field - unique by default)
-            await db.database.assessments.create_index([("user_id", 1), ("status", 1)], name="idx_assessments_user_status")
-            await db.database.assessments.create_index([("user_id", 1), ("created_at", -1)], name="idx_assessments_user_created")
-            
-            # Status and priority indexes
-            await db.database.assessments.create_index([("status", 1), ("priority", 1), ("created_at", -1)], name="idx_assessments_status_priority_created")
-            await db.database.assessments.create_index([("status", 1), ("updated_at", -1)], name="idx_assessments_status_updated")
-            
-            # Business context indexes
-            await db.database.assessments.create_index([("business_requirements.industry", 1), ("status", 1)], name="idx_assessments_industry_status")
-            await db.database.assessments.create_index([("business_requirements.company_size", 1), ("created_at", -1)], name="idx_assessments_company_size_created")
-            
-            # Tag and category indexes
-            await db.database.assessments.create_index([("tags", 1)], name="idx_assessments_tags")
-            await db.database.assessments.create_index([("assessment_type", 1), ("status", 1)], name="idx_assessments_type_status")
-            
-            # Performance tracking indexes
-            await db.database.assessments.create_index([("completion_time_seconds", 1)], sparse=True, name="idx_assessments_completion_time")
-            await db.database.assessments.create_index([("agent_count", 1), ("status", 1)], name="idx_assessments_agent_count_status")
-            
-            # TTL index for temporary/draft assessments (30 days)
-            await db.database.assessments.create_index(
-                [("created_at", 1)],
-                expireAfterSeconds=2592000,
-                partialFilterExpression={"status": "draft", "is_temporary": True},
-                name="idx_assessments_draft_ttl"
-            )
-            
-            created_indexes.extend(["assessments_id_unique", "assessments_user_status", "assessments_user_created", "assessments_status_priority_created", "assessments_status_updated", "assessments_industry_status", "assessments_company_size_created", "assessments_tags", "assessments_type_status", "assessments_completion_time", "assessments_agent_count_status", "assessments_draft_ttl"])
-            
-        except Exception as e:
-            logger.warning(f"⚠️ Error creating assessment indexes: {e}")
-        
-        # === RECOMMENDATIONS COLLECTION INDEXES ===
-        logger.info("💡 Creating recommendation indexes...")
-        try:
-            # Primary recommendation lookup indexes - removed unique constraint on nullable field
-            # await db.database.recommendations.create_index([("recommendation_id", 1)], unique=True, name="idx_recommendations_id_unique")
-            await db.database.recommendations.create_index([("assessment_id", 1), ("agent_name", 1)], name="idx_recommendations_assessment_agent")
-            await db.database.recommendations.create_index([("assessment_id", 1), ("confidence_score", -1)], name="idx_recommendations_assessment_confidence")
-            
-            # Agent and performance indexes
-            await db.database.recommendations.create_index([("agent_name", 1), ("created_at", -1)], name="idx_recommendations_agent_created")
-            await db.database.recommendations.create_index([("confidence_score", -1), ("priority", 1)], name="idx_recommendations_confidence_priority")
-            
-            # Business impact and cost indexes
-            await db.database.recommendations.create_index([("business_impact", -1), ("category", 1)], name="idx_recommendations_impact_category")
-            await db.database.recommendations.create_index([("total_estimated_monthly_cost", 1), ("confidence_score", -1)], name="idx_recommendations_cost_confidence")
-            await db.database.recommendations.create_index([("roi_score", -1)], sparse=True, name="idx_recommendations_roi")
-            
-            # Category and provider indexes
-            await db.database.recommendations.create_index([("category", 1), ("priority", 1), ("created_at", -1)], name="idx_recommendations_category_priority_created")
-            await db.database.recommendations.create_index([("cloud_provider", 1), ("service_category", 1)], name="idx_recommendations_provider_service")
-            
-            # Implementation status indexes
-            await db.database.recommendations.create_index([("implementation_status", 1), ("assessment_id", 1)], name="idx_recommendations_status_assessment")
-            await db.database.recommendations.create_index([("is_implemented", 1), ("implementation_date", -1)], sparse=True, name="idx_recommendations_implemented_date")
-            
-            # Text search index for recommendation content
-            await db.database.recommendations.create_index([("title", "text"), ("description", "text"), ("rationale", "text")], name="idx_recommendations_text_search")
-            
-            created_indexes.extend(["recommendations_id_unique", "recommendations_assessment_agent", "recommendations_assessment_confidence", "recommendations_agent_created", "recommendations_confidence_priority", "recommendations_impact_category", "recommendations_cost_confidence", "recommendations_roi", "recommendations_category_priority_created", "recommendations_provider_service", "recommendations_status_assessment", "recommendations_implemented_date", "recommendations_text_search"])
-            
-        except OperationFailure as e:
-            if e.details.get('code') == 85:  # IndexOptionsConflict
-                logger.debug("Some recommendation indexes already exist with different options, continuing...")
-            else:
-                logger.warning(f"⚠️ Error creating recommendation indexes: {e}")
-        except Exception as e:
-            logger.warning(f"⚠️ Error creating recommendation indexes: {e}")
-        
-        # === REPORTS COLLECTION INDEXES ===
-        logger.info("📄 Creating report indexes...")
-        try:
-            # Primary report lookup indexes
-            await db.database.reports.create_index([("report_id", 1)], unique=True, name="idx_reports_id_unique")
-            await db.database.reports.create_index([("assessment_id", 1), ("report_type", 1)], name="idx_reports_assessment_type")
-            await db.database.reports.create_index([("user_id", 1), ("status", 1), ("created_at", -1)], name="idx_reports_user_status_created")
-            
-            # Report status and generation indexes
-            await db.database.reports.create_index([("status", 1), ("priority", 1)], name="idx_reports_status_priority")
-            await db.database.reports.create_index([("generation_status", 1), ("updated_at", -1)], name="idx_reports_generation_updated")
-            
-            # Report type and format indexes
-            await db.database.reports.create_index([("report_type", 1), ("format", 1), ("created_at", -1)], name="idx_reports_type_format_created")
-            await db.database.reports.create_index([("is_public", 1), ("created_at", -1)], name="idx_reports_public_created")
-            
-            # Performance and size indexes
-            await db.database.reports.create_index([("generation_time_seconds", 1)], sparse=True, name="idx_reports_generation_time")
-            await db.database.reports.create_index([("file_size_bytes", 1)], sparse=True, name="idx_reports_file_size")
-            
-            # TTL index for temporary reports (7 days)
-            await db.database.reports.create_index(
-                [("created_at", 1)],
-                expireAfterSeconds=604800,
-                partialFilterExpression={"is_temporary": True},
-                name="idx_reports_temporary_ttl"
-            )
-            
-            created_indexes.extend(["reports_id_unique", "reports_assessment_type", "reports_user_status_created", "reports_status_priority", "reports_generation_updated", "reports_type_format_created", "reports_public_created", "reports_generation_time", "reports_file_size", "reports_temporary_ttl"])
-            
-        except Exception as e:
-            logger.warning(f"⚠️ Error creating report indexes: {e}")
-        
-        # === METRICS COLLECTION INDEXES ===
-        logger.info("📊 Creating metrics indexes...")
-        try:
-            # Time-series optimized indexes
-            await db.database.metrics.create_index([("metric_name", 1), ("timestamp", -1)], name="idx_metrics_name_timestamp")
-            await db.database.metrics.create_index([("metric_type", 1), ("timestamp", -1)], name="idx_metrics_type_timestamp")
-            await db.database.metrics.create_index([("source", 1), ("timestamp", -1)], name="idx_metrics_source_timestamp")
-            await db.database.metrics.create_index([("category", 1), ("timestamp", -1)], name="idx_metrics_category_timestamp")
-            
-            # Value-based indexes for analytics
-            await db.database.metrics.create_index([("metric_name", 1), ("value", 1)], name="idx_metrics_name_value")
-            await db.database.metrics.create_index([("timestamp", -1), ("value", 1)], name="idx_metrics_timestamp_value")
-            
-            # Compound indexes for complex queries
-            await db.database.metrics.create_index([("source", 1), ("metric_name", 1), ("timestamp", -1)], name="idx_metrics_source_name_timestamp")
-            await db.database.metrics.create_index([("metric_type", 1), ("category", 1), ("timestamp", -1)], name="idx_metrics_type_category_timestamp")
-            
-            # TTL index for automatic cleanup (90 days for production)
-            await db.database.metrics.create_index([("timestamp", 1)], expireAfterSeconds=7776000, name="idx_metrics_ttl")
-            
-            # Partial index for high-priority metrics
-            await db.database.metrics.create_index(
-                [("timestamp", -1), ("value", 1)],
-                partialFilterExpression={"priority": {"$gte": 8}},
-                name="idx_metrics_high_priority"
-            )
-            
-            created_indexes.extend(["metrics_name_timestamp", "metrics_type_timestamp", "metrics_source_timestamp", "metrics_category_timestamp", "metrics_name_value", "metrics_timestamp_value", "metrics_source_name_timestamp", "metrics_type_category_timestamp", "metrics_ttl", "metrics_high_priority"])
-            
-        except Exception as e:
-            logger.warning(f"⚠️ Error creating metrics indexes: {e}")
-        
-        # === AGENT METRICS COLLECTION INDEXES ===
-        logger.info("🤖 Creating agent metrics indexes...")
-        try:
-            # Agent performance indexes
-            await db.database.agent_metrics.create_index([("agent_name", 1), ("completed_at", -1)], name="idx_agent_metrics_name_completed")
-            await db.database.agent_metrics.create_index([("assessment_id", 1), ("agent_name", 1)], name="idx_agent_metrics_assessment_agent")
-            await db.database.agent_metrics.create_index([("agent_name", 1), ("execution_time_seconds", 1)], name="idx_agent_metrics_name_execution_time")
-            
-            # Performance analysis indexes
-            await db.database.agent_metrics.create_index([("confidence_score", -1), ("agent_name", 1)], name="idx_agent_metrics_confidence_name")
-            await db.database.agent_metrics.create_index([("success_rate", -1), ("completed_at", -1)], name="idx_agent_metrics_success_completed")
-            await db.database.agent_metrics.create_index([("error_count", 1), ("agent_name", 1)], name="idx_agent_metrics_errors_name")
-            
-            # Resource usage indexes
-            await db.database.agent_metrics.create_index([("memory_usage_mb", 1), ("cpu_usage_percent", 1)], name="idx_agent_metrics_resource_usage")
-            await db.database.agent_metrics.create_index([("tokens_used", 1), ("cost_usd", 1)], name="idx_agent_metrics_tokens_cost")
-            
-            # TTL index for agent metrics cleanup (180 days)
-            await db.database.agent_metrics.create_index([("completed_at", 1)], expireAfterSeconds=15552000, name="idx_agent_metrics_ttl")
-            
-            created_indexes.extend(["agent_metrics_name_completed", "agent_metrics_assessment_agent", "agent_metrics_name_execution_time", "agent_metrics_confidence_name", "agent_metrics_success_completed", "agent_metrics_errors_name", "agent_metrics_resource_usage", "agent_metrics_tokens_cost", "agent_metrics_ttl"])
-            
-        except Exception as e:
-            logger.warning(f"⚠️ Error creating agent metrics indexes: {e}")
-        
-        # === WORKFLOW STATES COLLECTION INDEXES ===
-        logger.info("🔄 Creating workflow state indexes...")
-        try:
-            # Workflow tracking indexes
-            await db.database.workflow_states.create_index([("workflow_id", 1), ("assessment_id", 1)], name="idx_workflow_states_workflow_assessment")
-            await db.database.workflow_states.create_index([("assessment_id", 1), ("state", 1), ("updated_at", -1)], name="idx_workflow_states_assessment_state_updated")
-            await db.database.workflow_states.create_index([("state", 1), ("created_at", -1)], name="idx_workflow_states_state_created")
-            
-            # Agent coordination indexes
-            await db.database.workflow_states.create_index([("current_agent", 1), ("state", 1)], name="idx_workflow_states_agent_state")
-            await db.database.workflow_states.create_index([("next_agents", 1), ("state", 1)], name="idx_workflow_states_next_agents_state")
-            
-            # Performance tracking
-            await db.database.workflow_states.create_index([("execution_time_seconds", 1)], sparse=True, name="idx_workflow_states_execution_time")
-            
-            # TTL index for completed workflows (30 days)
-            await db.database.workflow_states.create_index(
-                [("updated_at", 1)],
-                expireAfterSeconds=2592000,
-                partialFilterExpression={"state": {"$in": ["completed", "failed", "cancelled"]}},
-                name="idx_workflow_states_completed_ttl"
-            )
-            
-            created_indexes.extend(["workflow_states_workflow_assessment", "workflow_states_assessment_state_updated", "workflow_states_state_created", "workflow_states_agent_state", "workflow_states_next_agents_state", "workflow_states_execution_time", "workflow_states_completed_ttl"])
-            
-        except Exception as e:
-            logger.warning(f"⚠️ Error creating workflow state indexes: {e}")
-        
-        # === CACHE COLLECTION INDEXES ===
-        logger.info("💾 Creating cache indexes...")
-        try:
-            # Cache key and expiration indexes
-            await db.database.cache.create_index([("key", 1)], unique=True, name="idx_cache_key_unique")
-            await db.database.cache.create_index([("expires_at", 1)], name="idx_cache_expires")
-            await db.database.cache.create_index([("cache_type", 1), ("created_at", -1)], name="idx_cache_type_created")
-            
-            # TTL index for automatic cache cleanup
-            await db.database.cache.create_index([("expires_at", 1)], expireAfterSeconds=0, name="idx_cache_ttl")
-            
-            # Cache statistics indexes
-            await db.database.cache.create_index([("hit_count", -1)], name="idx_cache_hit_count")
-            await db.database.cache.create_index([("size_bytes", 1)], name="idx_cache_size")
-            
-            created_indexes.extend(["cache_key_unique", "cache_expires", "cache_type_created", "cache_ttl", "cache_hit_count", "cache_size"])
-            
-        except Exception as e:
-            logger.warning(f"⚠️ Error creating cache indexes: {e}")
-        
-        # === AUDIT LOG COLLECTION INDEXES ===
-        logger.info("📝 Creating audit log indexes...")
-        try:
-            # Audit tracking indexes
-            await db.database.audit_logs.create_index([("user_id", 1), ("timestamp", -1)], name="idx_audit_logs_user_timestamp")
-            await db.database.audit_logs.create_index([("action", 1), ("timestamp", -1)], name="idx_audit_logs_action_timestamp")
-            await db.database.audit_logs.create_index([("resource_type", 1), ("resource_id", 1)], name="idx_audit_logs_resource")
-            
-            # Security monitoring indexes
-            await db.database.audit_logs.create_index([("ip_address", 1), ("timestamp", -1)], name="idx_audit_logs_ip_timestamp")
-            await db.database.audit_logs.create_index([("user_agent", 1), ("timestamp", -1)], name="idx_audit_logs_user_agent_timestamp")
-            await db.database.audit_logs.create_index([("severity", 1), ("timestamp", -1)], name="idx_audit_logs_severity_timestamp")
-            
-            # TTL index for audit log retention (1 year)
-            await db.database.audit_logs.create_index([("timestamp", 1)], expireAfterSeconds=31536000, name="idx_audit_logs_ttl")
-            
-            created_indexes.extend(["audit_logs_user_timestamp", "audit_logs_action_timestamp", "audit_logs_resource", "audit_logs_ip_timestamp", "audit_logs_user_agent_timestamp", "audit_logs_severity_timestamp", "audit_logs_ttl"])
-            
-        except Exception as e:
-            logger.warning(f"⚠️ Error creating audit log indexes: {e}")
-        
-        # Calculate index creation time
-        end_time = datetime.utcnow()
-        creation_time = (end_time - start_time).total_seconds()
-        
-        logger.success(f"✅ Created {len(created_indexes)} production database indexes in {creation_time:.2f} seconds")
-        logger.info(f"📊 Index creation summary: {', '.join(created_indexes[:10])}{'...' if len(created_indexes) > 10 else ''}")
-        
-        # Log index statistics
-        await _log_index_statistics()
-        
-    except Exception as e:
-        logger.error(f"❌ Error creating production indexes: {e}")
-        if settings.is_production:
-            raise
+    logger.info("📊 Creating production-optimized database indexes...")
+    start_time = datetime.utcnow()
+    created_indexes = []
+
+    # === USERS COLLECTION INDEXES ===
+    # Note: Basic user indexes are created by Beanie from the User model
+    # Only create additional indexes not defined in the model
+    logger.info("👥 Creating additional user indexes...")
+    await _safe_create_index(db.database.users, [("user_id", 1)], unique=True, sparse=True, name="idx_users_user_id")
+    await _safe_create_index(db.database.users, [("is_active", 1), ("last_login", -1)], name="idx_users_active_login")
+    await _safe_create_index(db.database.users, [("subscription_tier", 1), ("is_active", 1)], name="idx_users_subscription_active")
+    await _safe_create_index(
+        db.database.users,
+        [("subscription_tier", 1), ("created_at", -1)],
+        partialFilterExpression={"subscription_tier": {"$in": ["premium", "enterprise"]}},
+        name="idx_users_premium_created"
+    )
+    created_indexes.extend(["users_user_id", "users_active_login", "users_subscription_active", "users_premium_created"])
+
+    # === ASSESSMENTS COLLECTION INDEXES ===
+    logger.info("📋 Creating assessment indexes...")
+    await _safe_create_index(db.database.assessments, [("user_id", 1), ("status", 1)], name="idx_assessments_user_status")
+    await _safe_create_index(db.database.assessments, [("user_id", 1), ("created_at", -1)], name="idx_assessments_user_created")
+    await _safe_create_index(db.database.assessments, [("status", 1), ("priority", 1), ("created_at", -1)], name="idx_assessments_status_priority_created")
+    await _safe_create_index(db.database.assessments, [("status", 1), ("updated_at", -1)], name="idx_assessments_status_updated")
+    await _safe_create_index(db.database.assessments, [("business_requirements.industry", 1), ("status", 1)], name="idx_assessments_industry_status")
+    await _safe_create_index(db.database.assessments, [("business_requirements.company_size", 1), ("created_at", -1)], name="idx_assessments_company_size_created")
+    await _safe_create_index(db.database.assessments, [("tags", 1)], name="idx_assessments_tags")
+    await _safe_create_index(db.database.assessments, [("assessment_type", 1), ("status", 1)], name="idx_assessments_type_status")
+    await _safe_create_index(db.database.assessments, [("completion_time_seconds", 1)], sparse=True, name="idx_assessments_completion_time")
+    await _safe_create_index(db.database.assessments, [("agent_count", 1), ("status", 1)], name="idx_assessments_agent_count_status")
+    await _safe_create_index(
+        db.database.assessments,
+        [("created_at", 1)],
+        expireAfterSeconds=2592000,
+        partialFilterExpression={"status": "draft", "is_temporary": True},
+        name="idx_assessments_draft_ttl"
+    )
+    created_indexes.extend(["assessments_id_unique", "assessments_user_status", "assessments_user_created", "assessments_status_priority_created", "assessments_status_updated", "assessments_industry_status", "assessments_company_size_created", "assessments_tags", "assessments_type_status", "assessments_completion_time", "assessments_agent_count_status", "assessments_draft_ttl"])
+
+    # === RECOMMENDATIONS COLLECTION INDEXES ===
+    logger.info("💡 Creating recommendation indexes...")
+    await _safe_create_index(db.database.recommendations, [("assessment_id", 1), ("agent_name", 1)], name="idx_recommendations_assessment_agent")
+    await _safe_create_index(db.database.recommendations, [("assessment_id", 1), ("confidence_score", -1)], name="idx_recommendations_assessment_confidence")
+    await _safe_create_index(db.database.recommendations, [("agent_name", 1), ("created_at", -1)], name="idx_recommendations_agent_created")
+    await _safe_create_index(db.database.recommendations, [("confidence_score", -1), ("priority", 1)], name="idx_recommendations_confidence_priority")
+    await _safe_create_index(db.database.recommendations, [("business_impact", -1), ("category", 1)], name="idx_recommendations_impact_category")
+    await _safe_create_index(db.database.recommendations, [("total_estimated_monthly_cost", 1), ("confidence_score", -1)], name="idx_recommendations_cost_confidence")
+    await _safe_create_index(db.database.recommendations, [("roi_score", -1)], sparse=True, name="idx_recommendations_roi")
+    await _safe_create_index(db.database.recommendations, [("category", 1), ("priority", 1), ("created_at", -1)], name="idx_recommendations_category_priority_created")
+    await _safe_create_index(db.database.recommendations, [("cloud_provider", 1), ("service_category", 1)], name="idx_recommendations_provider_service")
+    await _safe_create_index(db.database.recommendations, [("implementation_status", 1), ("assessment_id", 1)], name="idx_recommendations_status_assessment")
+    await _safe_create_index(db.database.recommendations, [("is_implemented", 1), ("implementation_date", -1)], sparse=True, name="idx_recommendations_implemented_date")
+    await _safe_create_index(db.database.recommendations, [("title", "text"), ("description", "text"), ("rationale", "text")], name="idx_recommendations_text_search")
+    created_indexes.extend(["recommendations_id_unique", "recommendations_assessment_agent", "recommendations_assessment_confidence", "recommendations_agent_created", "recommendations_confidence_priority", "recommendations_impact_category", "recommendations_cost_confidence", "recommendations_roi", "recommendations_category_priority_created", "recommendations_provider_service", "recommendations_status_assessment", "recommendations_implemented_date", "recommendations_text_search"])
+
+    # === REPORTS COLLECTION INDEXES ===
+    logger.info("📄 Creating report indexes...")
+    await _safe_create_index(db.database.reports, [("report_id", 1)], unique=True, name="idx_reports_id_unique")
+    await _safe_create_index(db.database.reports, [("assessment_id", 1), ("report_type", 1)], name="idx_reports_assessment_type")
+    await _safe_create_index(db.database.reports, [("user_id", 1), ("status", 1), ("created_at", -1)], name="idx_reports_user_status_created")
+    await _safe_create_index(db.database.reports, [("status", 1), ("priority", 1)], name="idx_reports_status_priority")
+    await _safe_create_index(db.database.reports, [("generation_status", 1), ("updated_at", -1)], name="idx_reports_generation_updated")
+    await _safe_create_index(db.database.reports, [("report_type", 1), ("format", 1), ("created_at", -1)], name="idx_reports_type_format_created")
+    await _safe_create_index(db.database.reports, [("is_public", 1), ("created_at", -1)], name="idx_reports_public_created")
+    await _safe_create_index(db.database.reports, [("generation_time_seconds", 1)], sparse=True, name="idx_reports_generation_time")
+    await _safe_create_index(db.database.reports, [("file_size_bytes", 1)], sparse=True, name="idx_reports_file_size")
+    await _safe_create_index(
+        db.database.reports,
+        [("created_at", 1)],
+        expireAfterSeconds=604800,
+        partialFilterExpression={"is_temporary": True},
+        name="idx_reports_temporary_ttl"
+    )
+    created_indexes.extend(["reports_id_unique", "reports_assessment_type", "reports_user_status_created", "reports_status_priority", "reports_generation_updated", "reports_type_format_created", "reports_public_created", "reports_generation_time", "reports_file_size", "reports_temporary_ttl"])
+
+    # === METRICS COLLECTION INDEXES ===
+    logger.info("📊 Creating metrics indexes...")
+    await _safe_create_index(db.database.metrics, [("metric_name", 1), ("timestamp", -1)], name="idx_metrics_name_timestamp")
+    await _safe_create_index(db.database.metrics, [("metric_type", 1), ("timestamp", -1)], name="idx_metrics_type_timestamp")
+    await _safe_create_index(db.database.metrics, [("source", 1), ("timestamp", -1)], name="idx_metrics_source_timestamp")
+    await _safe_create_index(db.database.metrics, [("category", 1), ("timestamp", -1)], name="idx_metrics_category_timestamp")
+    await _safe_create_index(db.database.metrics, [("metric_name", 1), ("value", 1)], name="idx_metrics_name_value")
+    await _safe_create_index(db.database.metrics, [("timestamp", -1), ("value", 1)], name="idx_metrics_timestamp_value")
+    await _safe_create_index(db.database.metrics, [("source", 1), ("metric_name", 1), ("timestamp", -1)], name="idx_metrics_source_name_timestamp")
+    await _safe_create_index(db.database.metrics, [("metric_type", 1), ("category", 1), ("timestamp", -1)], name="idx_metrics_type_category_timestamp")
+    await _safe_create_index(db.database.metrics, [("timestamp", 1)], expireAfterSeconds=7776000, name="idx_metrics_ttl")
+    await _safe_create_index(
+        db.database.metrics,
+        [("timestamp", -1), ("value", 1)],
+        partialFilterExpression={"priority": {"$gte": 8}},
+        name="idx_metrics_high_priority"
+    )
+    created_indexes.extend(["metrics_name_timestamp", "metrics_type_timestamp", "metrics_source_timestamp", "metrics_category_timestamp", "metrics_name_value", "metrics_timestamp_value", "metrics_source_name_timestamp", "metrics_type_category_timestamp", "metrics_ttl", "metrics_high_priority"])
+
+    # === AGENT METRICS COLLECTION INDEXES ===
+    logger.info("🤖 Creating agent metrics indexes...")
+    await _safe_create_index(db.database.agent_metrics, [("agent_name", 1), ("completed_at", -1)], name="idx_agent_metrics_name_completed")
+    await _safe_create_index(db.database.agent_metrics, [("assessment_id", 1), ("agent_name", 1)], name="idx_agent_metrics_assessment_agent")
+    await _safe_create_index(db.database.agent_metrics, [("agent_name", 1), ("execution_time_seconds", 1)], name="idx_agent_metrics_name_execution_time")
+    await _safe_create_index(db.database.agent_metrics, [("confidence_score", -1), ("agent_name", 1)], name="idx_agent_metrics_confidence_name")
+    await _safe_create_index(db.database.agent_metrics, [("success_rate", -1), ("completed_at", -1)], name="idx_agent_metrics_success_completed")
+    await _safe_create_index(db.database.agent_metrics, [("error_count", 1), ("agent_name", 1)], name="idx_agent_metrics_errors_name")
+    await _safe_create_index(db.database.agent_metrics, [("memory_usage_mb", 1), ("cpu_usage_percent", 1)], name="idx_agent_metrics_resource_usage")
+    await _safe_create_index(db.database.agent_metrics, [("tokens_used", 1), ("cost_usd", 1)], name="idx_agent_metrics_tokens_cost")
+    await _safe_create_index(db.database.agent_metrics, [("completed_at", 1)], expireAfterSeconds=15552000, name="idx_agent_metrics_ttl")
+    created_indexes.extend(["agent_metrics_name_completed", "agent_metrics_assessment_agent", "agent_metrics_name_execution_time", "agent_metrics_confidence_name", "agent_metrics_success_completed", "agent_metrics_errors_name", "agent_metrics_resource_usage", "agent_metrics_tokens_cost", "agent_metrics_ttl"])
+
+    # === WORKFLOW STATES COLLECTION INDEXES ===
+    logger.info("🔄 Creating workflow state indexes...")
+    await _safe_create_index(db.database.workflow_states, [("workflow_id", 1), ("assessment_id", 1)], name="idx_workflow_states_workflow_assessment")
+    await _safe_create_index(db.database.workflow_states, [("assessment_id", 1), ("state", 1), ("updated_at", -1)], name="idx_workflow_states_assessment_state_updated")
+    await _safe_create_index(db.database.workflow_states, [("state", 1), ("created_at", -1)], name="idx_workflow_states_state_created")
+    await _safe_create_index(db.database.workflow_states, [("current_agent", 1), ("state", 1)], name="idx_workflow_states_agent_state")
+    await _safe_create_index(db.database.workflow_states, [("next_agents", 1), ("state", 1)], name="idx_workflow_states_next_agents_state")
+    await _safe_create_index(db.database.workflow_states, [("execution_time_seconds", 1)], sparse=True, name="idx_workflow_states_execution_time")
+    await _safe_create_index(
+        db.database.workflow_states,
+        [("updated_at", 1)],
+        expireAfterSeconds=2592000,
+        partialFilterExpression={"state": {"$in": ["completed", "failed", "cancelled"]}},
+        name="idx_workflow_states_completed_ttl"
+    )
+    created_indexes.extend(["workflow_states_workflow_assessment", "workflow_states_assessment_state_updated", "workflow_states_state_created", "workflow_states_agent_state", "workflow_states_next_agents_state", "workflow_states_execution_time", "workflow_states_completed_ttl"])
+
+    # === CACHE COLLECTION INDEXES ===
+    logger.info("💾 Creating cache indexes...")
+    await _safe_create_index(db.database.cache, [("key", 1)], unique=True, name="idx_cache_key_unique")
+    await _safe_create_index(db.database.cache, [("expires_at", 1)], name="idx_cache_expires")
+    await _safe_create_index(db.database.cache, [("cache_type", 1), ("created_at", -1)], name="idx_cache_type_created")
+    await _safe_create_index(db.database.cache, [("expires_at", 1)], expireAfterSeconds=0, name="idx_cache_ttl")
+    await _safe_create_index(db.database.cache, [("hit_count", -1)], name="idx_cache_hit_count")
+    await _safe_create_index(db.database.cache, [("size_bytes", 1)], name="idx_cache_size")
+    created_indexes.extend(["cache_key_unique", "cache_expires", "cache_type_created", "cache_ttl", "cache_hit_count", "cache_size"])
+
+    # === AUDIT LOG COLLECTION INDEXES ===
+    logger.info("📝 Creating audit log indexes...")
+    await _safe_create_index(db.database.audit_logs, [("user_id", 1), ("timestamp", -1)], name="idx_audit_logs_user_timestamp")
+    await _safe_create_index(db.database.audit_logs, [("action", 1), ("timestamp", -1)], name="idx_audit_logs_action_timestamp")
+    await _safe_create_index(db.database.audit_logs, [("resource_type", 1), ("resource_id", 1)], name="idx_audit_logs_resource")
+    await _safe_create_index(db.database.audit_logs, [("ip_address", 1), ("timestamp", -1)], name="idx_audit_logs_ip_timestamp")
+    await _safe_create_index(db.database.audit_logs, [("user_agent", 1), ("timestamp", -1)], name="idx_audit_logs_user_agent_timestamp")
+    await _safe_create_index(db.database.audit_logs, [("severity", 1), ("timestamp", -1)], name="idx_audit_logs_severity_timestamp")
+    await _safe_create_index(db.database.audit_logs, [("timestamp", 1)], expireAfterSeconds=31536000, name="idx_audit_logs_ttl")
+    created_indexes.extend(["audit_logs_user_timestamp", "audit_logs_action_timestamp", "audit_logs_resource", "audit_logs_ip_timestamp", "audit_logs_user_agent_timestamp", "audit_logs_severity_timestamp", "audit_logs_ttl"])
+
+    # Calculate index creation time
+    end_time = datetime.utcnow()
+    creation_time = (end_time - start_time).total_seconds()
+    
+    logger.success(f"✅ Created {len(created_indexes)} production database indexes in {creation_time:.2f} seconds")
+    logger.info(f"📊 Index creation summary: {', '.join(created_indexes[:10])}{'...' if len(created_indexes) > 10 else ''}")
+    
+    # Log index statistics
+    await _log_index_statistics()
+
 
 
 async def get_database():

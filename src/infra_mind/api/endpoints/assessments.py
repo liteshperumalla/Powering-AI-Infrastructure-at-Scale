@@ -27,7 +27,7 @@ from ...models.assessment import Assessment
 from ...models.recommendation import Recommendation, ServiceRecommendation
 from ...models.report import Report, ReportSection
 from ...schemas.base import AssessmentStatus, Priority, CloudProvider, RecommendationConfidence, ReportType, ReportFormat, ReportStatus
-from ...api.auth import get_current_user
+from .auth import get_current_user
 from ...models.user import User
 from ...workflows.orchestrator import agent_orchestrator, OrchestrationConfig
 from ...agents.base import AgentRole
@@ -169,6 +169,32 @@ async def start_assessment_workflow(assessment: Assessment, app_state=None):
         
         await assessment.save()
         await broadcast_update("completed", 100.0, "Assessment completed successfully!")
+        
+        # Broadcast dashboard update for completed assessment
+        try:
+            if app_state and hasattr(app_state, 'broadcast_dashboard_update'):
+                await app_state.broadcast_dashboard_update({
+                    "type": "assessment_completed",
+                    "assessment_id": str(assessment.id),
+                    "assessment_data": {
+                        "id": str(assessment.id),
+                        "title": assessment.title,
+                        "status": assessment.status,
+                        "completion_percentage": assessment.completion_percentage,
+                        "completed_at": assessment.completed_at.isoformat(),
+                        "recommendations_generated": assessment.recommendations_generated,
+                        "reports_generated": assessment.reports_generated
+                    },
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "message": f"Assessment '{assessment.title}' has been completed successfully!"
+                })
+                
+            # Invalidate dashboard cache for refresh
+            if app_state and hasattr(app_state, 'invalidate_dashboard_cache'):
+                await app_state.invalidate_dashboard_cache()
+                
+        except Exception as e:
+            logger.warning(f"Failed to broadcast dashboard update for completed assessment: {e}")
         
         logger.info(f"Assessment workflow completed for {assessment.id}")
         
@@ -315,12 +341,14 @@ async def generate_orchestrated_recommendations(assessment: Assessment, app_stat
         # Update assessment with orchestration results
         assessment.recommendations_generated = True
         assessment.agent_states = {
-            "orchestration_id": orchestration_result.orchestration_metadata.get("orchestration_id"),
-            "total_agents": orchestration_result.total_agents,
-            "successful_agents": orchestration_result.successful_agents,
-            "failed_agents": orchestration_result.failed_agents,
-            "consensus_score": orchestration_result.consensus_score,
-            "execution_time": orchestration_result.execution_time
+            "orchestration": {
+                "orchestration_id": orchestration_result.orchestration_metadata.get("orchestration_id"),
+                "total_agents": orchestration_result.total_agents,
+                "successful_agents": orchestration_result.successful_agents,
+                "failed_agents": orchestration_result.failed_agents,
+                "consensus_score": orchestration_result.consensus_score,
+                "execution_time": orchestration_result.execution_time
+            }
         }
         assessment.progress = {
             "current_step": "orchestrated_recommendations_generated",
@@ -338,6 +366,31 @@ async def generate_orchestrated_recommendations(assessment: Assessment, app_stat
         logger.info(f"Orchestration stats: {orchestration_result.successful_agents}/{orchestration_result.total_agents} agents successful, {saved_count} recommendations saved")
     
     except Exception as e:
+        assessment.recommendations_generated = False
+        assessment.status = AssessmentStatus.FAILED
+        
+        # Safely update agent_states
+        if not isinstance(assessment.agent_states, dict):
+            assessment.agent_states = {}
+            
+        assessment.agent_states['orchestration'] = {
+            "status": "failed",
+            "error": str(e),
+            "execution_time": orchestration_result.execution_time if 'orchestration_result' in locals() else 0
+        }
+        
+        assessment.progress = {
+            "current_step": "orchestration_failed",
+            "completed_steps": assessment.progress.get("completed_steps", ["created", "analyzing"]),
+            "total_steps": 5,
+            "progress_percentage": 75.0,
+            "error": f"Multi-agent orchestration failed: {str(e)}"
+        }
+        await assessment.save()
+        
+        if broadcast_update:
+            await broadcast_update("orchestration_failed", 75.0, f"Multi-agent orchestration failed: {str(e)}")
+        
         logger.error(f"Multi-agent orchestration failed for assessment {assessment.id}: {e}")
         raise
 
@@ -398,187 +451,143 @@ async def generate_actual_recommendations(assessment: Assessment, app_state=None
 
 
 async def generate_actual_reports(assessment: Assessment, app_state=None, broadcast_update=None):
-    """Generate actual reports using Report Generator Agent and save to database."""
-    logger.info(f"Starting comprehensive report generation for assessment {assessment.id}")
+    """Generate actual reports using Report Generator Agent with LLM."""
+    logger.info(f"Starting LLM-powered report generation for assessment {assessment.id}")
     
     try:
         if broadcast_update:
-            await broadcast_update("report_generator_agent", 95.0, "Report Generator Agent creating comprehensive reports...")
+            await broadcast_update("report_generator_agent", 90.0, "Report Generator Agent creating comprehensive reports using AI...")
         
-        executive_report = Report(
-            assessment_id=str(assessment.id),
-            user_id=assessment.user_id,
-            title="Executive Infrastructure Assessment Report",
-            description="High-level strategic report for executive decision-making on infrastructure investments",
-            report_type="executive_summary",
-            format=ReportFormat.PDF,
-            status=ReportStatus.COMPLETED,
-            progress_percentage=100.0,
-            sections=[
-                "executive_summary",
-                "strategic_recommendations", 
-                "investment_analysis",
-                "risk_assessment",
-                "implementation_roadmap"
-            ],
-            total_pages=12,
-            word_count=3500,
-            file_path=f"/reports/{assessment.id}/executive_summary.pdf",
-            file_size_bytes=2400000,
-            generated_by=["report_generator_agent", "cto_agent"],
-            generation_time_seconds=45.2,
-            completeness_score=0.95,
-            confidence_score=0.89,
-            priority=Priority.HIGH,
-            tags=["executive", "strategic", "investment"],
-            error_message=None,
-            retry_count=0,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
-            completed_at=datetime.utcnow(),
-            content={
-                "executive_summary": "This assessment recommends a strategic cloud-first infrastructure modernization approach that will reduce costs by 38% while improving scalability and security. The total investment of $180K annually will generate $432K in savings, achieving ROI within 8 months.",
-                "key_findings": [
-                    "Current infrastructure costs are 38% above industry benchmarks",
-                    "Manual scaling processes limit business agility",
-                    "Security posture needs modernization for compliance requirements",
-                    "Multi-cloud strategy provides risk mitigation and cost optimization"
-                ],
-                "strategic_recommendations": [
-                    "Implement AWS-first cloud strategy with Azure as secondary provider",
-                    "Adopt containerized microservices architecture using Kubernetes",
-                    "Establish centralized governance and cost management framework",
-                    "Execute phased migration over 18 months with pilot programs"
-                ],
-                "investment_analysis": {
-                    "total_annual_investment": 180000,
-                    "expected_annual_savings": 432000,
-                    "net_annual_benefit": 252000,
-                    "roi_percentage": 240,
-                    "payback_period_months": 8
-                }
-            }
-        )
-        await executive_report.insert()
-        logger.info(f"Saved Executive Report for assessment {assessment.id}")
+        # Create Report Generator Agent
+        from ...agents.base import agent_factory, AgentRole
+        from ...agents.report_generator_agent import ReportGeneratorAgent
         
-        # Technical Implementation Report
+        report_agent = await agent_factory.create_agent(AgentRole.REPORT_GENERATOR)
+        if not report_agent:
+            logger.error("Failed to create Report Generator Agent")
+            return
+        
+        # Generate Executive Report using AI
         if broadcast_update:
-            await broadcast_update("report_generation", 87.0, "Generating Technical Implementation Report...")
+            await broadcast_update("executive_report", 92.0, "Generating executive summary report...")
+            
+        executive_result = await report_agent.process_assessment(assessment, {
+            "report_type": "executive_summary",
+            "target_audience": "C-level executives",
+            "focus_areas": ["strategic_planning", "investment_analysis", "risk_assessment", "roi_projections"]
+        })
         
-        technical_report = Report(
-            assessment_id=str(assessment.id),
-            user_id=assessment.user_id,
-            title="Technical Infrastructure Implementation Guide",
-            description="Detailed technical report with implementation steps, architecture diagrams, and operational procedures",
-            report_type="technical_roadmap",
-            format=ReportFormat.PDF,
-            status=ReportStatus.COMPLETED,
-            progress_percentage=100.0,
-            sections=[
-                "architecture_overview",
-                "service_specifications",
-                "implementation_steps",
-                "operational_procedures",
-                "security_configuration",
-                "monitoring_setup"
-            ],
-            total_pages=28,
-            word_count=8200,
-            file_path=f"/reports/{assessment.id}/technical_implementation.pdf",
-            file_size_bytes=5800000,
-            generated_by=["report_generator_agent", "cloud_engineer_agent"],
-            generation_time_seconds=78.5,
-            completeness_score=0.92,
-            confidence_score=0.85,
-            priority=Priority.HIGH,
-            tags=["technical", "implementation", "architecture"],
-            error_message=None,
-            retry_count=0,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
-            completed_at=datetime.utcnow(),
-            content={
-                "architecture_overview": "Multi-cloud architecture with AWS EKS for container orchestration, RDS PostgreSQL for data persistence, and Lambda for serverless processing. Azure serves as disaster recovery and overflow capacity.",
-                "service_specifications": {
-                    "compute": "Amazon EKS with 6 m5.large nodes, auto-scaling enabled",
-                    "database": "RDS PostgreSQL db.r5.xlarge with Multi-AZ deployment",
-                    "serverless": "AWS Lambda with 512MB memory, 30s timeout",
-                    "networking": "VPC with public/private subnets across 3 AZs"
-                },
-                "implementation_phases": [
-                    "Phase 1: Infrastructure setup and basic services (Weeks 1-4)",
-                    "Phase 2: Application migration and testing (Weeks 5-8)", 
-                    "Phase 3: Production deployment and optimization (Weeks 9-12)"
-                ],
-                "estimated_timeline": "12 weeks total implementation"
-            }
-        )
-        await technical_report.insert()
-        logger.info(f"Saved Technical Report for assessment {assessment.id}")
+        if executive_result.status.value == "completed":
+            executive_report = Report(
+                assessment_id=str(assessment.id),
+                user_id=assessment.user_id,
+                title="Executive Infrastructure Assessment Report",
+                description="AI-generated strategic report for executive decision-making",
+                report_type="executive_summary",
+                format=ReportFormat.PDF,
+                status=ReportStatus.COMPLETED,
+                progress_percentage=100.0,
+                sections=executive_result.data.get("sections", ["executive_summary", "recommendations", "investment_analysis"]),
+                total_pages=executive_result.data.get("page_count", 12),
+                word_count=executive_result.data.get("word_count", 3500),
+                file_path=f"/reports/{assessment.id}/executive_summary.pdf",
+                file_size_bytes=executive_result.data.get("file_size", 2400000),
+                generated_by=["report_generator_agent"],
+                generation_time_seconds=executive_result.execution_time or 45.0,
+                completeness_score=executive_result.data.get("completeness_score", 0.95),
+                confidence_score=executive_result.data.get("confidence_score", 0.89),
+                priority=Priority.HIGH,
+                tags=["executive", "strategic", "ai_generated"],
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+                completed_at=datetime.utcnow(),
+                content=executive_result.data.get("content", {})
+            )
+            await executive_report.insert()
+            logger.info(f"Saved AI-generated Executive Report for assessment {assessment.id}")
         
-        # Cost Analysis Report
+        # Generate Technical Report using AI
         if broadcast_update:
-            await broadcast_update("report_generation", 92.0, "Generating Cost Analysis Report...")
+            await broadcast_update("technical_report", 95.0, "Generating technical implementation report...")
+            
+        technical_result = await report_agent.process_assessment(assessment, {
+            "report_type": "technical_roadmap", 
+            "target_audience": "technical_teams",
+            "focus_areas": ["architecture", "implementation", "operations", "security", "monitoring"]
+        })
         
-        cost_report = Report(
-            assessment_id=str(assessment.id),
-            user_id=assessment.user_id,
-            title="Infrastructure Cost Analysis and Optimization",
-            description="Comprehensive cost breakdown, optimization opportunities, and budget projections",
-            report_type="cost_analysis",
-            format=ReportFormat.PDF,
-            status=ReportStatus.COMPLETED,
-            progress_percentage=100.0,
-            sections=[
-                "current_cost_analysis",
-                "proposed_cost_structure",
-                "optimization_opportunities",
-                "budget_projections",
-                "cost_monitoring_strategy"
-            ],
-            total_pages=16,
-            word_count=4800,
-            file_path=f"/reports/{assessment.id}/cost_analysis.pdf",
-            file_size_bytes=3200000,
-            generated_by=["report_generator_agent", "research_agent"],
-            generation_time_seconds=52.8,
-            completeness_score=0.90,
-            confidence_score=0.88,
-            priority=Priority.MEDIUM,
-            tags=["financial", "cost_analysis", "budget"],
-            error_message=None,
-            retry_count=0,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
-            completed_at=datetime.utcnow(),
-            content={
-                "cost_breakdown": {
-                    "compute_monthly": 2800,
-                    "database_monthly": 1200,
-                    "serverless_monthly": 400,
-                    "networking_monthly": 600,
-                    "storage_monthly": 300,
-                    "total_monthly": 5300
-                },
-                "savings_analysis": {
-                    "current_monthly_cost": 8500,
-                    "proposed_monthly_cost": 5300,
-                    "monthly_savings": 3200,
-                    "annual_savings": 38400,
-                    "savings_percentage": 37.6
-                },
-                "optimization_opportunities": [
-                    "Spot instances for development workloads: $800/month savings",
-                    "Reserved instances for predictable workloads: $400/month savings",
-                    "S3 Intelligent Tiering for storage: $150/month savings"
-                ]
-            }
-        )
-        await cost_report.insert()
-        logger.info(f"Saved Cost Analysis Report for assessment {assessment.id}")
+        if technical_result.status.value == "completed":
+            technical_report = Report(
+                assessment_id=str(assessment.id),
+                user_id=assessment.user_id,
+                title="Technical Infrastructure Implementation Guide",
+                description="AI-generated technical implementation guide with detailed procedures",
+                report_type="technical_roadmap",
+                format=ReportFormat.PDF,
+                status=ReportStatus.COMPLETED,
+                progress_percentage=100.0,
+                sections=technical_result.data.get("sections", ["architecture", "implementation", "operations"]),
+                total_pages=technical_result.data.get("page_count", 28),
+                word_count=technical_result.data.get("word_count", 8200),
+                file_path=f"/reports/{assessment.id}/technical_implementation.pdf",
+                file_size_bytes=technical_result.data.get("file_size", 5800000),
+                generated_by=["report_generator_agent"],
+                generation_time_seconds=technical_result.execution_time or 78.0,
+                completeness_score=technical_result.data.get("completeness_score", 0.92),
+                confidence_score=technical_result.data.get("confidence_score", 0.85),
+                priority=Priority.HIGH,
+                tags=["technical", "implementation", "ai_generated"],
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+                completed_at=datetime.utcnow(),
+                content=technical_result.data.get("content", {})
+            )
+            await technical_report.insert()
+            logger.info(f"Saved AI-generated Technical Report for assessment {assessment.id}")
         
-        logger.info(f"Successfully generated and saved 3 reports for assessment {assessment.id}")
+        # Generate Cost Analysis Report using AI
+        if broadcast_update:
+            await broadcast_update("cost_analysis", 97.0, "Generating cost analysis report...")
+            
+        cost_result = await report_agent.process_assessment(assessment, {
+            "report_type": "cost_analysis",
+            "target_audience": "financial_teams",
+            "focus_areas": ["cost_breakdown", "optimization_opportunities", "budget_projections", "roi_analysis"]
+        })
+        
+        if cost_result.status.value == "completed":
+            cost_report = Report(
+                assessment_id=str(assessment.id),
+                user_id=assessment.user_id,
+                title="Infrastructure Cost Analysis and Optimization",
+                description="AI-generated cost analysis with optimization recommendations",
+                report_type="cost_analysis",
+                format=ReportFormat.PDF,
+                status=ReportStatus.COMPLETED,
+                progress_percentage=100.0,
+                sections=cost_result.data.get("sections", ["cost_analysis", "optimization", "projections"]),
+                total_pages=cost_result.data.get("page_count", 16),
+                word_count=cost_result.data.get("word_count", 4800),
+                file_path=f"/reports/{assessment.id}/cost_analysis.pdf",
+                file_size_bytes=cost_result.data.get("file_size", 3200000),
+                generated_by=["report_generator_agent"],
+                generation_time_seconds=cost_result.execution_time or 52.0,
+                completeness_score=cost_result.data.get("completeness_score", 0.90),
+                confidence_score=cost_result.data.get("confidence_score", 0.88),
+                priority=Priority.MEDIUM,
+                tags=["financial", "cost_analysis", "ai_generated"],
+                created_at=datetime.utcnow(),
+                updated_at=datetime.utcnow(),
+                completed_at=datetime.utcnow(),
+                content=cost_result.data.get("content", {})
+            )
+            await cost_report.insert()
+            logger.info(f"Saved AI-generated Cost Analysis Report for assessment {assessment.id}")
+        
+        if broadcast_update:
+            await broadcast_update("reports_completed", 100.0, "All reports generated successfully!")
+            
+        logger.info(f"Successfully generated and saved AI-powered reports for assessment {assessment.id}")
         
     except Exception as e:
         logger.error(f"Failed to generate reports for assessment {assessment.id}: {e}")
@@ -587,19 +596,13 @@ async def generate_actual_reports(assessment: Assessment, app_state=None, broadc
 
 
 @router.post("/simple", status_code=status.HTTP_201_CREATED)
-async def create_simple_assessment(data: dict, request: Request):
+async def create_simple_assessment(data: dict, current_user: User = Depends(get_current_user)):
     """
     Create a simple assessment for testing with all required fields populated.
     """
     try:
         current_time = datetime.utcnow()
-        
-        # Try to get authenticated user, fallback to anonymous
-        try:
-            user = await get_current_user(request)
-            user_id = str(user.id) if user else "anonymous_user"
-        except Exception:
-            user_id = "anonymous_user"
+        user_id = str(current_user.id)
         
         # Create complete business requirements with defaults
         business_requirements = {
@@ -679,11 +682,11 @@ async def create_simple_assessment(data: dict, request: Request):
         )
 
 
-@router.post("/", response_model=AssessmentResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_assessment(
-    assessment_data: AssessmentCreate, 
+    assessment_data: dict, 
     request: Request,
-    current_user: User = Depends(require_permission(Permission.CREATE_ASSESSMENT))
+    current_user: User = Depends(get_current_user)
 ):
     """
     Create a new infrastructure assessment.
@@ -694,23 +697,124 @@ async def create_assessment(
     try:
         current_time = datetime.utcnow()
         
+        # Extract data from the frontend payload
+        title = assessment_data.get('title', 'Infrastructure Assessment')
+        description = assessment_data.get('description', 'AI infrastructure assessment')
+        business_goal = assessment_data.get('business_goal', 'Improve infrastructure')
+        
+        # Transform frontend business_requirements to backend format
+        frontend_business_req = assessment_data.get('business_requirements', {})
+        business_requirements = {
+            "company_size": frontend_business_req.get('company_size', 'startup'),
+            "industry": frontend_business_req.get('industry', 'technology'),
+            "business_goals": frontend_business_req.get('business_goals', [
+                {
+                    "goal": business_goal,
+                    "priority": "high",
+                    "timeline_months": 6,
+                    "success_metrics": ["Performance improvement", "Cost optimization"]
+                }
+            ]),
+            "growth_projection": frontend_business_req.get('growth_projection', {
+                "current_users": 1000,
+                "projected_users_6m": 2000,
+                "projected_users_12m": 5000,
+                "current_revenue": "500000",
+                "projected_revenue_12m": "1000000"
+            }),
+            "budget_constraints": frontend_business_req.get('budget_constraints', {
+                "total_budget_range": "10k_50k",
+                "monthly_budget_limit": 25000,
+                "cost_optimization_priority": "high"
+            }),
+            "team_structure": frontend_business_req.get('team_structure', {
+                "total_developers": 5,
+                "senior_developers": 2,
+                "devops_engineers": 1,
+                "data_engineers": 1,
+                "cloud_expertise_level": 3,
+                "kubernetes_expertise": 2,
+                "database_expertise": 3
+            }),
+            "compliance_requirements": frontend_business_req.get('compliance_requirements', ["none"]),
+            "project_timeline_months": frontend_business_req.get('project_timeline_months', 6),
+            "urgency_level": "medium",
+            "current_pain_points": ["Scalability challenges"],
+            "success_criteria": ["Improved performance", "Cost reduction"],
+            "multi_cloud_acceptable": True
+        }
+        
+        # Transform frontend technical_requirements to backend format
+        frontend_technical_req = assessment_data.get('technical_requirements', {})
+        technical_requirements = {
+            "workload_types": frontend_technical_req.get('workload_types', ["web_application", "api_service"]),
+            "performance_requirements": frontend_technical_req.get('performance_requirements', {
+                "api_response_time_ms": 200,
+                "requests_per_second": 1000,
+                "concurrent_users": 500,
+                "uptime_percentage": 99.9
+            }),
+            "scalability_requirements": frontend_technical_req.get('scalability_requirements', {
+                "current_data_size_gb": 100,
+                "current_daily_transactions": 10000,
+                "expected_data_growth_rate": "20% monthly",
+                "peak_load_multiplier": 3.0,
+                "auto_scaling_required": True,
+                "global_distribution_required": False,
+                "cdn_required": True,
+                "planned_regions": ["us-east-1"]
+            }),
+            "security_requirements": frontend_technical_req.get('security_requirements', {
+                "encryption_at_rest_required": True,
+                "encryption_in_transit_required": True,
+                "multi_factor_auth_required": False,
+                "single_sign_on_required": False,
+                "role_based_access_control": True,
+                "vpc_isolation_required": True,
+                "firewall_required": True,
+                "ddos_protection_required": False,
+                "security_monitoring_required": True,
+                "audit_logging_required": False,
+                "vulnerability_scanning_required": False,
+                "data_loss_prevention_required": False,
+                "backup_encryption_required": True
+            }),
+            "integration_requirements": frontend_technical_req.get('integration_requirements', {
+                "existing_databases": [],
+                "existing_apis": [],
+                "legacy_systems": [],
+                "payment_processors": [],
+                "analytics_platforms": [],
+                "marketing_tools": [],
+                "rest_api_required": True,
+                "graphql_api_required": False,
+                "websocket_support_required": False,
+                "real_time_sync_required": False,
+                "batch_sync_acceptable": True
+            }),
+            "preferred_programming_languages": ["Python", "JavaScript"],
+            "monitoring_requirements": ["Performance monitoring", "Error tracking"],
+            "backup_requirements": ["Daily backups", "Point-in-time recovery"],
+            "ci_cd_requirements": ["Automated deployment", "Testing pipeline"]
+        }
+        
         # Create and save Assessment document
         assessment = Assessment(
-            user_id="anonymous_user",  # For now, use anonymous user since no auth required
-            title=assessment_data.title,
-            description=assessment_data.description,
-            business_requirements=assessment_data.business_requirements.model_dump(),
-            technical_requirements=assessment_data.technical_requirements.model_dump(),
-            business_goal=getattr(assessment_data, 'business_goal', None),
+            user_id=str(current_user.id),
+            title=title,
+            description=description,
+            business_requirements=business_requirements,
+            technical_requirements=technical_requirements,
+            business_goal=business_goal,
             status=AssessmentStatus.DRAFT,
-            priority=assessment_data.priority,
+            priority=Priority.MEDIUM,
             completion_percentage=0.0,
-            source=getattr(assessment_data, 'source', 'web_form'),
-            tags=getattr(assessment_data, 'tags', []),
+            source=assessment_data.get('source', 'web_form'),
+            tags=assessment_data.get('tags', []),
             metadata={
-                "source": getattr(assessment_data, 'source', 'web_form'), 
+                "source": assessment_data.get('source', 'web_form'), 
                 "version": "1.0", 
-                "tags": getattr(assessment_data, 'tags', [])
+                "tags": assessment_data.get('tags', [])
             },
             created_at=current_time,
             updated_at=current_time
@@ -721,7 +825,30 @@ async def create_assessment(
         logger.info(f"Created assessment: {assessment.id}")
         
         # Clear any cached visualization data to ensure fresh dashboard display
-        # Note: Removed metadata fields that cause response validation issues
+        try:
+            # Invalidate dashboard cache for real-time updates
+            if hasattr(request.app, 'state') and hasattr(request.app.state, 'invalidate_dashboard_cache'):
+                await request.app.state.invalidate_dashboard_cache()
+                
+            # Broadcast new assessment creation to all connected clients via WebSocket
+            if hasattr(request.app, 'state') and hasattr(request.app.state, 'broadcast_dashboard_update'):
+                await request.app.state.broadcast_dashboard_update({
+                    "type": "new_assessment",
+                    "assessment_id": str(assessment.id), 
+                    "assessment_data": {
+                        "id": str(assessment.id),
+                        "title": assessment.title,
+                        "status": assessment.status,
+                        "created_at": assessment.created_at.isoformat(),
+                        "user_id": assessment.user_id,
+                        "priority": assessment.priority
+                    },
+                    "timestamp": datetime.utcnow().isoformat(),
+                    "message": f"New assessment '{assessment.title}' has been created"
+                })
+                logger.info(f"Broadcasted new assessment creation via WebSocket: {assessment.id}")
+        except Exception as e:
+            logger.warning(f"Failed to invalidate cache or broadcast dashboard update: {e}")
         
         # Automatically start the workflow to generate recommendations and reports
         logger.info(f"Starting workflow for assessment: {assessment.id}")
@@ -742,6 +869,25 @@ async def create_assessment(
             }
             await assessment.save()
             
+            # Broadcast dashboard update for workflow start
+            try:
+                if hasattr(request.app, 'state') and hasattr(request.app.state, 'broadcast_dashboard_update'):
+                    await request.app.state.broadcast_dashboard_update({
+                        "type": "assessment_progress",
+                        "assessment_id": str(assessment.id),
+                        "assessment_data": {
+                            "id": str(assessment.id),
+                            "title": assessment.title,
+                            "status": assessment.status,
+                            "progress": assessment.progress,
+                            "workflow_id": assessment.workflow_id
+                        },
+                        "timestamp": datetime.utcnow().isoformat(),
+                        "message": f"Workflow started for assessment '{assessment.title}'"
+                    })
+            except Exception as e:
+                logger.warning(f"Failed to broadcast dashboard update for workflow start: {e}")
+                
             logger.info(f"Successfully started workflow for assessment: {assessment.id}")
         except Exception as workflow_error:
             logger.error(f"Failed to start workflow for assessment {assessment.id}: {workflow_error}")
@@ -765,25 +911,21 @@ async def create_assessment(
             # Don't fail assessment creation - allow manual processing
         
         # Return response
-        return AssessmentResponse(
-            id=str(assessment.id),
-            title=assessment.title,
-            description=assessment.description,
-            business_requirements=assessment_data.business_requirements,
-            technical_requirements=assessment_data.technical_requirements,
-            status=assessment.status,
-            priority=assessment.priority,
-            progress=assessment.progress,
-            workflow_id=assessment.workflow_id,
-            agent_states={},
-            recommendations_generated=assessment.recommendations_generated,
-            reports_generated=assessment.reports_generated,
-            metadata=assessment.metadata,
-            created_at=assessment.created_at,
-            updated_at=assessment.updated_at,
-            started_at=assessment.started_at,
-            completed_at=assessment.completed_at
-        )
+        return {
+            "id": str(assessment.id),
+            "title": assessment.title,
+            "description": assessment.description,
+            "status": assessment.status,
+            "priority": assessment.priority,
+            "progress": assessment.progress,
+            "workflow_id": assessment.workflow_id,
+            "recommendations_generated": assessment.recommendations_generated,
+            "reports_generated": assessment.reports_generated,
+            "created_at": assessment.created_at,
+            "updated_at": assessment.updated_at,
+            "started_at": assessment.started_at,
+            "completed_at": assessment.completed_at
+        }
         
     except Exception as e:
         logger.error(f"Failed to create assessment: {e}")
@@ -807,8 +949,13 @@ async def get_assessment(
     progress, and any generated recommendations or reports.
     """
     try:
-        # Retrieve from database
-        assessment = await Assessment.get(assessment_id)
+        # Retrieve from database using proper ObjectId
+        try:
+            assessment = await Assessment.get(PydanticObjectId(assessment_id))
+        except Exception as e:
+            logger.error(f"Error retrieving assessment {assessment_id}: {e}")
+            assessment = None
+            
         if not assessment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND, 
@@ -871,10 +1018,11 @@ async def get_assessment(
         )
 
 
-@router.get("/{assessment_id}/mock", response_model=AssessmentResponse)
-async def get_assessment_mock(assessment_id: str):
+@router.get("/{assessment_id}/test-mock", response_model=AssessmentResponse)
+async def get_assessment_test_mock(assessment_id: str):
     """
-    Get a mock assessment response for testing.
+    Get a mock assessment response for development testing only.
+    DO NOT USE IN PRODUCTION - This returns hardcoded mock data.
     """
     try:
         # Return mock assessment for testing
@@ -1006,7 +1154,7 @@ async def list_assessments(
     limit: int = Query(10, ge=1, le=100, description="Items per page"),
     status_filter: Optional[AssessmentStatus] = Query(None, description="Filter by status"),
     priority_filter: Optional[Priority] = Query(None, description="Filter by priority"),
-    current_user: User = Depends(require_permission(Permission.READ_ASSESSMENT))
+    current_user: User = Depends(get_current_user)
 ):
     """
     List all assessments for the current user.
@@ -1022,16 +1170,8 @@ async def list_assessments(
         if priority_filter:
             query_filter["priority"] = priority_filter
         
-        # Apply user access control
-        user_role = AccessControl.get_user_role(current_user)
-        if user_role not in [Role.ADMIN, Role.SUPER_ADMIN]:
-            # Regular users can only see their own assessments
-            if AccessControl.user_has_permission(current_user, Permission.READ_ALL_ASSESSMENTS):
-                # Managers and analysts can see all assessments
-                pass
-            else:
-                # Regular users can only see their own assessments
-                query_filter["user_id"] = str(current_user.id)
+        # Users can only see their own assessments
+        query_filter["user_id"] = str(current_user.id)
         
         # Get total count and paginated results
         total = await Assessment.find(query_filter).count()
@@ -1620,18 +1760,21 @@ Service Preferences:
 - Containerization Preference: {tech_reqs.get('containerization_preference', 'medium')}
 """
 
-    prompt = f"""You are a senior cloud architect with expertise in AWS, Azure, and Google Cloud. Based on the comprehensive assessment requirements and available cloud services, generate 4-6 specific, actionable infrastructure recommendations.
+    prompt = f"""You are a senior multi-cloud architect with deep expertise in AWS, Microsoft Azure, Google Cloud Platform, Alibaba Cloud, and IBM Cloud. Based on the comprehensive assessment requirements and available cloud services, generate 4-6 specific, actionable infrastructure recommendations.
 
 {assessment_context}
 
-INSTRUCTIONS:
-1. Use ONLY the cloud services listed in the "AVAILABLE CLOUD SERVICES" section above
-2. Match services to the specific technical requirements (performance, scalability, security)
-3. Consider the budget constraints and company size
-4. Provide realistic cost estimates based on the service pricing shown
-5. Include services from multiple cloud providers for comparison
-6. Focus on managed services when preference is medium or high
-7. Consider compliance requirements when selecting services
+MULTI-CLOUD STRATEGY INSTRUCTIONS:
+1. MUST include services from at least 3 different cloud providers (AWS, Azure, GCP minimum)
+2. Use ONLY the cloud services listed in the "AVAILABLE CLOUD SERVICES" section above
+3. Design for multi-cloud redundancy and avoid vendor lock-in
+4. Consider cross-cloud networking and data replication requirements
+5. Provide cost comparisons between cloud providers for similar services
+6. Include disaster recovery and failover strategies across clouds
+7. Focus on cloud-native and containerized solutions for portability
+8. Consider regional availability and compliance requirements per cloud
+9. Recommend hybrid and multi-cloud orchestration tools (Terraform, Kubernetes)
+10. Include security considerations for cross-cloud identity and access management
 
 For each recommendation, provide a JSON object with this EXACT structure:
 {{

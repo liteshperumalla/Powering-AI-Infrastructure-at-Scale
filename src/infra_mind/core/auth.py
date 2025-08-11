@@ -591,11 +591,11 @@ class AuthService:
             if await self._is_account_locked(email):
                 log_authentication_event(
                     AuditEventType.LOGIN_FAILURE,
-                    user_email=email,
+                    user=None,
                     ip_address=ip_address,
                     user_agent=user_agent,
                     outcome="failure",
-                    details={"reason": "account_locked"}
+                    details={"reason": "account_locked", "email": email}
                 )
                 return None
             
@@ -609,11 +609,11 @@ class AuthService:
                 await self._record_failed_attempt(email)
                 log_authentication_event(
                     AuditEventType.LOGIN_FAILURE,
-                    user_email=email,
+                    user=None,
                     ip_address=ip_address,
                     user_agent=user_agent,
                     outcome="failure",
-                    details={"reason": "user_not_found"}
+                    details={"reason": "user_not_found", "email": email}
                 )
                 return None
             
@@ -664,11 +664,11 @@ class AuthService:
             logger.error(f"Authentication error for {email}: {e}")
             log_authentication_event(
                 AuditEventType.LOGIN_FAILURE,
-                user_email=email,
+                user=None,
                 ip_address=ip_address,
                 user_agent=user_agent,
                 outcome="error",
-                details={"error": str(e)}
+                details={"error": str(e), "email": email}
             )
             return None
     

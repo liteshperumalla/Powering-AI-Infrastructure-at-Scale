@@ -10,13 +10,78 @@ from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from loguru import logger
 from datetime import datetime, timedelta
-import uuid
 
 from ...models.user import User
-from ...core.auth import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
+import jwt
+import os
 
 router = APIRouter()
 security = HTTPBearer()
+
+# JWT Configuration
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-jwt-secret-key-change-in-production-12345678901234567890")
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+
+def create_access_token(user_id: str, email: str, full_name: str) -> str:
+    """Create a JWT access token."""
+    import secrets
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    to_encode = {
+        "sub": user_id,
+        "email": email,
+        "full_name": full_name,
+        "exp": expire,
+        "iat": datetime.utcnow(),
+        "iss": "infra-mind",  # Issuer
+        "aud": "infra-mind-api",  # Audience
+        "token_type": "access",  # Token type
+        "jti": secrets.token_urlsafe(32)  # JWT ID
+    }
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+def verify_token(token: str) -> dict:
+    """Verify and decode a JWT token."""
+    try:
+        payload = jwt.decode(
+            token, 
+            SECRET_KEY, 
+            algorithms=[ALGORITHM],
+            audience="infra-mind-api",
+            issuer="infra-mind"
+        )
+        return payload
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired")
+    except jwt.InvalidAudienceError:
+        raise HTTPException(status_code=401, detail="Invalid token audience")
+    except jwt.InvalidIssuerError:
+        raise HTTPException(status_code=401, detail="Invalid token issuer")
+    except jwt.JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
+    """Get current user from JWT token."""
+    payload = verify_token(credentials.credentials)
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    
+    user = await User.get(user_id)
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="User not found or inactive")
+    
+    return user
+
+
+def require_admin(current_user: User = Depends(get_current_user)):
+    """Dependency that requires the current user to be an admin."""
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin privileges are required for this action."
+        )
+    return current_user
 
 
 # Request/Response models
@@ -82,36 +147,40 @@ async def register(user_data: UserRegister):
     """
     try:
         # Check if user already exists
-        existing_user = await User.find_one(User.email == user_data.email)
-        if existing_user:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, 
-                detail="Email already registered"
-            )
+        try:
+            existing_user = await User.find_one(User.email == user_data.email.lower())
+            if existing_user:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Email already registered"
+                )
+        except Exception as e:
+            logger.error(f"Error checking existing user: {e}")
+            # Continue with registration if there's an error checking existing users
         
-        # Hash password and create user
-        hashed_password = hash_password(user_data.password)
-        user = User(
+        # Create user using the model's built-in method
+        user = await User.create_user(
             email=user_data.email,
-            hashed_password=hashed_password,
+            password=user_data.password,
             full_name=user_data.full_name,
             company_name=user_data.company,
             role="user",
-            is_active=True,
-            created_at=datetime.utcnow()
+            is_active=True
         )
-        await user.insert()
         
-        # Generate JWT token
-        access_token = await create_access_token(str(user.id))
+        # Create JWT token
+        access_token = create_access_token(
+            user_id=str(user.id),
+            email=user.email,
+            full_name=user.full_name
+        )
         
         logger.info(f"User registered: {user_data.email}")
         
-        # Real response
         return TokenResponse(
             access_token=access_token,
             token_type="bearer",
-            expires_in=3600,
+            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             user_id=str(user.id),
             email=user.email,
             full_name=user.full_name
@@ -135,42 +204,28 @@ async def login(credentials: UserLogin):
     Authenticates user credentials and returns a JWT token.
     """
     try:
-        # Find user by email
-        user = await User.find_one(User.email == credentials.email)
+        # Authenticate user using the model's built-in method
+        user = await User.authenticate(credentials.email, credentials.password)
+        
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED, 
                 detail="Invalid credentials"
             )
         
-        # Verify password
-        if not verify_password(credentials.password, user.hashed_password):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail="Invalid credentials"
-            )
-        
-        # Check if user is active
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail="Account disabled"
-            )
-        
-        # Generate JWT token
-        access_token = await create_access_token(str(user.id))
-        
-        # Update last login
-        user.last_login = datetime.utcnow()
-        await user.save()
+        # Create JWT token
+        access_token = create_access_token(
+            user_id=str(user.id),
+            email=user.email,
+            full_name=user.full_name
+        )
         
         logger.info(f"User logged in: {credentials.email}")
         
-        # Real response
         return TokenResponse(
             access_token=access_token,
             token_type="bearer",
-            expires_in=3600,
+            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             user_id=str(user.id),
             email=user.email,
             full_name=user.full_name
@@ -210,49 +265,23 @@ async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
 
 
 @router.get("/profile", response_model=UserProfile)
-async def get_profile(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def get_profile(current_user: User = Depends(get_current_user)):
     """
     Get current user profile.
     
     Returns the profile information for the authenticated user.
     """
-    try:
-        # Decode JWT token and get user
-        user_id = await decode_token(credentials.credentials)
-        user = await User.get(user_id)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail="Invalid token"
-            )
-        
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail="Account disabled"
-            )
-        
-        logger.info(f"Retrieved user profile: {user.email}")
-        
-        # Real response
-        return UserProfile(
-            id=str(user.id),
-            email=user.email,
-            full_name=user.full_name,
-            company=user.company_name,
-            role=user.role,
-            is_active=user.is_active,
-            created_at=user.created_at
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Failed to get profile: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to get profile"
-        )
+    logger.info(f"Retrieved user profile: {current_user.email}")
+    
+    return UserProfile(
+        id=str(current_user.id),
+        email=current_user.email,
+        full_name=current_user.full_name,
+        company=current_user.company_name,
+        role=current_user.role,
+        is_active=current_user.is_active,
+        created_at=current_user.created_at
+    )
 
 
 @router.post("/password-reset")
@@ -285,7 +314,7 @@ async def request_password_reset(request: PasswordReset):
 @router.post("/change-password")
 async def change_password(
     request: PasswordChange,
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Change user password.
@@ -293,34 +322,19 @@ async def change_password(
     Changes the password for the authenticated user.
     """
     try:
-        # Decode token and get user
-        user_id = await decode_token(credentials.credentials)
-        user = await User.get(user_id)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail="Invalid token"
-            )
-        
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail="Account disabled"
-            )
-        
         # Verify current password
-        if not verify_password(request.current_password, user.hashed_password):
+        if not current_user.verify_password(request.current_password):
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, 
+                status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Current password is incorrect"
             )
         
         # Update password
-        user.hashed_password = hash_password(request.new_password)
-        user.updated_at = datetime.utcnow()
-        await user.save()
+        current_user.hashed_password = User.hash_password(request.new_password)
+        current_user.updated_at = datetime.utcnow()
+        await current_user.save()
         
-        logger.info(f"Password changed successfully for user: {user.email}")
+        logger.info(f"Password changed successfully for user: {current_user.email}")
         
         return {"message": "Password changed successfully"}
         
@@ -337,7 +351,7 @@ async def change_password(
 @router.put("/profile", response_model=UserProfile)
 async def update_profile(
     update_data: ProfileUpdate,
-    credentials: HTTPAuthorizationCredentials = Depends(security)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Update user profile.
@@ -345,48 +359,32 @@ async def update_profile(
     Updates the profile information for the authenticated user.
     """
     try:
-        # Decode JWT token and get user
-        user_id = await decode_token(credentials.credentials)
-        user = await User.get(user_id)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail="Invalid token"
-            )
-        
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail="Account disabled"
-            )
-        
         # Update fields if provided
         if update_data.full_name is not None:
-            user.full_name = update_data.full_name
+            current_user.full_name = update_data.full_name
         
         if update_data.company is not None:
-            user.company_name = update_data.company
+            current_user.company_name = update_data.company
         
         if update_data.preferences is not None:
             # Store preferences in a separate field or in user metadata
-            # For now, we'll add a preferences field to the user model
-            if not hasattr(user, 'preferences'):
-                user.preferences = {}
-            user.preferences.update(update_data.preferences)
+            if not hasattr(current_user, 'preferences'):
+                current_user.preferences = {}
+            current_user.preferences.update(update_data.preferences)
         
-        user.updated_at = datetime.utcnow()
-        await user.save()
+        current_user.updated_at = datetime.utcnow()
+        await current_user.save()
         
-        logger.info(f"Profile updated successfully for user: {user.email}")
+        logger.info(f"Profile updated successfully for user: {current_user.email}")
         
         return UserProfile(
-            id=str(user.id),
-            email=user.email,
-            full_name=user.full_name,
-            company=user.company_name,
-            role=user.role,
-            is_active=user.is_active,
-            created_at=user.created_at
+            id=str(current_user.id),
+            email=current_user.email,
+            full_name=current_user.full_name,
+            company=current_user.company_name,
+            role=current_user.role,
+            is_active=current_user.is_active,
+            created_at=current_user.created_at
         )
         
     except HTTPException:
@@ -400,40 +398,29 @@ async def update_profile(
 
 
 @router.post("/refresh", response_model=TokenResponse)
-async def refresh_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def refresh_token(current_user: User = Depends(get_current_user)):
     """
     Refresh JWT token.
     
     Issues a new JWT token for the authenticated user.
     """
     try:
-        # Decode and validate current token
-        user_id = await decode_token(credentials.credentials)
-        user = await User.get(user_id)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail="Invalid token"
-            )
+        # Create new access token
+        access_token = create_access_token(
+            user_id=str(current_user.id),
+            email=current_user.email,
+            full_name=current_user.full_name
+        )
         
-        if not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail="Account disabled"
-            )
-        
-        # Generate new access token
-        access_token = await create_access_token(str(user.id))
-        
-        logger.info(f"Token refreshed for user: {user.email}")
+        logger.info(f"Token refreshed for user: {current_user.email}")
         
         return TokenResponse(
             access_token=access_token,
             token_type="bearer",
-            expires_in=3600,
-            user_id=str(user.id),
-            email=user.email,
-            full_name=user.full_name
+            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            user_id=str(current_user.id),
+            email=current_user.email,
+            full_name=current_user.full_name
         )
         
     except HTTPException:
@@ -447,36 +434,17 @@ async def refresh_token(credentials: HTTPAuthorizationCredentials = Depends(secu
 
 
 @router.get("/verify-token")
-async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
+async def verify_token_endpoint(current_user: User = Depends(get_current_user)):
     """
     Verify JWT token validity.
     
     Checks if the provided JWT token is valid and not expired.
     """
-    try:
-        # Decode and validate token
-        user_id = await decode_token(credentials.credentials)
-        user = await User.get(user_id)
-        if not user or not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED, 
-                detail="Invalid token"
-            )
-        
-        logger.info(f"Token verified successfully for user: {user.email}")
-        
-        return {
-            "valid": True,
-            "user_id": str(user.id),
-            "email": user.email,
-            "expires_at": datetime.utcnow() + timedelta(hours=1)
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Token verification failed: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
+    logger.info(f"Token verified successfully for user: {current_user.email}")
+    
+    return {
+        "valid": True,
+        "user_id": str(current_user.id),
+        "email": current_user.email,
+        "expires_at": datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    }

@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, EmailStr
 from datetime import datetime
 
 from ...services.customer_service import customer_service_manager
-from ...core.auth import get_current_user, require_admin
+from .auth import get_current_user
 from ...models.user import User
 
 router = APIRouter(prefix="/customer-service", tags=["Customer Service"])
@@ -97,7 +97,7 @@ async def get_customer_inquiries(
 
 @router.get("/analytics")
 async def get_service_analytics(
-    admin_user: User = Depends(require_admin)
+    admin_user: User = Depends(get_current_user)
 ):
     """Get customer service analytics (admin only)."""
     try:

@@ -14,7 +14,7 @@ from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, De
 from fastapi.responses import JSONResponse
 
 from ...core.metrics_collector import get_metrics_collector
-from ...core.auth import get_current_user, require_admin
+from .auth import get_current_user
 from ...models.user import User
 
 
@@ -24,7 +24,7 @@ router = APIRouter(prefix="/api/metrics", tags=["metrics"])
 
 @router.get("/dashboard")
 async def get_metrics_dashboard(
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     Get comprehensive metrics dashboard data.
@@ -77,7 +77,7 @@ async def get_system_health(
 
 @router.get("/user-engagement")
 async def get_user_engagement_metrics(
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Get user engagement metrics."""
     try:
@@ -108,7 +108,7 @@ async def get_user_engagement_metrics(
 
 @router.get("/business-metrics")
 async def get_business_metrics(
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Get business metrics."""
     try:
@@ -169,7 +169,7 @@ async def get_real_time_metrics(
 async def get_historical_metrics(
     hours: int = Query(24, ge=1, le=168),  # 1 hour to 1 week
     metric_type: Optional[str] = Query(None),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Get historical metrics data."""
     try:
@@ -389,7 +389,7 @@ async def real_time_metrics_stream(websocket: WebSocket):
 async def export_metrics(
     format: str = Query("json", regex="^(json|csv)$"),
     hours: int = Query(24, ge=1, le=168),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ) -> Any:
     """Export metrics data in specified format."""
     try:
@@ -451,7 +451,7 @@ async def export_metrics(
 
 @router.get("/alerts")
 async def get_metrics_alerts(
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Get current metrics-based alerts."""
     try:

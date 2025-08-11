@@ -18,7 +18,7 @@ from ...integrations.compliance_databases import (
     assess_framework_compliance,
     get_industry_compliance_summary
 )
-from ...core.auth import get_current_user
+from .auth import get_current_user
 from ...models.user import User
 
 logger = logging.getLogger(__name__)

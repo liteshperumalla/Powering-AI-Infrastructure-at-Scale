@@ -15,7 +15,8 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    UV_CACHE_DIR=/tmp/.uv-cache
 
 # Install system dependencies for building with security updates
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -23,6 +24,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
     git \
+    libffi-dev \
+    libssl-dev \
     && apt-get upgrade -y \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
@@ -32,13 +35,19 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Copy requirements and install Python dependencies
-COPY pyproject.toml requirements.txt ./
+COPY pyproject.toml ./
 COPY README.md ./
 
-# Install uv and use it to create venv and install dependencies
+# Install uv for faster dependency resolution and installation
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh && \
-    /root/.local/bin/uv venv /opt/venv && \
-    /root/.local/bin/uv pip install --no-cache -r requirements.txt .
+    /root/.local/bin/uv venv /opt/venv
+
+# Install dependencies with uv for faster builds
+RUN /root/.local/bin/uv pip install --no-cache -e . && \
+    /root/.local/bin/uv pip install --no-cache \
+    gunicorn[gthread] \
+    prometheus-client \
+    && rm -rf /tmp/.uv-cache
 
 
 # Security scanning stage (optional)
@@ -149,11 +158,17 @@ EXPOSE 8000
 # Use tini as init system for proper signal handling
 ENTRYPOINT ["tini", "--"]
 
-# Run the application with production settings
-CMD ["/opt/venv/bin/uvicorn", "src.infra_mind.main:app", \
-     "--host", "0.0.0.0", \
-     "--port", "8000", \
+# Run the application with production settings using gunicorn for better performance
+CMD ["/opt/venv/bin/gunicorn", "src.infra_mind.main:app", \
+     "--bind", "0.0.0.0:8000", \
      "--workers", "4", \
-     "--access-log", \
+     "--worker-class", "uvicorn.workers.UvicornWorker", \
+     "--worker-connections", "1000", \
+     "--max-requests", "1000", \
+     "--max-requests-jitter", "100", \
+     "--preload", \
+     "--access-logfile", "-", \
+     "--error-logfile", "-", \
      "--log-level", "info", \
-     "--no-server-header"]
+     "--capture-output", \
+     "--enable-stdio-inheritance"]

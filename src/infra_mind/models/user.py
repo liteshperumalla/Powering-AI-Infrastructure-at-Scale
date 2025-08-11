@@ -128,7 +128,7 @@ class User(Document):
         """Authenticate a user by email and password."""
         user = await cls.find_one(cls.email == email.lower(), cls.is_active == True)
         if user and user.verify_password(password):
-            await user.update_login_info()
+            user.update_login_info()
             await user.save()
             return user
         return None

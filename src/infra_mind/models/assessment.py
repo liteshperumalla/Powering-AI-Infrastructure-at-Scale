@@ -62,7 +62,7 @@ class Assessment(Document):
         default=None,
         description="LangGraph workflow identifier"
     )
-    agent_states: Dict[str, Dict[str, Any]] = Field(
+    agent_states: Dict[str, Any] = Field(
         default_factory=dict,
         description="Current state of each agent in the workflow"
     )

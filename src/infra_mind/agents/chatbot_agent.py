@@ -274,7 +274,7 @@ class ChatbotAgent(BaseAgent):
             )
             
             # Parse response and map to enum
-            intent_text = response.strip().lower()
+            intent_text = response.content.strip().lower()
             
             # Map common variations
             intent_mapping = {
@@ -1106,35 +1106,35 @@ class ChatbotAgent(BaseAgent):
             # Search for platform updates and news
             platform_search = await self.web_search_client.search(
                 "infrastructure platform updates cloud services 2024 2025 enterprise announcements",
-                num_results=3
+                max_results=3
             )
             real_time_knowledge["platform_updates"] = platform_search.get("results", [])
             
             # Search for service status and outages
             status_search = await self.web_search_client.search(
                 "cloud service status outages infrastructure issues enterprise support 2024",
-                num_results=3
+                max_results=3
             )
             real_time_knowledge["service_status"] = status_search.get("results", [])
             
             # Search for common technical issues
             issues_search = await self.web_search_client.search(
                 "common infrastructure problems troubleshooting enterprise cloud support 2024",
-                num_results=3
+                max_results=3
             )
             real_time_knowledge["common_issues"] = issues_search.get("results", [])
             
             # Search for feature announcements
             features_search = await self.web_search_client.search(
                 "cloud infrastructure new features enterprise platform capabilities 2024 2025",
-                num_results=3
+                max_results=3
             )
             real_time_knowledge["feature_announcements"] = features_search.get("results", [])
             
             # Search for troubleshooting guides
             guides_search = await self.web_search_client.search(
                 "infrastructure troubleshooting guides enterprise support documentation 2024",
-                num_results=3
+                max_results=3
             )
             real_time_knowledge["troubleshooting_guides"] = guides_search.get("results", [])
             
@@ -1236,7 +1236,7 @@ class ChatbotAgent(BaseAgent):
             """
             
             response = await self.llm_client.generate_response(extract_prompt)
-            return response.strip()
+            return response.content.strip()
             
         except Exception as e:
             logger.warning(f"Failed to extract key terms: {str(e)}")
@@ -1313,7 +1313,7 @@ class ChatbotAgent(BaseAgent):
             # Generate response
             response = await self.llm_client.generate_response(llm_request)
             
-            return response.strip()
+            return response.content.strip()
             
         except Exception as e:
             logger.error(f"LLM call failed: {str(e)}")

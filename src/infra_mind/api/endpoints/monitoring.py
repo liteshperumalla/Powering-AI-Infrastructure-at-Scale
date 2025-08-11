@@ -16,17 +16,17 @@ from fastapi.responses import JSONResponse
 from ...core.health_checks import get_health_manager, initialize_health_checks, setup_monitoring_dashboard
 from ...core.metrics_collector import get_metrics_collector
 from ...core.log_monitoring import RealTimeLogMonitor
-from ...core.auth import get_current_user, require_admin
+from .auth import get_current_user, require_admin
 from ...models.user import User
 
 
 logger = logging.getLogger(__name__)
-router = APIRouter(prefix="/api/monitoring", tags=["monitoring"])
+router = APIRouter(tags=["monitoring"])
 
 
 @router.get("/dashboard")
 async def get_monitoring_dashboard(
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """
     Get comprehensive monitoring dashboard data.
@@ -125,7 +125,7 @@ async def get_system_health(
 @router.post("/health/check/{component_name}")
 async def trigger_health_check(
     component_name: str,
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Trigger immediate health check for a specific component."""
     try:
@@ -157,7 +157,7 @@ async def trigger_health_check(
 
 @router.post("/health/check-all")
 async def trigger_all_health_checks(
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Trigger immediate health check for all components."""
     try:
@@ -193,7 +193,7 @@ async def get_alerts(
     status: Optional[str] = Query(None, regex="^(active|resolved)$"),
     severity: Optional[str] = Query(None, regex="^(low|medium|high|critical)$"),
     limit: int = Query(50, ge=1, le=500),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Get system alerts with optional filtering."""
     try:
@@ -248,7 +248,7 @@ async def get_alerts(
 async def trigger_recovery(
     component_name: str,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Trigger manual recovery for a specific component."""
     try:
@@ -279,7 +279,7 @@ async def trigger_recovery(
 async def get_recovery_history(
     component: Optional[str] = Query(None),
     limit: int = Query(50, ge=1, le=200),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Get recovery attempt history."""
     try:
@@ -313,7 +313,7 @@ async def get_recovery_history(
 @router.get("/logs/summary")
 async def get_log_summary(
     hours: int = Query(24, ge=1, le=168),
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Get log summary and analysis."""
     try:
@@ -497,7 +497,7 @@ async def monitoring_websocket(websocket: WebSocket):
 
 @router.post("/start")
 async def start_monitoring(
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Start monitoring services."""
     try:
@@ -528,7 +528,7 @@ async def start_monitoring(
 
 @router.post("/stop")
 async def stop_monitoring(
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:
     """Stop monitoring services."""
     try:

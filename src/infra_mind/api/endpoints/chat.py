@@ -24,7 +24,7 @@ from ...models.assessment import Assessment
 from ...models.report import Report
 from ...agents.chatbot_agent import ChatbotAgent
 from ...agents.base import AgentConfig, AgentRole
-from ...core.auth import get_current_user
+from .auth import get_current_user
 
 logger = logging.getLogger(__name__)
 

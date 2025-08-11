@@ -14,7 +14,7 @@ from typing import Optional, List, Dict, Any
 from datetime import datetime
 import logging
 
-from ...core.auth import get_current_active_user, auth_service
+from .auth import get_current_user
 from ...core.rbac import (
     Role, Permission, AccessControl, require_permission, require_role,
     require_user_management, require_view_all_users
@@ -267,7 +267,7 @@ async def list_users(
 @router.get("/{user_id}", response_model=UserResponse)
 async def get_user(
     user_id: str,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get user by ID.
@@ -323,7 +323,7 @@ async def update_user(
     user_id: str,
     request: UpdateUserRequest,
     http_request: Request,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
     """
     Update user information.

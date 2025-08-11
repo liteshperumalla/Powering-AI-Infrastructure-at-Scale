@@ -911,42 +911,42 @@ class ComplianceAgent(BaseAgent):
             # Search for recent GDPR updates
             gdpr_search = await self.web_search_client.search(
                 "GDPR General Data Protection Regulation updates 2024 2025 compliance requirements",
-                num_results=5
+                max_results=5
             )
             regulatory_updates["gdpr_updates"] = gdpr_search.get("results", [])
             
             # Search for HIPAA updates
             hipaa_search = await self.web_search_client.search(
                 "HIPAA Health Insurance Portability Accountability Act updates 2024 2025 compliance",
-                num_results=5
+                max_results=5
             )
             regulatory_updates["hipaa_updates"] = hipaa_search.get("results", [])
             
             # Search for CCPA updates
             ccpa_search = await self.web_search_client.search(
                 "CCPA California Consumer Privacy Act updates 2024 2025 compliance requirements",
-                num_results=5
+                max_results=5
             )
             regulatory_updates["ccpa_updates"] = ccpa_search.get("results", [])
             
             # Search for general compliance news
             compliance_search = await self.web_search_client.search(
                 "data privacy compliance regulations 2024 2025 enterprise security requirements",
-                num_results=5
+                max_results=5
             )
             regulatory_updates["general_compliance_news"] = compliance_search.get("results", [])
             
             # Search for security advisories
             security_search = await self.web_search_client.search(
                 "cybersecurity advisories data breach compliance 2024 2025 enterprise security",
-                num_results=5
+                max_results=5
             )
             regulatory_updates["security_advisories"] = security_search.get("results", [])
             
             # Search for recent data breach incidents for learning
             breach_search = await self.web_search_client.search(
                 "data breach incidents 2024 2025 compliance lessons learned enterprise security",
-                num_results=3
+                max_results=3
             )
             regulatory_updates["data_breach_incidents"] = breach_search.get("results", [])
             
@@ -1178,7 +1178,7 @@ class ComplianceAgent(BaseAgent):
             # Search for current security benchmarks and standards
             security_research = await self.web_search_client.search(
                 "enterprise security controls benchmarks 2024 2025 NIST CIS OWASP best practices",
-                num_results=5
+                max_results=5
             )
             
             assessment_data = self.current_assessment.dict() if self.current_assessment else {}
@@ -1353,7 +1353,7 @@ class ComplianceAgent(BaseAgent):
             # Research compliance solutions and best practices
             solutions_research = await self.web_search_client.search(
                 "enterprise compliance solutions 2024 2025 data protection GDPR HIPAA implementation",
-                num_results=5
+                max_results=5
             )
             
             recommendations_prompt = f"""

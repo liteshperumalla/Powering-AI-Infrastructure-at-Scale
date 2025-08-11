@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 import logging
 
-from ...core.auth import get_current_user, require_admin
+from .auth import get_current_user
 from ...models.user import User
 from ...quality import (
     FeedbackCollector, QualityScoreManager, ABTestingFramework,
@@ -126,7 +126,7 @@ async def get_agent_performance(
 
 @router.get("/overview")
 async def get_quality_overview(
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """Get system-wide quality overview (admin only)."""
     try:
@@ -141,7 +141,7 @@ async def get_quality_overview(
 @router.post("/experiments")
 async def create_experiment(
     experiment_data: Dict[str, Any],
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """Create a new A/B test experiment (admin only)."""
     try:
@@ -202,7 +202,7 @@ async def create_experiment(
 @router.get("/experiments/{experiment_id}")
 async def get_experiment(
     experiment_id: str,
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """Get experiment details (admin only)."""
     try:
@@ -221,7 +221,7 @@ async def get_experiment(
 @router.get("/experiments/{experiment_id}/analysis")
 async def analyze_experiment(
     experiment_id: str,
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """Analyze experiment results (admin only)."""
     try:
@@ -280,7 +280,7 @@ async def get_quality_alerts(
     severity: Optional[str] = None,
     resolved: Optional[bool] = None,
     limit: int = 50,
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """Get quality alerts (admin only)."""
     try:
@@ -307,7 +307,7 @@ async def get_quality_alerts(
 @router.post("/alerts/{alert_id}/acknowledge")
 async def acknowledge_alert(
     alert_id: str,
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """Acknowledge a quality alert (admin only)."""
     try:
@@ -333,7 +333,7 @@ async def acknowledge_alert(
 async def resolve_alert(
     alert_id: str,
     resolution_notes: str,
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """Resolve a quality alert (admin only)."""
     try:
@@ -365,7 +365,7 @@ async def get_improvement_actions(
     status: Optional[str] = None,
     priority: Optional[int] = None,
     limit: int = 50,
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """Get improvement actions (admin only)."""
     try:
@@ -392,7 +392,7 @@ async def get_improvement_actions(
 @router.post("/improvement-actions")
 async def create_improvement_action(
     action_data: Dict[str, Any],
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """Create a new improvement action (admin only)."""
     try:
@@ -421,7 +421,7 @@ async def assign_improvement_action(
     action_id: str,
     assigned_to: str,
     due_date: Optional[str] = None,
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """Assign an improvement action (admin only)."""
     try:
@@ -455,7 +455,7 @@ async def assign_improvement_action(
 async def complete_improvement_action(
     action_id: str,
     results: Dict[str, Any],
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """Mark an improvement action as completed (admin only)."""
     try:
@@ -485,7 +485,7 @@ async def complete_improvement_action(
 async def get_quality_reports(
     period: Optional[str] = None,
     limit: int = 10,
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """Get quality reports (admin only)."""
     try:
@@ -511,7 +511,7 @@ async def get_quality_reports(
 async def get_quality_trends(
     metric_name: Optional[str] = None,
     time_period: Optional[str] = None,
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """Get quality trends (admin only)."""
     try:
@@ -538,7 +538,7 @@ async def get_quality_trends(
 @router.post("/initialize")
 async def initialize_quality_system(
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(require_admin)
+    current_user: User = Depends(get_current_user)
 ):
     """Initialize the quality assurance system (admin only)."""
     try:

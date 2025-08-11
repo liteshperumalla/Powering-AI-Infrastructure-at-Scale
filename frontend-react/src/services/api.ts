@@ -11,18 +11,17 @@ import { Assessment, BusinessRequirements, TechnicalRequirements } from '../stor
 // Use different URLs for client-side (browser) vs server-side (SSR) requests
 const getApiBaseUrl = () => {
     if (typeof window === 'undefined') {
-        // Server-side: use internal Docker service name
+        // Server-side: use internal Docker service name for internal container communication
         return process.env.API_URL || 'http://api:8000';
     } else {
-        // Client-side: use public URL
-        // First try env var, then hardcoded fallback
+        // Client-side: use public URL that the browser can reach
         const envUrl = process.env.NEXT_PUBLIC_API_URL;
         if (envUrl) {
             console.log('🔧 Using NEXT_PUBLIC_API_URL from env:', envUrl);
             return envUrl;
         }
-        
-        // Fallback to hardcoded localhost for now to resolve connection issue
+
+        // Fallback to localhost for development
         const fallbackUrl = 'http://localhost:8000';
         console.log('🔧 Using hardcoded fallback URL:', fallbackUrl);
         return fallbackUrl;
@@ -220,12 +219,13 @@ export interface CloudService {
 // API Client Class
 class ApiClient {
     private baseURL: string;
-    private token: string | null = null;
 
     constructor() {
         // Set baseURL dynamically based on environment
         this.baseURL = getApiBaseUrl() + API_PREFIX;
-        this.token = this.getStoredToken();
+        
+        // Clear old tokens that might be missing required claims
+        this.clearOldTokens();
     }
 
     // Token management
@@ -240,14 +240,39 @@ class ApiClient {
         if (typeof window !== 'undefined') {
             localStorage.setItem('auth_token', token);
         }
-        this.token = token;
     }
 
     public removeStoredToken(): void {
         if (typeof window !== 'undefined') {
             localStorage.removeItem('auth_token');
         }
-        this.token = null;
+    }
+
+    // Clear old tokens that might be missing required claims
+    public clearOldTokens(): void {
+        if (typeof window !== 'undefined') {
+            const token = localStorage.getItem('auth_token');
+            if (token) {
+                try {
+                    // Decode token without verification to check claims
+                    const parts = token.split('.');
+                    if (parts.length === 3) {
+                        const payload = JSON.parse(atob(parts[1]));
+                        // If token is missing required claims, remove it
+                        const requiredClaims = ['iss', 'aud', 'token_type', 'jti'];
+                        const missingClaims = requiredClaims.filter(claim => !payload[claim]);
+                        if (missingClaims.length > 0) {
+                            console.log('🔄 Removing old token missing claims:', missingClaims);
+                            localStorage.removeItem('auth_token');
+                        }
+                    }
+                } catch (error) {
+                    // If we can't decode the token, it's probably invalid
+                    console.log('🔄 Removing invalid token');
+                    localStorage.removeItem('auth_token');
+                }
+            }
+        }
     }
 
     // HTTP request helper with enhanced error handling and loading states
@@ -258,10 +283,7 @@ class ApiClient {
         const { useFullUrl, ...fetchOptions } = options;
         const url = useFullUrl ? endpoint : `${this.baseURL}${endpoint}`;
 
-        // Ensure token is loaded from localStorage if not already set
-        if (!this.token) {
-            this.token = this.getStoredToken();
-        }
+        const token = this.getStoredToken();
 
         const headers: Record<string, string> = {
             'Content-Type': 'application/json',
@@ -271,8 +293,8 @@ class ApiClient {
             ...(fetchOptions.headers as Record<string, string> || {}),
         };
 
-        if (this.token) {
-            headers['Authorization'] = `Bearer ${this.token}`;
+        if (token) {
+            headers['Authorization'] = `Bearer ${token}`;
         }
 
         const config: RequestInit = {
@@ -301,9 +323,16 @@ class ApiClient {
                 // Handle different error types
                 switch (response.status) {
                     case 401:
-                        this.removeStoredToken();
-                        if (typeof window !== 'undefined') {
-                            window.location.href = '/auth/login';
+                        // Only logout for certain 401 errors, not all of them
+                        const shouldLogout = this.shouldLogoutOn401(errorData, endpoint);
+                        if (shouldLogout) {
+                            console.log('🔒 Authentication failed - logging out user');
+                            this.removeStoredToken();
+                            if (typeof window !== 'undefined') {
+                                window.location.href = '/auth/login';
+                            }
+                        } else {
+                            console.warn('🔒 401 error but not logging out:', errorData.message);
                         }
                         break;
                     case 403:
@@ -325,16 +354,16 @@ class ApiClient {
 
             // Handle different content types and empty responses
             const contentType = response.headers.get('content-type');
-            
+
             // Check if response has content
             const contentLength = response.headers.get('content-length');
             const hasContent = contentLength !== '0' && contentLength !== null;
-            
+
             // Handle empty responses (common for DELETE operations)
             if (!hasContent) {
                 return undefined as unknown as T;
             }
-            
+
             if (contentType?.includes('application/json')) {
                 try {
                     return await response.json();
@@ -352,7 +381,7 @@ class ApiClient {
                 if (error.name === 'AbortError') {
                     throw new Error('Request timeout. Please try again.');
                 }
-                
+
                 // Handle network connectivity issues
                 if (error.message.includes('fetch') || error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
                     const currentApiUrl = this.baseURL.replace('/api/v1', '');
@@ -373,7 +402,7 @@ class ApiClient {
                     console.error('API Connection Details:', debugInfo);
                     throw new Error(`Connection failed - API server not reachable at ${currentApiUrl}. Check if the server is running and network connectivity is available.`);
                 }
-                
+
                 console.error(`API request failed: ${config.method || 'GET'} ${endpoint}`, error);
                 throw error;
             }
@@ -386,16 +415,55 @@ class ApiClient {
         return `req_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     }
 
+    // Determine if a 401 error should trigger logout
+    private shouldLogoutOn401(errorData: ApiError, endpoint: string): boolean {
+        // Always logout for explicit authentication endpoints
+        if (endpoint.includes('/auth/')) {
+            return true;
+        }
+
+        // Don't logout for missing resources or malformed requests
+        if (errorData.message?.includes('not found') || 
+            errorData.message?.includes('invalid format') ||
+            errorData.message?.includes('malformed')) {
+            return false;
+        }
+
+        // Check if this is a token-related error that should cause logout
+        const tokenErrors = [
+            'invalid token',
+            'token expired',
+            'token has been revoked',
+            'authentication required',
+            'token validation failed',
+            'invalid token signature',
+            'invalid token issuer',
+            'invalid token audience'
+        ];
+
+        const errorMessage = errorData.message?.toLowerCase() || errorData.error?.toLowerCase() || '';
+        const shouldLogout = tokenErrors.some(err => errorMessage.includes(err));
+        
+        console.log('🔍 Checking 401 error:', {
+            endpoint,
+            errorMessage,
+            shouldLogout,
+            errorData
+        });
+
+        return shouldLogout;
+    }
+
     // Debug connection method
     async debugConnection(): Promise<any> {
         console.log('🔍 Starting connection debug...');
-        
+
         const testUrls = [
             'http://localhost:8000',
             'http://127.0.0.1:8000',
             'http://api:8000'
         ];
-        
+
         const debugInfo = {
             currentConfig: {
                 baseURL: this.baseURL,
@@ -408,7 +476,7 @@ class ApiClient {
             },
             testResults: {} as any
         };
-        
+
         // Test each URL
         for (const testUrl of testUrls) {
             try {
@@ -418,14 +486,14 @@ class ApiClient {
                     headers: { 'Accept': 'application/json' },
                     signal: AbortSignal.timeout(5000)
                 });
-                
+
                 debugInfo.testResults[testUrl] = {
                     success: true,
                     status: response.status,
                     statusText: response.statusText,
                     headers: Object.fromEntries(response.headers.entries())
                 };
-                
+
                 if (response.ok) {
                     console.log(`✅ ${testUrl} - SUCCESS (${response.status})`);
                 } else {
@@ -439,7 +507,7 @@ class ApiClient {
                 };
             }
         }
-        
+
         console.log('🔍 Connection debug complete:', debugInfo);
         return debugInfo;
     }
@@ -499,10 +567,10 @@ class ApiClient {
         });
     }
 
-    async getAssessments(): Promise<{assessments: Assessment[], total: number, page: number, limit: number, pages: number}> {
+    async getAssessments(): Promise<{ assessments: Assessment[], total: number, page: number, limit: number, pages: number }> {
         // Temporarily disable cache buster to debug CORS issues
         const url = '/assessments/';
-        const response = await this.request<{assessments: Assessment[], total: number, page: number, limit: number, pages: number}>(url);
+        const response = await this.request<{ assessments: Assessment[], total: number, page: number, limit: number, pages: number }>(url);
         return response;
     }
 
@@ -635,7 +703,7 @@ class ApiClient {
     async getRecommendations(assessmentId: string): Promise<Recommendation[]> {
         // Use cache buster to ensure fresh recommendations data
         const url = cacheBuster.bustCache(`/recommendations/${assessmentId}`, `recommendations_${assessmentId}`);
-        const response = await this.request<{recommendations: Recommendation[], total: number, assessment_id: string, summary: any}>(url, {
+        const response = await this.request<{ recommendations: Recommendation[], total: number, assessment_id: string, summary: any }>(url, {
             headers: {
                 ...getNoCacheHeaders()
             }
@@ -669,8 +737,8 @@ class ApiClient {
         if (assessmentId) {
             // Get reports for specific assessment
             const timestamp = Date.now();
-            const response = await this.request<{reports: Report[]}>(
-                `/reports/${assessmentId}?t=${timestamp}`, 
+            const response = await this.request<{ reports: Report[] }>(
+                `/reports/${assessmentId}?t=${timestamp}`,
                 {
                     headers: {
                         'Cache-Control': 'no-cache'
@@ -683,7 +751,7 @@ class ApiClient {
             // This avoids the recursive call chain that causes CORS issues
             console.log('🔄 getReports() called without assessmentId - returning empty array to prevent loops');
             return [];
-            
+
             // TODO: Implement proper reports endpoint that doesn't require assessment iteration
             /*
             try {
@@ -734,7 +802,7 @@ class ApiClient {
                 downloadUrl = `${this.baseURL}/reports/${reportId}/download?format=${format}`;
             }
         }
-        
+
         const response = await fetch(downloadUrl, {
             headers: {
                 'Authorization': `Bearer ${this.token}`,
@@ -854,7 +922,7 @@ class ApiClient {
         };
     }> {
         const params = new URLSearchParams();
-        
+
         if (options?.provider) {
             params.append('provider', options.provider);
         }
@@ -964,7 +1032,7 @@ class ApiClient {
             // Use the base URL directly for health endpoint (no API prefix needed)
             const healthUrl = `${getApiBaseUrl()}/health`;
             console.log('Health check attempting to connect to:', healthUrl);
-            
+
             const response = await fetch(healthUrl, {
                 method: 'GET',
                 headers: {
@@ -973,12 +1041,12 @@ class ApiClient {
                 // Add timeout for health check
                 signal: AbortSignal.timeout(10000), // 10 second timeout
             });
-            
+
             if (!response.ok) {
                 console.error(`Health check HTTP error: ${response.status} ${response.statusText}`);
                 throw new Error(`Health check failed: ${response.status}`);
             }
-            
+
             const healthData = await response.json();
             console.log('Health check successful:', healthData);
             return healthData;
@@ -1054,15 +1122,15 @@ class ApiClient {
         const contentType = response.headers.get('content-type');
         const contentLength = response.headers.get('content-length');
         const hasContent = contentLength !== '0' && contentLength !== null;
-        
+
         if (!hasContent) {
             return undefined as unknown as T;
         }
-        
+
         if (contentType?.includes('application/json')) {
             return await response.json();
         }
-        
+
         return await response.text() as unknown as T;
     }
 
@@ -1311,14 +1379,14 @@ class ApiClient {
         session_id: string;
         timestamp: string;
     }> {
-        const url = `${API_BASE_URL}/api/v1/chat/simple`;
+        const url = `${getApiBaseUrl()}${API_PREFIX}/chat/simple`;
         const payload = {
             message,
             session_id: sessionId || `simple_${Date.now()}`
         };
-        
+
         console.log('🔧 SendSimpleMessage called:', { url, payload, API_BASE_URL });
-        
+
         try {
             // Use direct fetch to avoid authentication and complex headers
             const response = await fetch(url, {
@@ -1328,15 +1396,15 @@ class ApiClient {
                 },
                 body: JSON.stringify(payload)
             });
-            
+
             console.log('🔧 Response status:', response.status, response.statusText);
-            
+
             if (!response.ok) {
                 const errorText = await response.text();
                 console.error('❌ HTTP error response:', errorText);
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
-            
+
             const result = await response.json();
             console.log('✅ SendSimpleMessage success:', result);
             return result;
@@ -1344,6 +1412,91 @@ class ApiClient {
             console.error('❌ SendSimpleMessage failed:', error);
             throw error;
         }
+    }
+
+    // Advanced Analytics methods (v2 API only)
+    async getAdvancedAnalyticsDashboard(timeframe?: string): Promise<{
+        timestamp: string;
+        timeframe: string;
+        analytics: {
+            cost_modeling: any;
+            scaling_simulations: any;
+            performance_benchmarks: any;
+            multi_cloud_analysis: any;
+            security_analytics: any;
+            recommendation_trends: any;
+        };
+        visualizations: {
+            d3js_charts: any;
+            interactive_dashboards: any;
+        };
+        predictive_insights: any;
+        optimization_opportunities: any[];
+    }> {
+        const params = new URLSearchParams();
+        if (timeframe) {
+            params.append('timeframe', timeframe);
+        }
+        
+        // Use v2 API explicitly for advanced analytics
+        const url = `${getApiBaseUrl()}/api/v2/advanced-analytics/dashboard${params.toString() ? `?${params.toString()}` : ''}`;
+        return this.request(url, { useFullUrl: true });
+    }
+
+    async getCostPredictions(assessmentId?: string, projectionMonths?: number): Promise<{
+        predictions: any;
+        projection_months: number;
+        generated_at: string;
+    }> {
+        const params = new URLSearchParams();
+        if (assessmentId) {
+            params.append('assessment_id', assessmentId);
+        }
+        if (projectionMonths) {
+            params.append('projection_months', projectionMonths.toString());
+        }
+        
+        // Use v2 API explicitly for advanced analytics
+        const url = `${getApiBaseUrl()}/api/v2/advanced-analytics/cost-predictions${params.toString() ? `?${params.toString()}` : ''}`;
+        return this.request(url, { useFullUrl: true });
+    }
+
+    async getSecurityAudit(assessmentId?: string, includeRemediation?: boolean): Promise<{
+        security_audit: any;
+        audit_timestamp: string;
+        next_audit_recommended: string;
+    }> {
+        const params = new URLSearchParams();
+        if (assessmentId) {
+            params.append('assessment_id', assessmentId);
+        }
+        if (includeRemediation !== undefined) {
+            params.append('include_remediation', includeRemediation.toString());
+        }
+        
+        // Use v2 API explicitly for advanced analytics
+        const url = `${getApiBaseUrl()}/api/v2/advanced-analytics/security-audit${params.toString() ? `?${params.toString()}` : ''}`;
+        return this.request(url, { useFullUrl: true });
+    }
+
+    async getCostOptimization(assessmentId?: string, optimizationLevel?: string): Promise<{
+        cost_optimization: any;
+        optimization_level: string;
+        potential_monthly_savings: number;
+        confidence_score: number;
+        generated_at: string;
+    }> {
+        const params = new URLSearchParams();
+        if (assessmentId) {
+            params.append('assessment_id', assessmentId);
+        }
+        if (optimizationLevel) {
+            params.append('optimization_level', optimizationLevel);
+        }
+        
+        // Use v2 API explicitly for advanced analytics
+        const url = `${getApiBaseUrl()}/api/v2/advanced-analytics/infrastructure-cost-optimization${params.toString() ? `?${params.toString()}` : ''}`;
+        return this.request(url, { useFullUrl: true });
     }
 
     // Intelligent Form Features
@@ -1436,7 +1589,7 @@ class ApiClient {
                 { value: 'InnovateLabs', label: 'InnovateLabs', description: 'Innovation laboratory', confidence: 0.5 }
             ]
         };
-        
+
         const fieldSuggestions = suggestions[fieldName] || [];
         return fieldSuggestions.filter(s =>
             s.value.toLowerCase().includes(query.toLowerCase()) ||

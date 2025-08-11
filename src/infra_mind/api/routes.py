@@ -6,7 +6,7 @@ Supports API versioning for backward compatibility and evolution.
 """
 
 from fastapi import APIRouter, HTTPException, status
-from .endpoints import auth, assessments, recommendations, reports, monitoring, webhooks, admin, testing, resilience, compliance, integrations, compliance_dashboard, business_tools, performance_monitoring, forms, cloud_services, chat
+from .endpoints import auth, assessments, recommendations, reports, monitoring, webhooks, admin, testing, resilience, compliance, integrations, compliance_dashboard, business_tools, performance_monitoring, forms, cloud_services, chat, advanced_analytics
 
 # Create versioned API routers
 api_v1_router = APIRouter()
@@ -46,6 +46,12 @@ api_v1_router.include_router(
 api_v1_router.include_router(
     performance_monitoring.router,
     tags=["Performance Monitoring"]
+)
+
+api_v1_router.include_router(
+    monitoring.router,
+    prefix="/monitoring",
+    tags=["Monitoring"]
 )
 
 api_v1_router.include_router(
@@ -162,6 +168,12 @@ api_v2_router.include_router(
     tags=["Chat"]
 )
 
+api_v2_router.include_router(
+    advanced_analytics.router,
+    prefix="/advanced-analytics",
+    tags=["Advanced Analytics"]
+)
+
 # Main API router that includes all versions
 api_router = APIRouter()
 
@@ -201,7 +213,7 @@ async def get_api_versions():
                 "description": "Enhanced API with webhooks, monitoring, and admin features",
                 "endpoints": [
                     "/auth", "/assessments", "/recommendations", "/reports", "/forms", 
-                    "/monitoring", "/webhooks", "/admin", "/testing", "/resilience", "/compliance", "/integrations", "/chat"
+                    "/monitoring", "/webhooks", "/admin", "/testing", "/resilience", "/compliance", "/integrations", "/chat", "/advanced-analytics", "/cloud-services"
                 ],
                 "new_features": [
                     "Webhook support with delivery tracking",
@@ -223,7 +235,12 @@ async def get_api_versions():
                     "Third-party integrations with compliance databases",
                     "Business tools integration (Slack, Teams, email)",
                     "SSO integration with enterprise identity providers",
-                    "Real-time notifications and workflow updates"
+                    "Real-time notifications and workflow updates",
+                    "Advanced analytics dashboard with D3.js visualizations",
+                    "Predictive cost modeling and infrastructure scaling simulations",
+                    "Multi-cloud service recommendations (AWS, Azure, GCP, Alibaba, IBM)",
+                    "Security audit automation with vulnerability scanning",
+                    "Performance benchmarking across cloud providers"
                 ]
             }
         ],

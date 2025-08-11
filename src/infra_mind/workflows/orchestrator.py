@@ -216,8 +216,11 @@ class AgentOrchestrator:
         
         while retries <= self.config.max_retries:
             try:
-                # Create real agent using factory
-                agent = self.agent_factory.create_agent(role, self.config.agent_configs.get(role, {}))
+                # Create real agent using factory - pass None to let agent handle its own default config
+                agent_config = self.config.agent_configs.get(role, None)
+                if isinstance(agent_config, dict) and not agent_config:
+                    agent_config = None  # Empty dict means no config, let agent create defaults
+                agent = await self.agent_factory.create_agent(role, agent_config)
                 
                 if agent is None:
                     logger.warning(f"Failed to create agent for role {role.value}, using mock")
@@ -225,7 +228,7 @@ class AgentOrchestrator:
                 else:
                     # Execute real agent
                     logger.info(f"Executing real agent: {agent.config.name}")
-                    agent_result = await agent.process_assessment(assessment, context)
+                    agent_result = await agent.execute(assessment, context)
                 
                 # Check if result is acceptable
                 if agent_result.status == AgentStatus.COMPLETED:

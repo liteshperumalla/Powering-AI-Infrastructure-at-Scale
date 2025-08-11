@@ -109,56 +109,132 @@ export default function ComprehensiveAnalyticsDashboard() {
             setLoading(true);
             setError(null);
             try {
-                // Simulate API call
-                const response = await new Promise<AnalyticsData>((resolve) => {
-                    setTimeout(() => {
-                        resolve({
-                            overall_performance: { score: 85, trend: 'up' },
-                            cost_efficiency: { score: 78, trend: 'down' },
-                            security_compliance: { score: 92, trend: 'up' },
-                            cost_breakdown: { aws: 12500, azure: 9800, gcp: 7600 },
-                            performance_by_service: [
-                                { service: 'EC2', provider: 'AWS', score: 88 },
-                                { service: 'RDS', provider: 'AWS', score: 92 },
-                                { service: 'Azure VMs', provider: 'Azure', score: 85 },
-                                { service: 'Azure SQL', provider: 'Azure', score: 89 },
-                                { service: 'Compute Engine', provider: 'GCP', score: 90 },
-                                { service: 'Cloud SQL', provider: 'GCP', score: 91 },
-                            ],
-                            alerts_by_severity: { critical: 5, high: 12, medium: 34, low: 56 },
-                            operational_insights: [
-                                {
-                                    id: '1',
-                                    insight: 'High CPU utilization on RDS instances during peak hours.',
-                                    recommendation: 'Consider upgrading to a larger instance class or implementing read replicas.',
-                                    severity: 'high',
-                                    category: 'performance',
-                                },
-                                {
-                                    id: '2',
-                                    insight: 'Unused EBS volumes detected in us-east-1.',
-                                    recommendation: 'Review and delete unused volumes to reduce costs.',
-                                    severity: 'medium',
-                                    category: 'cost',
-                                },
-                                {
-                                    id: '3',
-                                    insight: 'S3 buckets without public access block.',
-                                    recommendation: 'Enable public access block on all S3 buckets to enhance security.',
-                                    severity: 'high',
-                                    category: 'security',
-                                },
-                            ],
-                            feature_usage: [
-                                { feature: 'Assessments', usage_count: 120, user_engagement_score: 85 },
-                                { feature: 'Reports', usage_count: 95, user_engagement_score: 78 },
-                                { feature: 'Scenarios', usage_count: 65, user_engagement_score: 92 },
-                                { feature: 'Analytics', usage_count: 45, user_engagement_score: 65 },
-                            ],
-                        });
-                    }, 1000);
+                // Fetch real data from backend
+                const [assessmentsResponse, reportsData] = await Promise.all([
+                    apiClient.getAssessments(),
+                    // Get reports for all assessments
+                    apiClient.getAssessments().then(async (assessments) => {
+                        const allReports = [];
+                        for (const assessment of assessments.assessments || []) {
+                            try {
+                                const reports = await apiClient.getReports(assessment.id);
+                                allReports.push(...(reports || []));
+                            } catch (error) {
+                                console.warn(`Failed to fetch reports for assessment ${assessment.id}:`, error);
+                            }
+                        }
+                        return allReports;
+                    })
+                ]);
+
+                const assessments = assessmentsResponse.assessments || [];
+                const reports = reportsData || [];
+
+                // Calculate real analytics from data
+                const completedAssessments = assessments.filter(a => a.status === 'completed');
+                const totalAssessments = assessments.length;
+                
+                // Calculate performance metrics
+                const avgProgress = assessments.reduce((sum, a) => sum + (a.progress_percentage || 0), 0) / Math.max(totalAssessments, 1);
+                const completionRate = completedAssessments.length / Math.max(totalAssessments, 1) * 100;
+                
+                // Calculate cost breakdown from assessments budget ranges
+                const budgetCounts = { low: 0, medium: 0, high: 0 };
+                assessments.forEach(assessment => {
+                    const budget = assessment.budget_range || 'unknown';
+                    if (budget.includes('10k') || budget.includes('50k')) budgetCounts.low++;
+                    else if (budget.includes('100k') || budget.includes('500k')) budgetCounts.medium++;
+                    else budgetCounts.high++;
                 });
-                setAnalytics(response);
+                
+                const totalBudgets = budgetCounts.low + budgetCounts.medium + budgetCounts.high || 1;
+                const costBreakdown = {
+                    aws: Math.round((budgetCounts.high / totalBudgets) * 100),
+                    azure: Math.round((budgetCounts.medium / totalBudgets) * 100),
+                    gcp: Math.round((budgetCounts.low / totalBudgets) * 100)
+                };
+                
+                // Calculate report completion status
+                const completedReports = reports.filter(r => r.status === 'completed');
+                const reportCompletionRate = reports.length > 0 ? (completedReports.length / reports.length) * 100 : 0;
+                
+                // Generate insights based on real data
+                const insights = [];
+                if (completionRate < 50) {
+                    insights.push({
+                        id: 'low_completion',
+                        insight: `Only ${Math.round(completionRate)}% of assessments are completed`,
+                        recommendation: 'Focus on completing pending assessments to improve infrastructure planning',
+                        severity: 'high' as const,
+                        category: 'performance' as const,
+                    });
+                }
+                
+                if (reports.length < assessments.length) {
+                    insights.push({
+                        id: 'missing_reports',
+                        insight: `${assessments.length - reports.length} assessments are missing reports`,
+                        recommendation: 'Generate reports for completed assessments to provide actionable insights',
+                        severity: 'medium' as const,
+                        category: 'performance' as const,
+                    });
+                }
+                
+                if (totalAssessments === 0) {
+                    insights.push({
+                        id: 'no_assessments',
+                        insight: 'No assessments have been created yet',
+                        recommendation: 'Create your first assessment to start analyzing your infrastructure',
+                        severity: 'high' as const,
+                        category: 'performance' as const,
+                    });
+                }
+
+                // Calculate industry distribution
+                const industries = assessments.reduce((acc, assessment) => {
+                    const industry = assessment.industry || 'Other';
+                    acc[industry] = (acc[industry] || 0) + 1;
+                    return acc;
+                }, {} as Record<string, number>);
+
+                const performanceByService = Object.entries(industries).map(([industry, count]) => ({
+                    service: industry.charAt(0).toUpperCase() + industry.slice(1),
+                    provider: 'Multi-Cloud',
+                    score: Math.round((count / totalAssessments) * 100)
+                }));
+
+                const analyticsData: AnalyticsData = {
+                    overall_performance: { 
+                        score: Math.round(avgProgress), 
+                        trend: completionRate > 75 ? 'up' : completionRate < 25 ? 'down' : 'stable' 
+                    },
+                    cost_efficiency: { 
+                        score: Math.round(reportCompletionRate), 
+                        trend: reportCompletionRate > 80 ? 'up' : reportCompletionRate < 40 ? 'down' : 'stable' 
+                    },
+                    security_compliance: { 
+                        score: Math.round(completionRate), 
+                        trend: 'stable' 
+                    },
+                    cost_breakdown: costBreakdown,
+                    performance_by_service: performanceByService.length > 0 ? performanceByService : [
+                        { service: 'Technology', provider: 'Multi-Cloud', score: 100 }
+                    ],
+                    alerts_by_severity: {
+                        critical: assessments.filter(a => a.status === 'failed').length,
+                        high: assessments.filter(a => a.priority === 'high').length,
+                        medium: assessments.filter(a => a.priority === 'medium').length,
+                        low: assessments.filter(a => a.priority === 'low').length,
+                    },
+                    operational_insights: insights.slice(0, 5), // Limit to 5 insights
+                    feature_usage: [
+                        { feature: 'Assessments', usage_count: totalAssessments, user_engagement_score: Math.round(completionRate) },
+                        { feature: 'Reports', usage_count: reports.length, user_engagement_score: Math.round(reportCompletionRate) },
+                        { feature: 'Analytics', usage_count: 1, user_engagement_score: 100 }, // Current page view
+                    ],
+                };
+
+                setAnalytics(analyticsData);
             } catch (err) {
                 setError('Failed to fetch analytics data.');
             } finally {

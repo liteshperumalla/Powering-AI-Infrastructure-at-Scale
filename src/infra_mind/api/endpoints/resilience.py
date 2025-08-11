@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException, Query, Path, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from ..auth import get_current_user
+from .auth import get_current_user
 from ...core.health_checks import get_health_manager, HealthStatus
 from ...core.failover import get_failover_orchestrator, FailoverStrategy
 from ...core.resilience import get_system_recovery_manager, resilience_manager

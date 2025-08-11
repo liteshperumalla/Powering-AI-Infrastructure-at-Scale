@@ -23,17 +23,21 @@ export default function ProtectedRoute({
     const [isInitialized, setIsInitialized] = useState(false);
 
     useEffect(() => {
-        console.log('ProtectedRoute: initializeAuth effect');
+        console.log('ProtectedRoute: initializeAuth effect', { isAuthenticated, user: !!user });
         const initializeAuth = async () => {
             // Check for stored token
             const storedToken = localStorage.getItem('auth_token');
+            console.log('ProtectedRoute: storedToken exists:', !!storedToken);
 
             if (storedToken && !isAuthenticated) {
                 // Set token and fetch user data
                 dispatch(setToken(storedToken));
                 try {
+                    console.log('ProtectedRoute: calling getCurrentUser');
                     await dispatch(getCurrentUser()).unwrap();
+                    console.log('ProtectedRoute: getCurrentUser success');
                 } catch (error) {
+                    console.error('ProtectedRoute: getCurrentUser failed:', error);
                     // Token is invalid, remove it
                     localStorage.removeItem('auth_token');
                     dispatch(setToken(null));
@@ -47,8 +51,15 @@ export default function ProtectedRoute({
     }, [dispatch, isAuthenticated]);
 
     useEffect(() => {
-        console.log('ProtectedRoute: redirect effect');
+        console.log('ProtectedRoute: redirect effect', {
+            isInitialized,
+            requireAuth,
+            isAuthenticated,
+            loading,
+            shouldRedirect: isInitialized && requireAuth && !isAuthenticated && !loading
+        });
         if (isInitialized && requireAuth && !isAuthenticated && !loading) {
+            console.log('ProtectedRoute: redirecting to', redirectTo);
             router.push(redirectTo);
         }
     }, [isInitialized, requireAuth, isAuthenticated, loading, router, redirectTo]);

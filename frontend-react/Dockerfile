@@ -20,14 +20,16 @@ RUN apk update && apk upgrade && apk add --no-cache \
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies with npm ci for production builds
-RUN npm install --no-audit --no-fund
+# Install dependencies with npm ci for production builds (faster and more reliable)
+RUN npm ci --no-audit --no-fund
 
 # Copy source code
 COPY . .
 
 # Build the application with optimizations
-ENV DISABLE_ESLINT_PLUGIN=true
+ENV DISABLE_ESLINT_PLUGIN=true \
+    NEXT_TELEMETRY_DISABLED=1 \
+    NODE_OPTIONS="--max-old-space-size=4096"
 RUN npm run build && \
     npm prune --production
 

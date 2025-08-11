@@ -183,8 +183,7 @@ class BaseAgent(ABC):
         # Set up logging context
         with log_context(
             agent_name=self.name,
-            workflow_id=workflow_id,
-            assessment_id=str(assessment.id) if assessment else None
+            workflow_id=workflow_id
         ):
             # Use comprehensive error handling
             async with error_handler.handle_errors(
@@ -586,15 +585,8 @@ class AgentFactory:
             logger.error(f"Agent type not found for role: {role.value}")
             return None
         
-        # Use default config if none provided
-        if config is None:
-            config = AgentConfig(
-                name=f"{role.value}_agent",
-                role=role
-            )
-        
         try:
-            # Create agent instance
+            # Create agent instance - let each agent handle its own default config
             agent = agent_class(config)
             
             # Register instance

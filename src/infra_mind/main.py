@@ -232,8 +232,45 @@ def setup_websocket(app: FastAPI) -> None:
         for conn_id in disconnected:
             websocket_connections.pop(conn_id, None)
     
-    # Make broadcast function available to other modules
+    # Dashboard cache and broadcasting functions
+    dashboard_cache = {}  # Simple in-memory cache for dashboard data
+    
+    async def invalidate_dashboard_cache():
+        """Invalidate dashboard cache to force refresh on next request."""
+        dashboard_cache.clear()
+        logger.info("Dashboard cache invalidated")
+    
+    async def broadcast_dashboard_update(update_data: dict):
+        """Broadcast dashboard updates to all connected clients."""
+        if not websocket_connections:
+            return
+            
+        message = json.dumps({
+            "type": "dashboard_update",
+            "data": update_data,
+            "timestamp": time.time()
+        })
+        
+        # Send to all connected clients (dashboard updates are global)
+        disconnected = []
+        for conn_id, conn_info in websocket_connections.items():
+            try:
+                await conn_info["websocket"].send_text(message)
+            except Exception as e:
+                logger.error(f"Failed to send dashboard update to WebSocket {conn_id}: {e}")
+                disconnected.append(conn_id)
+        
+        # Clean up disconnected connections
+        for conn_id in disconnected:
+            websocket_connections.pop(conn_id, None)
+        
+        logger.info(f"Broadcasted dashboard update to {len(websocket_connections)} clients")
+    
+    # Make functions available to other modules
     app.state.broadcast_workflow_update = broadcast_workflow_update
+    app.state.invalidate_dashboard_cache = invalidate_dashboard_cache
+    app.state.broadcast_dashboard_update = broadcast_dashboard_update
+    app.state.dashboard_cache = dashboard_cache
 
 
 def setup_middleware(app: FastAPI) -> None:

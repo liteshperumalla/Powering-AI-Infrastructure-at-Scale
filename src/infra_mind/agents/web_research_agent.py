@@ -1250,7 +1250,7 @@ class WebResearchAgent(BaseAgent):
         for provider in providers:
             # Search for competitive information
             query = f"{provider} vs competitors cloud services comparison"
-            search_results = await scraper.multi_provider_search(query, num_results=5)
+            search_results = await scraper.multi_provider_search(query, max_results=5)
             
             # Scrape competitive content
             urls_to_scrape = []
@@ -1284,7 +1284,7 @@ class WebResearchAgent(BaseAgent):
         for provider in providers:
             # Search for best practices
             query = f"{provider} cloud best practices architecture guidelines"
-            search_results = await scraper.multi_provider_search(query, num_results=5)
+            search_results = await scraper.multi_provider_search(query, max_results=5)
             
             # Scrape best practices content
             urls_to_scrape = []

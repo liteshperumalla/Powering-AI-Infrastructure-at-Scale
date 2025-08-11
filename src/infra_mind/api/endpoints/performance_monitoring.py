@@ -24,7 +24,7 @@ from ...core.performance_monitoring import (
     ScalingPolicy
 )
 from ...core.production_performance_optimizer import performance_optimizer
-from ...core.auth import get_current_user
+from .auth import get_current_user
 from ...models.user import User
 
 logger = logging.getLogger(__name__)
