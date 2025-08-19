@@ -21,6 +21,7 @@ class ReportType(str, Enum):
     COMPLIANCE_REPORT = "compliance_report"
     ARCHITECTURE_OVERVIEW = "architecture_overview"
     FULL_ASSESSMENT = "full_assessment"
+    COMPREHENSIVE = "comprehensive"  # Legacy compatibility
 
 
 class ReportFormat(str, Enum):

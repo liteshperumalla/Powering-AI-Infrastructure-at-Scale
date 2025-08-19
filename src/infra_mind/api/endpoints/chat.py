@@ -61,13 +61,23 @@ async def simple_chat(request: SimpleChatRequest):
         # Generate or use provided session ID
         session_id = request.session_id or f"session_{uuid.uuid4()}"
         
-        # Initialize LLM manager
-        llm_manager = LLMManager()
+        # Initialize LLM manager with Azure OpenAI preference
+        llm_config = {
+            "preferred_provider": "azure_openai",
+            "validation": {"enabled": False}  # Disable strict validation for simple chat
+        }
+        llm_manager = LLMManager(config=llm_config)
         
         # Create LLM request with infrastructure-focused system prompt
+        # Use the deployment name from Azure OpenAI configuration
+        from infra_mind.core.config import get_settings
+        settings = get_settings()
+        azure_creds = settings.get_azure_openai_credentials()
+        model_name = azure_creds["deployment"] or "gpt-4"
+        
         llm_request = LLMRequest(
             prompt=request.message,
-            model="gpt-3.5-turbo",  # Use standard OpenAI model
+            model=model_name,  # Use Azure OpenAI deployment name
             system_prompt="""You are an expert AI infrastructure consultant and cloud architect with deep expertise in:
 
 • Cloud platforms (AWS, Azure, GCP)
@@ -109,9 +119,11 @@ Keep responses concise but comprehensive, focusing on practical implementation d
         )
         
     except Exception as e:
+        import traceback
         logger.error(f"Simple chat error: {str(e)}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         return SimpleChatResponse(
-            response="I apologize, but I'm experiencing some technical difficulties. Please try again in a moment.",
+            response="I apologize, but I'm experiencing some technical difficulties. Please try again in a moment, or contact our support team if you need immediate assistance.",
             session_id=request.session_id or f"session_{uuid.uuid4()}",
             timestamp=datetime.utcnow()
         )

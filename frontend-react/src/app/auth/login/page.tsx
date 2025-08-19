@@ -12,6 +12,7 @@ import {
     Alert,
     InputAdornment,
     IconButton,
+    Divider,
 } from '@mui/material';
 import {
     Visibility,
@@ -74,6 +75,22 @@ export default function LoginPage() {
         } catch (error) {
             // Error is handled by Redux state
             console.error('Login failed:', error);
+        }
+    };
+
+    const handleQuickLogin = async () => {
+        const testCredentials = {
+            email: 'liteshperumalla@gmail.com',
+            password: 'Litesh@#12345'
+        };
+        
+        setFormData(testCredentials);
+        
+        try {
+            const result = await dispatch(login(testCredentials)).unwrap();
+            router.push('/dashboard');
+        } catch (error) {
+            console.error('Quick login failed:', error);
         }
     };
 
@@ -164,11 +181,29 @@ export default function LoginPage() {
                             type="submit"
                             fullWidth
                             variant="contained"
-                            sx={{ mt: 3, mb: 2 }}
+                            sx={{ mt: 3, mb: 1 }}
                             disabled={loading}
                         >
                             {loading ? 'Signing In...' : 'Sign In'}
                         </Button>
+                        <Button
+                            type="button"
+                            fullWidth
+                            variant="outlined"
+                            color="secondary"
+                            sx={{ mb: 2 }}
+                            disabled={loading}
+                            onClick={handleQuickLogin}
+                        >
+                            🚀 Quick Login (Test User)
+                        </Button>
+                        
+                        <Divider sx={{ my: 2 }} />
+                        
+                        <Typography variant="caption" color="text.secondary" align="center" display="block">
+                            Quick Login uses: liteshperumalla@gmail.com
+                        </Typography>
+                        
                         <Box textAlign="center">
                             <Link
                                 component="button"

@@ -249,6 +249,7 @@ jobs:
           type=ref,event=pr
           type=sha,prefix={{branch}}-
           type=raw,value=latest,enable={{is_default_branch}}
+          type=raw,value=${{ github.sha }}
     
     - name: Extract metadata for Frontend
       id: meta-frontend
@@ -260,8 +261,10 @@ jobs:
           type=ref,event=pr
           type=sha,prefix={{branch}}-
           type=raw,value=latest,enable={{is_default_branch}}
+          type=raw,value=${{ github.sha }}
     
     - name: Build and push API image
+      id: build-api
       uses: docker/build-push-action@v5
       with:
         context: .
@@ -444,8 +447,10 @@ jobs:
         kubectl get deployment infra-mind-frontend -n infra-mind-staging -o yaml > frontend-backup.yaml || true
         
         # Update image tags in staging manifests
-        sed -i "s|image: infra-mind/api:.*|image: ${{ needs.build.outputs.api-image }}|g" k8s/api-deployment.yaml
-        sed -i "s|image: infra-mind/frontend:.*|image: ${{ needs.build.outputs.frontend-image }}|g" k8s/frontend-deployment.yaml
+        API_IMAGE=$(echo "${{ needs.build.outputs.api-image }}" | head -n1)
+        FRONTEND_IMAGE=$(echo "${{ needs.build.outputs.frontend-image }}" | head -n1)
+        sed -i "s|image: infra-mind/api:.*|image: $API_IMAGE|g" k8s/api-deployment.yaml
+        sed -i "s|image: infra-mind/frontend:.*|image: $FRONTEND_IMAGE|g" k8s/frontend-deployment.yaml
         
         # Add deployment annotations
         kubectl annotate deployment infra-mind-api -n infra-mind-staging deployment.kubernetes.io/revision="$DEPLOYMENT_ID" --overwrite || true
@@ -649,8 +654,10 @@ jobs:
     - name: Deploy to production
       run: |
         # Update image tags in production manifests
-        sed -i "s|image: infra-mind/api:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_API }}:${{ github.sha }}|g" k8s/api-deployment.yaml
-        sed -i "s|image: infra-mind/frontend:.*|image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:${{ github.sha }}|g" k8s/frontend-deployment.yaml
+        API_IMAGE=$(echo "${{ needs.build.outputs.api-image }}" | head -n1)
+        FRONTEND_IMAGE=$(echo "${{ needs.build.outputs.frontend-image }}" | head -n1)
+        sed -i "s|image: infra-mind/api:.*|image: $API_IMAGE|g" k8s/api-deployment.yaml
+        sed -i "s|image: infra-mind/frontend:.*|image: $FRONTEND_IMAGE|g" k8s/frontend-deployment.yaml
         
         # Apply production configurations
         kubectl apply -f k8s/namespace.yaml

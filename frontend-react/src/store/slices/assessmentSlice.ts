@@ -137,9 +137,38 @@ export const fetchAssessments = createAsyncThunk(
             const response = await apiClient.getAssessments();
             console.log('📊 Assessments API response:', response);
             console.log('📊 Assessments array:', response.assessments);
+            
+            try {
+                console.log('🔍 Starting response inspection...');
+                console.log('🔍 Response type:', typeof response);
+                console.log('🔍 Response keys:', Object.keys(response));
+            } catch (inspectionError) {
+                console.error('❌ Error during response inspection:', inspectionError);
+            }
+            console.log('🔍 Response.assessments type:', typeof response.assessments);
+            console.log('🔍 Response.assessments length:', response.assessments?.length);
+            console.log('🎯 About to return response to Redux...');
+            
+            // Validate response structure
+            if (!response || typeof response !== 'object') {
+                console.error('❌ Invalid response structure:', response);
+                throw new Error('Invalid API response structure');
+            }
+            
+            if (!Array.isArray(response.assessments)) {
+                console.error('❌ response.assessments is not an array:', response.assessments);
+                throw new Error('Assessments data is not an array');
+            }
+            
+            console.log('✅ Response validation passed, returning to Redux...');
             return response;
         } catch (error) {
             console.error('❌ Failed to fetch assessments:', error);
+            console.error('❌ Error details:', {
+                message: error instanceof Error ? error.message : 'Unknown error',
+                stack: error instanceof Error ? error.stack : undefined,
+                type: typeof error
+            });
             return rejectWithValue(error instanceof Error ? error.message : 'Failed to fetch assessments');
         }
     }
@@ -244,15 +273,20 @@ const assessmentSlice = createSlice({
             })
             // Fetch assessments
             .addCase(fetchAssessments.pending, (state) => {
+                console.log('🔄 Redux: fetchAssessments.pending triggered');
                 state.loading = true;
                 state.error = null;
             })
             .addCase(fetchAssessments.fulfilled, (state, action) => {
                 state.loading = false;
                 // Extract the assessments array from the API response
-                state.assessments = action.payload.assessments || [];
+                const assessments = action.payload.assessments || [];
+                state.assessments = assessments;
+                console.log('🔄 Redux: fetchAssessments.fulfilled - Updated state with', assessments.length, 'assessments');
+                console.log('🔄 Redux: Assessment IDs:', assessments.map(a => a.id));
             })
             .addCase(fetchAssessments.rejected, (state, action) => {
+                console.log('❌ Redux: fetchAssessments.rejected triggered', action.payload);
                 state.loading = false;
                 state.error = action.payload as string || 'Failed to fetch assessments';
             })

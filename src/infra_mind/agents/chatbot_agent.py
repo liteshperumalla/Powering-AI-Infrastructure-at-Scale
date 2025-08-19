@@ -64,8 +64,25 @@ class ChatbotAgent(BaseAgent):
     - Multi-turn conversation support
     """
     
-    def __init__(self, config: AgentConfig):
+    def __init__(self, config: Optional[AgentConfig] = None):
         """Initialize chatbot agent."""
+        if config is None:
+            config = AgentConfig(
+                name="Chatbot Agent",
+                role=AgentRole.CHATBOT,
+                model_name="gpt-4",
+                temperature=0.7,
+                max_tokens=1500,
+                tools_enabled=["web_search", "knowledge_base"],
+                memory_enabled=True,
+                timeout_seconds=300,
+                custom_config={
+                    "max_conversation_turns": 20,
+                    "escalation_threshold": 3,
+                    "enable_faq_integration": True,
+                    "enable_context_memory": True
+                }
+            )
         super().__init__(config)
         
         # Chatbot-specific configuration

@@ -61,7 +61,7 @@ spec:
               topologyKey: kubernetes.io/hostname
       containers:
       - name: frontend
-        image: infra-mind/frontend:v1.0.0
+        image: ghcr.io/liteshperumalla/powering-ai-infrastructure-at-scale/frontend:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 3000

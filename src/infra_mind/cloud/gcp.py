@@ -552,10 +552,19 @@ class GCPComputeClient:
     
     def _get_machine_type_price(self, machine_name: str, pricing_lookup: Dict, vcpus: int, memory_gb: float) -> float:
         """Get machine type price from pricing lookup or calculate estimate."""
-        # Try to find exact match in pricing data
-        for sku_id, sku_data in pricing_lookup.items():
-            if machine_name.lower() in sku_data.get('description', '').lower():
-                return sku_data.get('unit_price', 0.0)
+        # Handle case where pricing_lookup contains float values instead of dicts
+        try:
+            for sku_id, sku_data in pricing_lookup.items():
+                # Check if sku_data is a dictionary or just a price value
+                if isinstance(sku_data, dict):
+                    if machine_name.lower() in sku_data.get('description', '').lower():
+                        return sku_data.get('unit_price', 0.0)
+                elif isinstance(sku_data, (int, float)):
+                    # If it's just a price value, use it for exact name matches
+                    if sku_id.lower() == machine_name.lower():
+                        return float(sku_data)
+        except Exception as e:
+            logger.warning(f"Error processing pricing lookup for {machine_name}: {e}")
         
         # Fallback to calculated price
         return self._calculate_price(vcpus, memory_gb)

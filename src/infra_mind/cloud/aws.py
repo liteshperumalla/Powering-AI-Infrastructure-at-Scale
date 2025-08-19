@@ -736,7 +736,7 @@ class AWSEC2Client:
                 self.boto_client = boto3.client('ec2', region_name=region, config=boto_config)
                 
             # Test the credentials by making a simple call with timeout
-            self.boto_client.describe_regions(MaxResults=1)
+            self.boto_client.describe_regions()
             logger.info(f"AWS EC2 client initialized successfully for region {region}")
             
         except (NoCredentialsError, ClientError, BotoCoreError) as e:
@@ -778,9 +778,17 @@ class AWSEC2Client:
                     "NO_INSTANCE_TYPES"
                 )
             
-            # Get pricing data
-            pricing_client = AWSPricingClient(region)
-            pricing_data = await pricing_client.get_service_pricing("AmazonEC2", region)
+            # Get pricing data with fallback
+            pricing_data = {"products": []}
+            try:
+                # Try to create a pricing client if needed
+                pricing_client = AWSPricingClient(region, self.aws_access_key_id, self.aws_secret_access_key, self.boto_config)
+                if pricing_client.boto_client:
+                    pricing_data = await pricing_client.get_service_pricing("AmazonEC2", region)
+                else:
+                    logger.info("Pricing client not available, using fallback pricing")
+            except Exception as e:
+                logger.info(f"Could not get pricing data: {e}, using fallback pricing")
             pricing_lookup = self._process_ec2_pricing(pricing_data.get("products", []))
             
             services = []
@@ -1097,7 +1105,7 @@ class AWSRDSClient:
                 self.boto_client = boto3.client('rds', region_name=region, config=boto_config)
                 
             # Test the credentials by making a simple call with timeout
-            self.boto_client.describe_db_engine_versions(MaxRecords=1)
+            self.boto_client.describe_db_engine_versions(MaxRecords=20)
             logger.info(f"AWS RDS client initialized successfully for region {region}")
             
         except (NoCredentialsError, ClientError, BotoCoreError) as e:

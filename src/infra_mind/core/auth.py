@@ -121,7 +121,7 @@ class TokenBlacklist:
             if self.redis_client:
                 # Calculate TTL based on token expiration
                 ttl = max(0, exp - int(datetime.now(timezone.utc).timestamp()))
-                await self.redis_client.setex(f"blacklist:{jti}", ttl, "1")
+                self.redis_client.setex(f"blacklist:{jti}", ttl, "1")
             else:
                 self._memory_blacklist.add(jti)
         except Exception as e:
@@ -141,7 +141,7 @@ class TokenBlacklist:
         """
         try:
             if self.redis_client:
-                result = await self.redis_client.get(f"blacklist:{jti}")
+                result = self.redis_client.get(f"blacklist:{jti}")
                 return result is not None
             else:
                 return jti in self._memory_blacklist

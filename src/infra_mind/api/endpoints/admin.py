@@ -947,8 +947,13 @@ async def get_recommendation_quality_analytics(
     Requires admin privileges.
     """
     try:
-        workflow_monitor = get_workflow_monitor()
-        workflow_dashboard = get_workflow_dashboard()
+        # Initialize EventManager and get monitoring components
+        from ...orchestration.events import EventManager
+        event_manager = EventManager()
+        
+        # Get or initialize workflow monitor with EventManager
+        workflow_monitor = get_workflow_monitor(event_manager)
+        workflow_dashboard = get_workflow_dashboard(workflow_monitor)
         analytics_dashboard = get_analytics_dashboard(workflow_monitor, workflow_dashboard)
         
         analytics = analytics_dashboard.get_comprehensive_analytics(timeframe)

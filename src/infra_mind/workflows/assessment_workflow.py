@@ -11,7 +11,8 @@ from datetime import datetime, timezone
 
 from .base import BaseWorkflow, WorkflowState, WorkflowNode, NodeStatus, WorkflowResult
 from ..models.assessment import Assessment
-from ..agents.base import BaseAgent, AgentRole, AgentFactory, agent_factory, AgentStatus
+from ..agents.base import BaseAgent, AgentRole, AgentFactory, AgentStatus
+from ..agents import agent_factory  # Import from agents package to ensure registration
 from ..agents.base import AgentConfig
 
 logger = logging.getLogger(__name__)
@@ -706,7 +707,7 @@ class AssessmentWorkflow(BaseWorkflow):
                 }
             )
             
-            await event_manager.emit(event)
+            await event_manager.publish(event)
             logger.info(f"Emitted agent started event for {agent_role.value}")
             
         except Exception as e:
@@ -745,7 +746,7 @@ class AssessmentWorkflow(BaseWorkflow):
                 }
             )
             
-            await event_manager.emit(event)
+            await event_manager.publish(event)
             logger.info(f"Emitted agent {event_type.value} event for {agent_role.value}")
             
         except Exception as e:
@@ -772,7 +773,7 @@ class AssessmentWorkflow(BaseWorkflow):
                 }
             )
             
-            await event_manager.emit(event)
+            await event_manager.publish(event)
             logger.info(f"Emitted workflow started event for {state.workflow_id}")
             
         except Exception as e:
@@ -802,7 +803,7 @@ class AssessmentWorkflow(BaseWorkflow):
                 }
             )
             
-            await event_manager.emit(event)
+            await event_manager.publish(event)
             logger.info(f"Emitted workflow completed event for {state.workflow_id}")
             
         except Exception as e:
@@ -937,7 +938,7 @@ class AssessmentWorkflow(BaseWorkflow):
                 }
             )
             
-            await event_manager.emit(event)
+            await event_manager.publish(event)
             logger.error(f"Emitted workflow failed event for {state.workflow_id}: {error}")
             
         except Exception as e:
@@ -1624,7 +1625,10 @@ class AssessmentWorkflow(BaseWorkflow):
         try:
             recommendations_count = len(result.get("recommendations", []))
             confidence = result.get("confidence_score", 0.0)
-            logger.info(f"Agent completed: {agent_name} - {recommendations_count} recommendations, {confidence:.2f} confidence, {progress}%")
+            # Handle None confidence score
+            confidence_str = f"{confidence:.2f}" if confidence is not None else "0.00"
+            progress_str = f"{progress:.1f}" if progress is not None else "0.0"
+            logger.info(f"Agent completed: {agent_name} - {recommendations_count} recommendations, {confidence_str} confidence, {progress_str}%")
         except Exception as e:
             logger.warning(f"Failed to emit agent completed event: {e}")
     

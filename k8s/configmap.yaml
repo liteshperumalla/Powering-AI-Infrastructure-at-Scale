@@ -26,8 +26,8 @@ data:
   INFRA_MIND_RATE_LIMIT_REQUESTS: "1000"
   
   # Frontend configuration
-  NEXT_PUBLIC_API_URL: "https://api.infra-mind.example.com"
-  NODE_ENV: "production"
+  FRONTEND_API_URL: "https://api.infra-mind.example.com"
+  FRONTEND_WS_URL: "wss://api.infra-mind.example.com/ws"
 
 ---
 apiVersion: v1
@@ -58,5 +58,5 @@ data:
   INFRA_MIND_RATE_LIMIT_REQUESTS: "500"
   
   # Frontend configuration
-  NEXT_PUBLIC_API_URL: "https://api-staging.infra-mind.example.com"
-  NODE_ENV: "production"
+  FRONTEND_API_URL: "https://api-staging.infra-mind.example.com"
+  FRONTEND_WS_URL: "wss://api-staging.infra-mind.example.com/ws"

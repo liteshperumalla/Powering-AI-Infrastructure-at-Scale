@@ -64,11 +64,11 @@ interface ReportVersion {
 export interface ReportData {
     id: string;
     title: string;
-    generatedDate: string;
-    status: 'draft' | 'final' | 'in-progress';
-    sections: ReportSection[];
-    keyFindings: string[];
-    recommendations: string[];
+    generatedDate?: string;
+    status: 'draft' | 'final' | 'in-progress' | 'completed';
+    sections: ReportSection[] | string[];  // Can be either objects or strings
+    keyFindings?: string[];
+    recommendations?: string[];
     estimatedSavings?: number;
     complianceScore?: number;
     version?: string;
@@ -186,22 +186,29 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                         Report Sections
                     </Typography>
                     <List dense>
-                        {report.sections.map((section, index) => (
-                            <ListItem key={index} sx={{ pl: 0 }}>
-                                <ListItemIcon sx={{ minWidth: 36 }}>
-                                    {getSectionIcon(section.type)}
-                                </ListItemIcon>
-                                <ListItemText
-                                    primary={section.title}
-                                    secondary={section.content.substring(0, 100) + '...'}
-                                />
-                            </ListItem>
-                        ))}
+                        {report.sections.map((section, index) => {
+                            // Handle both string arrays and section objects
+                            const sectionData = typeof section === 'string' 
+                                ? { title: section.replace('_', ' ').toUpperCase(), content: '', type: section }
+                                : section;
+                            
+                            return (
+                                <ListItem key={index} sx={{ pl: 0 }}>
+                                    <ListItemIcon sx={{ minWidth: 36 }}>
+                                        {getSectionIcon(sectionData.type || 'executive')}
+                                    </ListItemIcon>
+                                    <ListItemText
+                                        primary={sectionData.title}
+                                        secondary={sectionData.content ? sectionData.content.substring(0, 100) + '...' : 'Report section available'}
+                                    />
+                                </ListItem>
+                            );
+                        })}
                     </List>
                 </Box>
 
                 {/* Key Findings */}
-                {report.keyFindings.length > 0 && (
+                {report.keyFindings && report.keyFindings.length > 0 && (
                     <Box sx={{ mb: 2 }}>
                         <Typography variant="subtitle2" gutterBottom>
                             Key Findings
@@ -223,7 +230,7 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                 )}
 
                 {/* Top Recommendations */}
-                {report.recommendations.length > 0 && (
+                {report.recommendations && report.recommendations.length > 0 && (
                     <Box sx={{ mb: 2 }}>
                         <Typography variant="subtitle2" gutterBottom>
                             Top Recommendations

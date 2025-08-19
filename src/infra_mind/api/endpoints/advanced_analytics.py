@@ -73,9 +73,26 @@ async def get_advanced_analytics_dashboard(
         user_assessments = await Assessment.find({"user_id": str(current_user.id)}).to_list()
         
         if not user_assessments:
+            # Return empty dashboard structure but with real schema
             return {
-                "message": "No assessment data available for analytics",
-                "dashboard": _get_demo_analytics_dashboard()
+                "timestamp": datetime.utcnow().isoformat(),
+                "timeframe": timeframe,
+                "user_id": str(current_user.id),
+                "message": "Create your first assessment to see analytics data",
+                "analytics": {
+                    "cost_modeling": {"current_analysis": {"total_monthly_cost": 0, "assessments_analyzed": 0}, "predictions": []},
+                    "scaling_simulations": {"simulations": [], "global_recommendations": []},
+                    "performance_benchmarks": {"benchmarks": {}, "recommendations": []},
+                    "multi_cloud_analysis": {"global_strategy": {}, "assessment_strategies": []},
+                    "security_analytics": {"global_security": {}, "assessment_security": []},
+                    "recommendation_trends": {}
+                },
+                "visualizations": {
+                    "d3js_charts": {},
+                    "interactive_dashboards": {}
+                },
+                "predictive_insights": {"cost_predictions": {}, "capacity_planning": {}, "optimization_predictions": {}},
+                "optimization_opportunities": []
             }
         
         # Generate comprehensive analytics
@@ -120,12 +137,21 @@ async def _generate_predictive_cost_modeling(assessments: List[Assessment], time
             for rec in recommendations:
                 if rec.recommended_services:
                     for service in rec.recommended_services:
-                        cost = float(service.get("estimated_monthly_cost", "0").replace("$", "").replace(",", ""))
+                        # Handle both string and numeric cost formats
+                        cost_str = service.get("estimated_monthly_cost", "0")
+                        if isinstance(cost_str, (int, float)):
+                            cost = float(cost_str)
+                        else:
+                            # Clean string format like "$1,234"
+                            cost = float(str(cost_str).replace("$", "").replace(",", "") or "0")
+                        
                         assessment_costs.append({
                             "service": service.get("service_name", "Unknown"),
                             "provider": service.get("provider", "unknown"),
                             "cost": cost,
-                            "category": service.get("service_category", "other")
+                            "category": service.get("service_category", "other"),
+                            "agent_source": rec.agent_name,
+                            "confidence": rec.confidence_score
                         })
             
             if assessment_costs:

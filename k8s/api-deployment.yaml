@@ -73,7 +73,7 @@ spec:
         effect: "NoSchedule"
       containers:
       - name: api
-        image: infra-mind/api:v1.0.0
+        image: ghcr.io/liteshperumalla/powering-ai-infrastructure-at-scale/api:latest
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8000
@@ -113,10 +113,7 @@ spec:
               name: infra-mind-config
               key: INFRA_MIND_API_PORT
         - name: INFRA_MIND_MONGODB_URL
-          valueFrom:
-            configMapKeyRef:
-              name: infra-mind-config
-              key: INFRA_MIND_MONGODB_URL
+          value: "mongodb://$(MONGO_ROOT_USERNAME):$(MONGO_ROOT_PASSWORD)@mongodb-service:27017/infra_mind?authSource=admin"
         - name: INFRA_MIND_REDIS_URL
           valueFrom:
             configMapKeyRef:
@@ -159,36 +156,43 @@ spec:
             secretKeyRef:
               name: infra-mind-secrets
               key: OPENAI_API_KEY
+              optional: true
         - name: INFRA_MIND_AWS_ACCESS_KEY_ID
           valueFrom:
             secretKeyRef:
               name: infra-mind-secrets
               key: AWS_ACCESS_KEY_ID
+              optional: true
         - name: INFRA_MIND_AWS_SECRET_ACCESS_KEY
           valueFrom:
             secretKeyRef:
               name: infra-mind-secrets
               key: AWS_SECRET_ACCESS_KEY
+              optional: true
         - name: INFRA_MIND_AZURE_CLIENT_ID
           valueFrom:
             secretKeyRef:
               name: infra-mind-secrets
               key: AZURE_CLIENT_ID
+              optional: true
         - name: INFRA_MIND_AZURE_CLIENT_SECRET
           valueFrom:
             secretKeyRef:
               name: infra-mind-secrets
               key: AZURE_CLIENT_SECRET
+              optional: true
         - name: INFRA_MIND_AZURE_TENANT_ID
           valueFrom:
             secretKeyRef:
               name: infra-mind-secrets
               key: AZURE_TENANT_ID
+              optional: true
         - name: INFRA_MIND_GCP_PROJECT_ID
           valueFrom:
             secretKeyRef:
               name: infra-mind-secrets
               key: GCP_PROJECT_ID
+              optional: true
         
         # Database credentials
         - name: MONGO_ROOT_USERNAME
@@ -206,6 +210,7 @@ spec:
             secretKeyRef:
               name: infra-mind-secrets
               key: REDIS_PASSWORD
+              optional: true
         
         volumeMounts:
         - name: logs

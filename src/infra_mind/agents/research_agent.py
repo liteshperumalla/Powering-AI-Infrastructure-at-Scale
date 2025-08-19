@@ -6,6 +6,7 @@ Focuses on cloud provider APIs, pricing data, and trend analysis.
 """
 
 import logging
+import json
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone, timedelta
 import asyncio
@@ -2438,6 +2439,36 @@ Respond in JSON format with structured analysis for each section."""
             }
         
         return benchmarks
+    
+    def _get_performance_expectations(self, workload: str) -> Dict[str, Any]:
+        """Get performance expectations for a specific workload type."""
+        expectations = {
+            "web_application": {
+                "response_time_ms": {"target": 200, "acceptable": 500},
+                "throughput_rps": {"minimum": 100, "target": 1000},
+                "availability": {"target": 99.9, "minimum": 99.0}
+            },
+            "api_service": {
+                "response_time_ms": {"target": 100, "acceptable": 300},
+                "throughput_rps": {"minimum": 500, "target": 5000},
+                "availability": {"target": 99.95, "minimum": 99.5}
+            },
+            "data_processing": {
+                "processing_time": {"acceptable": "minutes", "target": "seconds"},
+                "throughput": {"minimum": "1GB/min", "target": "10GB/min"},
+                "availability": {"target": 99.5, "minimum": 99.0}
+            },
+            "ml_workload": {
+                "training_time": {"acceptable": "hours", "target": "minutes"},
+                "inference_latency_ms": {"target": 50, "acceptable": 200},
+                "availability": {"target": 99.9, "minimum": 99.0}
+            }
+        }
+        
+        return expectations.get(workload, {
+            "response_time_ms": {"target": 500, "acceptable": 1000},
+            "availability": {"target": 99.0, "minimum": 95.0}
+        })
     
     def _extract_key_findings(self, collected_data: Dict[str, Any], 
                             trend_analysis: Dict[str, Any],

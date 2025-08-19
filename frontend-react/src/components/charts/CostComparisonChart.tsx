@@ -180,7 +180,11 @@ const CostComparisonChart: React.FC<CostComparisonChartProps> = ({
                                         <Bar dataKey="networking" stackId="a" fill="#ffc658" name="Networking" />
                                     </>
                                 ) : (
-                                    <Bar dataKey="total" fill="#8884d8" name="Total Cost" />
+                                    <Bar dataKey="total" name="Total Cost">
+                                        {data.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.color} />
+                                        ))}
+                                    </Bar>
                                 )}
                             </BarChart>
                         ) : (

@@ -697,6 +697,14 @@ class ApiClient {
     async generateRecommendations(assessmentId: string): Promise<{ workflow_id: string }> {
         return this.request<{ workflow_id: string }>(`/recommendations/${assessmentId}/generate`, {
             method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                agent_names: null,
+                priority_override: null,
+                custom_config: null
+            }),
         });
     }
 
@@ -727,7 +735,7 @@ class ApiClient {
         sections?: string[];
         format?: 'pdf' | 'docx' | 'html';
     }): Promise<{ report_id: string; workflow_id: string }> {
-        return this.request<{ report_id: string; workflow_id: string }>(`/reports/${assessmentId}/generate`, {
+        return this.request<{ report_id: string; workflow_id: string }>(`/reports/assessment/${assessmentId}/generate`, {
             method: 'POST',
             body: JSON.stringify(options || {}),
         });
@@ -738,7 +746,7 @@ class ApiClient {
             // Get reports for specific assessment
             const timestamp = Date.now();
             const response = await this.request<{ reports: Report[] }>(
-                `/reports/${assessmentId}?t=${timestamp}`,
+                `/reports/assessment/${assessmentId}?t=${timestamp}`,
                 {
                     headers: {
                         'Cache-Control': 'no-cache'
@@ -747,39 +755,41 @@ class ApiClient {
             );
             return response.reports || [];
         } else {
-            // For now, return empty array to prevent infinite loops
-            // This avoids the recursive call chain that causes CORS issues
-            console.log('🔄 getReports() called without assessmentId - returning empty array to prevent loops');
-            return [];
-
-            // TODO: Implement proper reports endpoint that doesn't require assessment iteration
-            /*
+            // Use the new endpoint to get all user reports
             try {
-                const assessmentsResponse = await this.getAssessments();
-                const allReports: Report[] = [];
-                
-                for (const assessment of assessmentsResponse.assessments) {
-                    try {
-                        const reportsForAssessment = await this.getReports(assessment.id);
-                        allReports.push(...reportsForAssessment);
-                    } catch (error) {
-                        console.warn(`Failed to fetch reports for assessment ${assessment.id}:`, error);
-                        // Continue with other assessments
+                console.log('🔄 Getting all user reports...');
+                const reports = await this.request<Report[]>('/reports/all', {
+                    headers: {
+                        'Cache-Control': 'no-cache'
                     }
-                }
-                
-                return allReports;
+                });
+                console.log(`🔄 Found ${reports.length} reports for user`);
+                return reports || [];
             } catch (error) {
-                console.error('Failed to fetch assessments for reports:', error);
-                return [];
+                console.error('Failed to fetch all user reports:', error);
+                // Fallback to old behavior if new endpoint fails
+                try {
+                    console.log('🔄 Trying fallback method...');
+                    const assessmentsResponse = await this.getAssessments();
+                    if (assessmentsResponse.assessments && assessmentsResponse.assessments.length > 0) {
+                        const latestAssessment = assessmentsResponse.assessments[0];
+                        console.log(`🔄 Fallback: Getting reports for latest assessment: ${latestAssessment.id}`);
+                        return await this.getReports(latestAssessment.id);
+                    } else {
+                        console.log('🔄 No assessments found, returning empty array');
+                        return [];
+                    }
+                } catch (fallbackError) {
+                    console.error('Fallback also failed:', fallbackError);
+                    return [];
+                }
             }
-            */
         }
     }
 
     async getReport(reportId: string, assessmentId?: string): Promise<Report> {
         if (assessmentId) {
-            return this.request<Report>(`/reports/${assessmentId}/reports/${reportId}`);
+            return this.request<Report>(`/reports/assessment/${assessmentId}/reports/${reportId}`);
         }
         // Fallback - try to get assessment ID from the report itself or use generic endpoint
         return this.request<Report>(`/reports/${reportId}`);
@@ -788,13 +798,13 @@ class ApiClient {
     async downloadReport(reportId: string, format: 'pdf' | 'docx' | 'html' = 'pdf', assessmentId?: string): Promise<Blob> {
         let downloadUrl;
         if (assessmentId) {
-            downloadUrl = `${this.baseURL}/reports/${assessmentId}/reports/${reportId}/download?format=${format}`;
+            downloadUrl = `${this.baseURL}/reports/assessment/${assessmentId}/reports/${reportId}/download?format=${format}`;
         } else {
             // Try to get assessment ID from the report data first
             try {
                 const report = await this.getReport(reportId);
                 if (report && (report as any).assessment_id) {
-                    downloadUrl = `${this.baseURL}/reports/${(report as any).assessment_id}/reports/${reportId}/download?format=${format}`;
+                    downloadUrl = `${this.baseURL}/reports/assessment/${(report as any).assessment_id}/reports/${reportId}/download?format=${format}`;
                 } else {
                     downloadUrl = `${this.baseURL}/reports/${reportId}/download?format=${format}`;
                 }
@@ -805,7 +815,7 @@ class ApiClient {
 
         const response = await fetch(downloadUrl, {
             headers: {
-                'Authorization': `Bearer ${this.token}`,
+                'Authorization': `Bearer ${this.getStoredToken()}`,
             },
         });
 
@@ -872,9 +882,10 @@ class ApiClient {
 
     // WebSocket connection methods
     createWebSocketConnection(assessmentId?: string): WebSocket {
+        const token = this.getStoredToken();
         const wsUrl = assessmentId
-            ? `${WS_BASE_URL}/ws?token=${this.token}&assessment_id=${assessmentId}`
-            : `${WS_BASE_URL}/ws?token=${this.token}`;
+            ? `${WS_BASE_URL}/ws?token=${token}&assessment_id=${assessmentId}`
+            : `${WS_BASE_URL}/ws?token=${token}`;
 
         return new WebSocket(wsUrl);
     }
@@ -1012,11 +1023,11 @@ class ApiClient {
 
     // Utility methods
     isAuthenticated(): boolean {
-        return !!this.token;
+        return !!this.getStoredToken();
     }
 
     getAuthToken(): string | null {
-        return this.token;
+        return this.getStoredToken();
     }
 
     // Health check method
@@ -1438,9 +1449,18 @@ class ApiClient {
             params.append('timeframe', timeframe);
         }
         
-        // Use v2 API explicitly for advanced analytics
-        const url = `${getApiBaseUrl()}/api/v2/advanced-analytics/dashboard${params.toString() ? `?${params.toString()}` : ''}`;
-        return this.request(url, { useFullUrl: true });
+        // Force cache busting for analytics data to ensure fresh data
+        params.append('t', Date.now().toString());
+        params.append('nocache', 'true');
+        
+        // Use v2 API explicitly for advanced analytics with cache busting
+        const url = `${getApiBaseUrl()}/api/v2/advanced-analytics/dashboard?${params.toString()}`;
+        return this.request(url, { 
+            useFullUrl: true,
+            headers: {
+                ...getNoCacheHeaders(),
+            }
+        });
     }
 
     async getCostPredictions(assessmentId?: string, projectionMonths?: number): Promise<{

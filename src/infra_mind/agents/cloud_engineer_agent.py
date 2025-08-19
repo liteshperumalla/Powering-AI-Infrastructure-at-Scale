@@ -6,6 +6,7 @@ Focuses on multi-cloud service comparison, cost optimization, and best practices
 """
 
 import logging
+import json
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone
 
@@ -748,8 +749,8 @@ Please respond in JSON format with structured data for each section."""
             )
             
             # Try to parse JSON response
-            import json
             try:
+                import json
                 analysis = json.loads(response)
                 return analysis
             except json.JSONDecodeError:
@@ -767,6 +768,7 @@ Please respond in JSON format with structured data for each section."""
         service_data: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         """Use LLM to generate specific cloud service recommendations."""
+        import json
         
         prompt = f"""Based on the technical analysis and available cloud services, recommend specific cloud services for this infrastructure assessment.
 

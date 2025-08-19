@@ -258,6 +258,21 @@ export default function RealTimeProgress({
         }
     };
 
+    // LinearProgress only accepts 'primary' | 'secondary' | 'inherit'
+    type LinearProgressColor = 'primary' | 'secondary' | 'inherit';
+    const getLinearProgressColor = (status: string): LinearProgressColor => {
+        switch (status) {
+            case 'completed':
+                return 'primary';
+            case 'running':
+                return 'primary';
+            case 'failed':
+                return 'secondary';
+            default:
+                return 'primary';
+        }
+    };
+
     if (!progress && !error) {
         return (
             <Card>
@@ -266,9 +281,12 @@ export default function RealTimeProgress({
                         Workflow Progress
                     </Typography>
                     <Typography color="text.secondary">
-                        {isConnected ? 'Waiting for workflow to start...' : 'Connecting...'}
+                        {isConnected ? 'Initializing assessment workflow...' : 'Connecting to assessment service...'}
                     </Typography>
                     <LinearProgress sx={{ mt: 2 }} />
+                    <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                        Assessment ID: {assessmentId}
+                    </Typography>
                 </CardContent>
             </Card>
         );
@@ -324,7 +342,7 @@ export default function RealTimeProgress({
                             <LinearProgress
                                 variant="determinate"
                                 value={progress.progress}
-                                color={getStatusColor(progress.status)}
+                                color={getLinearProgressColor(progress.status)}
                             />
                         </Box>
 
@@ -345,7 +363,10 @@ export default function RealTimeProgress({
                                                     secondary={
                                                         step.error ||
                                                         (step.completed_at && `Completed at ${new Date(step.completed_at).toLocaleTimeString()}`) ||
-                                                        (step.started_at && `Started at ${new Date(step.started_at).toLocaleTimeString()}`)
+                                                        (step.started_at && `Started at ${new Date(step.started_at).toLocaleTimeString()}`) ||
+                                                        (step.status === 'running' ? 'In progress...' : 
+                                                         step.status === 'completed' ? 'Completed successfully' :
+                                                         step.status === 'failed' ? 'Failed' : 'Waiting...')
                                                     }
                                                 />
                                             </ListItem>

@@ -233,14 +233,27 @@ async def main():
     print("🔧 REAL AGENT LLM EXECUTION TEST")
     print("=" * 60)
     
-    # Ensure OpenAI API key is available
-    api_key = os.environ.get('OPENAI_API_KEY') or os.environ.get('INFRA_MIND_OPENAI_API_KEY')
-    if not api_key or not api_key.startswith('sk-'):
-        print("❌ OpenAI API key not found or invalid")
-        print("Please set OPENAI_API_KEY environment variable")
-        return
+    # Check for Azure OpenAI configuration
+    azure_api_key = os.environ.get('INFRA_MIND_AZURE_OPENAI_API_KEY')
+    azure_endpoint = os.environ.get('INFRA_MIND_AZURE_OPENAI_ENDPOINT')
     
-    print(f"✅ OpenAI API key found: {api_key[:20]}...")
+    if azure_api_key and azure_endpoint:
+        print(f"✅ Azure OpenAI configuration found")
+        print(f"  - Endpoint: {azure_endpoint}")
+        print(f"  - API Key: {azure_api_key[:20]}...")
+        # Set environment for Azure OpenAI
+        os.environ['INFRA_MIND_LLM_PROVIDER'] = 'azure_openai'
+    else:
+        # Fallback to OpenAI API key check
+        api_key = os.environ.get('OPENAI_API_KEY') or os.environ.get('INFRA_MIND_OPENAI_API_KEY')
+        if not api_key or not api_key.startswith('sk-'):
+            print("❌ Neither Azure OpenAI nor OpenAI API configuration found")
+            print("Please set INFRA_MIND_AZURE_OPENAI_API_KEY and INFRA_MIND_AZURE_OPENAI_ENDPOINT")
+            print("or OPENAI_API_KEY environment variable")
+            return
+        
+        print(f"✅ OpenAI API key found: {api_key[:20]}...")
+        os.environ['INFRA_MIND_LLM_PROVIDER'] = 'openai'
     
     # Test 1: Single agent creation and execution
     agent_test = await test_agent_execution()

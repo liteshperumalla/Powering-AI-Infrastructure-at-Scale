@@ -60,16 +60,43 @@ export default function DashboardPage() {
     const router = useRouter();
     const dispatch = useAppDispatch();
 
-    const { assessments, loading: assessmentLoading, workflowId } = useAppSelector(state => state.assessment);
+    const { assessments, loading: assessmentLoading, workflowId } = useAppSelector(state => {
+        console.log('🔍 Redux Selector - assessments:', state.assessment.assessments?.length || 0, 'items');
+        return state.assessment;
+    });
     const { reports, loading: reportLoading } = useAppSelector(state => state.report);
     const { scenarios, comparisonScenarios } = useAppSelector(state => state.scenario);
     const { modals } = useAppSelector(state => state.ui);
     const { user, isAuthenticated } = useAppSelector(state => state.auth);
 
+    // Debug Redux state updates
+    useEffect(() => {
+        console.log('🔄 Redux State Update:', {
+            assessments: assessments ? `${assessments.length} assessments` : 'null',
+            assessmentLoading,
+            reports: reports ? `${reports.length} reports` : 'null',
+            reportLoading,
+            scenarios: scenarios ? `${scenarios.length} scenarios` : 'null'
+        });
+        console.log('🔍 Raw assessments value:', assessments);
+        console.log('🔍 Assessments type:', typeof assessments);
+        console.log('🔍 Is assessments array?', Array.isArray(assessments));
+        
+        if (assessments && assessments.length > 0) {
+            console.log('📊 Assessment details:', assessments.map(a => ({
+                id: a.id,
+                title: a.title,
+                status: a.status,
+                progress: a.progress_percentage
+            })));
+        }
+    }, [assessments, reports, scenarios, assessmentLoading, reportLoading]);
+
     const [speedDialOpen, setSpeedDialOpen] = useState(false);
     const [systemHealth, setSystemHealth] = useState<SystemHealth | null>(null);
     const [systemMetrics, setSystemMetrics] = useState<SystemMetrics | null>(null);
     const [draftAssessments, setDraftAssessments] = useState<any[]>([]);
+    const [mounted, setMounted] = useState(false);
     
     // Real data states - no demo data
     const [costData, setCostData] = useState<any[]>([]);
@@ -93,27 +120,155 @@ export default function DashboardPage() {
 
     const progressSteps = useProgressSteps();
 
+    // Set mounted state
     useEffect(() => {
-        if (isAuthenticated) {
+        setMounted(true);
+    }, []);
+
+    useEffect(() => {
+        // Check if we have a token in localStorage even if Redux state isn't updated yet
+        const hasStoredToken = typeof window !== 'undefined' ? !!localStorage.getItem('auth_token') : false;
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+        
+        console.log('🔍 Dashboard useEffect Debug:', {
+            isAuthenticated,
+            hasStoredToken,
+            tokenExists: !!token,
+            tokenPreview: token ? `${token.substring(0, 20)}...` : 'none',
+            mounted,
+            user: !!user
+        });
+        
+        if (isAuthenticated || hasStoredToken) {
+            console.log('✅ Loading dashboard data...');
             // Clear all caches to ensure fresh data
             cacheBuster.clearAllCache();
             forceRefresh();
             
-            dispatch(fetchAssessments());
+            // Load all dashboard data
+            console.log('📊 Dispatching fetchAssessments...');
+            const fetchResult = dispatch(fetchAssessments());
+            console.log('🔍 Dispatch result:', fetchResult);
+            console.log('🔍 Dispatch result type:', typeof fetchResult);
+            
+            // Track the promise resolution
+            fetchResult.then((result) => {
+                console.log('✅ fetchAssessments promise resolved:', result);
+            }).catch((error) => {
+                console.error('❌ fetchAssessments promise rejected:', error);
+            });
+            console.log('📋 Dispatching fetchReports...');
             dispatch(fetchReports());
+            console.log('🔄 Dispatching fetchScenarios...');
             dispatch(fetchScenarios());
             loadSystemData();
             loadDraftAssessments();
+        } else {
+            console.log('❌ No authentication - skipping data load');
         }
-    }, [dispatch, isAuthenticated]);
+    }, [dispatch, isAuthenticated, mounted]);
+
+    // Listen for dashboard updates from WebSocket
+    useEffect(() => {
+        if (lastMessage && isAuthenticated) {
+            const handleMessage = async () => {
+                try {
+                    const message = JSON.parse(lastMessage.data);
+                    
+                    // Handle different types of dashboard updates
+                    switch (message.type) {
+                        case 'new_assessment':
+                            // Clear old data and refresh when new assessment is created
+                            cacheBuster.clearAllCache();
+                            clearAssessmentCache(message.assessment_id);
+                            dispatch(fetchAssessments());
+                            await loadDashboardData(true);
+                            dispatch(addNotification({
+                                type: 'info',
+                                message: message.message || 'New assessment created'
+                            }));
+                            break;
+                            
+                        case 'assessment_completed':
+                            // Refresh all data when assessment completes
+                            cacheBuster.clearAllCache();
+                            clearAssessmentCache(message.assessment_id);
+                            dispatch(fetchAssessments());
+                            dispatch(fetchReports());
+                            // Force refresh dashboard data with new visualizations
+                            await loadDashboardData(true);
+                            // Refresh reports after assessment completion
+                            dispatch(fetchReports());
+                            // Trigger advanced analytics refresh if user navigates there
+                            if (typeof window !== 'undefined') {
+                                window.dispatchEvent(new CustomEvent('assessment-completed', {
+                                    detail: { assessmentId: message.assessment_id }
+                                }));
+                            }
+                            dispatch(addNotification({
+                                type: 'success',
+                                message: message.message || 'Assessment completed successfully!'
+                            }));
+                            break;
+                        
+                    case 'assessment_progress':
+                        // Update progress in real-time
+                        dispatch(fetchAssessments());
+                        break;
+                        
+                    case 'dashboard_refresh':
+                        // Full dashboard refresh requested
+                        handleRefreshDashboard();
+                        break;
+                        
+                    default:
+                        // Handle other notification types
+                        if (message.type === 'notification') {
+                            dispatch(addNotification({
+                                type: message.data.type,
+                                message: message.data.message,
+                            }));
+                        }
+                }
+            } catch (error) {
+                console.error('Error parsing dashboard WebSocket message:', error);
+            }
+            };
+            
+            handleMessage();
+        }
+    }, [lastMessage, isAuthenticated, dispatch]);
 
     // Load dashboard data when assessments are loaded
     useEffect(() => {
-        if (isAuthenticated && assessments) {
+        console.log('🎯 Dashboard data loading effect:', {
+            isAuthenticated,
+            hasAssessments: !!assessments,
+            assessmentCount: assessments?.length || 0,
+            assessmentsIsArray: Array.isArray(assessments),
+            assessmentLoading
+        });
+        
+        // Check if we have valid assessments data to work with
+        if (isAuthenticated && Array.isArray(assessments) && assessments.length > 0) {
+            console.log('📈 Loading dashboard visualizations with assessments:', assessments.map(a => ({id: a.id, status: a.status})));
             loadDashboardData();
             loadDraftAssessments();
+        } else if (isAuthenticated && Array.isArray(assessments) && assessments.length === 0 && !assessmentLoading) {
+            console.log('📭 No assessments available - clearing visualization data');
+            // Clear visualization data when no assessments
+            setCostData([]);
+            setRecommendationScores([]);
+            setAssessmentResults([]);
+            setRecommendationsData([]);
+        } else {
+            console.log('⏳ Waiting for authentication and assessments...', {
+                isAuthenticated,
+                assessments: !!assessments,
+                assessmentLoading
+            });
         }
-    }, [isAuthenticated, assessments]);
+    }, [isAuthenticated, assessments, assessmentLoading]);
 
     const loadSystemData = async () => {
         try {
@@ -200,29 +355,63 @@ export default function DashboardPage() {
         }
     };
 
-    const loadDashboardData = async () => {
+    const loadDashboardData = async (forceRefresh = false) => {
         try {
-            // Clear cache for fresh data
-            cacheBuster.clearAllCache();
+            console.log('📊 loadDashboardData called:', { 
+                forceRefresh, 
+                assessmentCount: assessments?.length,
+                hasValidAssessments: Array.isArray(assessments) && assessments.length > 0,
+                firstAssessmentId: assessments?.[0]?.id
+            });
+            
+            if (forceRefresh) {
+                // Clear cache for fresh data on forced refresh
+                cacheBuster.clearAllCache();
+                
+                // Clear all visualization state
+                setCostData([]);
+                setRecommendationScores([]);
+                setAssessmentResults([]);
+                setRecommendationsData([]);
+            }
+            
+            // Verify we have assessments before proceeding
+            if (!Array.isArray(assessments) || assessments.length === 0) {
+                console.log('🚫 No assessments available for dashboard data loading');
+                return;
+            }
             
             // Load cost comparison data
+            console.log('💰 Loading cost comparison data...');
             await loadCostComparisonData();
             
             // Load recommendation scores
+            console.log('⭐ Loading recommendation scores...');
             await loadRecommendationScores();
             
             // Load assessment results
+            console.log('📈 Loading assessment results...');
             await loadAssessmentResults();
             
             // Load recommendations data
+            console.log('💡 Loading recommendations data...');
             await loadRecommendationsData();
             
+            console.log('✅ Dashboard data loading complete');
         } catch (error) {
             console.error('Failed to load dashboard data:', error);
         }
     };
 
     const handleRefreshDashboard = async () => {
+        console.log('🔄 Manual refresh triggered');
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+        console.log('🔑 Token status:', { 
+            hasToken: !!token, 
+            isAuthenticated,
+            tokenPreview: token ? `${token.substring(0, 20)}...` : 'none'
+        });
+        
         // Force clear all caches and refresh data
         cacheBuster.clearAllCache();
         forceRefresh();
@@ -235,16 +424,94 @@ export default function DashboardPage() {
         }
         
         // Re-fetch all data with fresh calls
+        console.log('📊 Manual refresh: Dispatching fetchAssessments...');
         dispatch(fetchAssessments());
+        console.log('📋 Manual refresh: Dispatching fetchReports...');
         dispatch(fetchReports());
+        console.log('🔄 Manual refresh: Dispatching fetchScenarios...');
         dispatch(fetchScenarios());
         await loadSystemData();
-        await loadDashboardData();
+        await loadDashboardData(true);
         
         dispatch(addNotification({
             type: 'success',
             message: 'Dashboard data refreshed successfully'
         }));
+    };
+
+    const handleRegenerateRecommendations = async () => {
+        if (!Array.isArray(assessments) || assessments.length === 0) {
+            dispatch(addNotification({
+                type: 'warning',
+                message: 'No assessments available to regenerate recommendations for'
+            }));
+            return;
+        }
+
+        try {
+            dispatch(addNotification({
+                type: 'info',
+                message: 'Starting recommendation regeneration for all assessments...'
+            }));
+
+            // Regenerate recommendations for all assessments
+            const regenerationPromises = assessments.map(async (assessment) => {
+                try {
+                    console.log(`🔄 Regenerating recommendations for assessment: ${assessment.id}`);
+                    const response = await apiClient.generateRecommendations(assessment.id);
+                    console.log(`✅ Recommendation generation started for ${assessment.id}:`, response);
+                    return { success: true, assessmentId: assessment.id, response };
+                } catch (error) {
+                    console.error(`❌ Failed to regenerate recommendations for ${assessment.id}:`, error);
+                    return { success: false, assessmentId: assessment.id, error };
+                }
+            });
+
+            const results = await Promise.all(regenerationPromises);
+            const successful = results.filter(r => r.success).length;
+            const failed = results.filter(r => !r.success).length;
+
+            if (successful > 0) {
+                dispatch(addNotification({
+                    type: 'success',
+                    message: `Recommendation regeneration started for ${successful} assessment${successful > 1 ? 's' : ''}. This may take 3-5 minutes.`
+                }));
+
+                // Wait a bit then refresh the dashboard
+                setTimeout(() => {
+                    handleRefreshDashboard();
+                }, 2000);
+            }
+
+            if (failed > 0) {
+                dispatch(addNotification({
+                    type: 'warning',
+                    message: `Failed to start regeneration for ${failed} assessment${failed > 1 ? 's' : ''}`
+                }));
+            }
+
+        } catch (error) {
+            console.error('❌ Failed to regenerate recommendations:', error);
+            dispatch(addNotification({
+                type: 'error',
+                message: 'Failed to start recommendation regeneration. Please try again.'
+            }));
+        }
+    };
+
+    // Clear old assessment data when creating new assessment
+    const handleNewAssessment = () => {
+        // Clear all cached data
+        cacheBuster.clearAllCache();
+        
+        // Clear visualization data
+        setCostData([]);
+        setRecommendationScores([]);
+        setAssessmentResults([]);
+        setRecommendationsData([]);
+        
+        // Navigate to assessment page
+        router.push('/assessment');
     };
 
     const loadCostComparisonData = async () => {
@@ -254,22 +521,40 @@ export default function DashboardPage() {
             if (Array.isArray(assessments) && assessments.length > 0) {
                 const latestAssessment = assessments[0];
                 try {
+                    console.log('💰 Requesting recommendations for assessment:', latestAssessment.id);
                     const recommendations = await apiClient.getRecommendations(latestAssessment.id);
+                    console.log('💰 Recommendations response:', recommendations);
+                    
+                    // Check if recommendations are empty despite being marked as generated
+                    if (!recommendations || recommendations.length === 0) {
+                        console.log('⚠️ No recommendations found despite recommendations_generated = true');
+                        setCostData([]);
+                        return;
+                    }
                     
                     // Process recommendations to extract cost data by provider
                     const providerCosts = recommendations.reduce((acc: any, rec: any) => {
-                        if (rec.recommended_services && Array.isArray(rec.recommended_services)) {
-                            rec.recommended_services.forEach((service: any) => {
-                                const provider = service.provider?.toUpperCase() || 'UNKNOWN';
-                                if (!acc[provider]) {
-                                    acc[provider] = { compute: 0, storage: 0, networking: 0, total: 0 };
-                                }
-                                const cost = parseFloat(service.estimated_monthly_cost) || 0;
-                                acc[provider].compute += cost * 0.6; // Assume 60% compute
-                                acc[provider].storage += cost * 0.25; // Assume 25% storage  
-                                acc[provider].networking += cost * 0.15; // Assume 15% networking
-                                acc[provider].total += cost;
-                            });
+                        // Use the new data structure with cost_estimates and recommendation_data
+                        if (rec.cost_estimates && rec.recommendation_data) {
+                            const provider = rec.recommendation_data.provider?.toUpperCase() || 'MULTI_CLOUD';
+                            if (!acc[provider]) {
+                                acc[provider] = { compute: 0, storage: 0, networking: 0, total: 0 };
+                            }
+                            
+                            // Use cost breakdown if available, otherwise distribute total cost
+                            if (rec.cost_estimates.cost_breakdown) {
+                                acc[provider].compute += rec.cost_estimates.cost_breakdown.compute || 0;
+                                acc[provider].storage += rec.cost_estimates.cost_breakdown.storage || 0;
+                                acc[provider].networking += rec.cost_estimates.cost_breakdown.networking || 0;
+                            } else {
+                                // Fallback: distribute monthly cost proportionally
+                                const monthlyCost = rec.cost_estimates.monthly_cost || parseFloat(rec.total_estimated_monthly_cost) || 0;
+                                acc[provider].compute += monthlyCost * 0.6;
+                                acc[provider].storage += monthlyCost * 0.25;
+                                acc[provider].networking += monthlyCost * 0.15;
+                            }
+                            
+                            acc[provider].total += rec.cost_estimates.monthly_cost || parseFloat(rec.total_estimated_monthly_cost) || 0;
                         }
                         return acc;
                     }, {});
@@ -287,9 +572,17 @@ export default function DashboardPage() {
                     }));
 
                     setCostData(chartData); // Show only real data or empty array
+                    console.log('💰 Set cost data:', chartData);
                 } catch (error) {
-                    console.error('Failed to load recommendations for cost data:', error);
+                    console.error('💰 Failed to load recommendations for cost data:', error);
+                    console.error('💰 Error details:', error);
                     setCostData([]); // No fallback to demo data
+                    
+                    // Show notification about missing recommendations
+                    dispatch(addNotification({
+                        type: 'warning',
+                        message: 'Recommendations data not available for cost visualization. Try regenerating recommendations.'
+                    }));
                 }
             } else {
                 setCostData([]); // No assessments = no data
@@ -310,10 +603,10 @@ export default function DashboardPage() {
                     const recommendations = await apiClient.getRecommendations(latestAssessment.id);
                     
                     if (recommendations && recommendations.length > 0) {
-                        // Convert recommendations to score format - real data
+                        // Convert recommendations to score format - use new data structure
                         const scoresData = recommendations.slice(0, 3).map((rec: any) => {
-                            const provider = rec.recommended_services?.[0]?.provider || 'Unknown';
-                            const serviceName = rec.recommended_services?.[0]?.service_name || rec.title;
+                            const provider = rec.recommendation_data?.provider || 'multi_cloud';
+                            const serviceName = rec.title;
                             
                             return {
                                 service: serviceName,
@@ -326,10 +619,12 @@ export default function DashboardPage() {
                                 provider: provider.toUpperCase(),
                                 color: provider.toLowerCase() === 'aws' ? '#FF9900' : 
                                        provider.toLowerCase() === 'azure' ? '#0078D4' : 
-                                       provider.toLowerCase() === 'gcp' ? '#4285F4' : '#8884d8'
+                                       provider.toLowerCase() === 'gcp' ? '#4285F4' : 
+                                       provider.toLowerCase() === 'multi_cloud' ? '#9C27B0' : '#8884d8'
                             };
                         });
                         setRecommendationScores(scoresData);
+                        console.log('⭐ Set recommendation scores:', scoresData);
                     } else {
                         // No recommendations - show empty data
                         setRecommendationScores([]);
@@ -358,9 +653,20 @@ export default function DashboardPage() {
                 const latestAssessment = assessments[0];
                 
                 try {
+                    // Force clear assessment-specific cache to ensure fresh data
+                    clearAssessmentCache(latestAssessment.id);
+                    
+                    console.log('📊 Loading assessment results with fresh data for:', {
+                        assessmentId: latestAssessment.id,
+                        title: latestAssessment.title,
+                        status: latestAssessment.status,
+                        progress: latestAssessment.progress?.progress_percentage || 0
+                    });
+                    
                     // Always use fallback calculation for now since the visualization API endpoint needs more work
                     const results = await calculateAssessmentResultsFallback(latestAssessment);
                     setAssessmentResults(results);
+                    console.log('📈 Set fresh assessment results:', results);
                     
                     // Optionally try to enhance with backend visualization data
                     try {
@@ -461,35 +767,41 @@ export default function DashboardPage() {
     };
 
     const loadRecommendationsData = async () => {
+        setLoadingRecommendations(true);
         try {
             if (Array.isArray(assessments) && assessments.length > 0) {
-                const latestAssessment = assessments[0];
+                // Find the best assessment to show recommendations from
+                const completedAssessment = assessments.find(a => a.status === 'completed' && a.recommendations_generated) || assessments[0];
+                
                 try {
-                    const recommendations = await apiClient.getRecommendations(latestAssessment.id);
+                    const recommendations = await apiClient.getRecommendations(completedAssessment.id);
                     
-                    // Convert API recommendations to table format
-                    const tableData = recommendations.slice(0, 5).map((rec: any) => {
-                        const service = rec.recommended_services?.[0];
-                        const provider = service?.provider || 'Unknown';
-                        
-                        return {
-                            id: rec.id,
-                            serviceName: service?.service_name || rec.title,
-                            provider: provider.toUpperCase() as 'AWS' | 'Azure' | 'GCP',
-                            serviceType: rec.title.includes('Compute') ? 'Compute' : 
-                                        rec.title.includes('Storage') ? 'Storage' : 
-                                        rec.title.includes('Database') ? 'Database' : 'Service',
-                            costEstimate: parseFloat(service?.estimated_monthly_cost) || 0,
-                            confidenceScore: Math.round(rec.confidence_score * 100),
-                            businessAlignment: Math.round((rec.business_alignment || rec.alignment_score) * 100),
-                            implementationComplexity: (rec.implementation_complexity || service?.setup_complexity || 'medium') as 'low' | 'medium' | 'high',
-                            pros: rec.pros || (service?.reasons || []),
-                            cons: rec.cons || rec.risks_and_considerations || [],
-                            status: rec.status === 'approved' ? 'recommended' as const : 'alternative' as const
-                        };
-                    });
+                    if (recommendations && recommendations.length > 0) {
+                        // Convert API recommendations to table format - use new data structure
+                        const tableData = recommendations.slice(0, 5).map((rec: any) => {
+                            const provider = rec.recommendation_data?.provider || 'multi_cloud';
+                            
+                            return {
+                                id: rec.id,
+                                serviceName: rec.title,
+                                provider: provider.toUpperCase() as 'AWS' | 'Azure' | 'GCP' | 'MULTI_CLOUD',
+                                serviceType: rec.category || 'Service',
+                                costEstimate: rec.cost_estimates?.monthly_cost || parseFloat(rec.total_estimated_monthly_cost) || 0,
+                                confidenceScore: Math.round((rec.confidence_score || 0.8) * 100),
+                                businessAlignment: Math.round((rec.business_alignment || rec.alignment_score || 0.85) * 100),
+                                implementationComplexity: (rec.recommendation_data?.complexity || 'medium') as 'low' | 'medium' | 'high',
+                                pros: rec.pros || [`${rec.recommendation_data?.estimated_savings || 0} estimated savings`, `${rec.recommendation_data?.implementation_timeline || 'N/A'} timeline`],
+                                cons: rec.cons || rec.risks_and_considerations || [`${rec.recommendation_data?.complexity || 'medium'} complexity`],
+                                status: rec.status === 'approved' || rec.confidence_score >= 0.8 ? 'recommended' as const : 'alternative' as const
+                            };
+                        });
 
-                    setRecommendationsData(tableData);
+                        setRecommendationsData(tableData);
+                        console.log('💡 Set recommendations data:', tableData);
+                        console.log('🔍 DEBUG: First recommendation costEstimate type:', typeof tableData[0]?.costEstimate, 'value:', tableData[0]?.costEstimate);
+                    } else {
+                        setRecommendationsData([]); // No recommendations yet
+                    }
                 } catch (error) {
                     console.error('Failed to load recommendations for table:', error);
                     setRecommendationsData([]);
@@ -501,6 +813,7 @@ export default function DashboardPage() {
             console.error('Failed to load recommendations data:', error);
             setRecommendationsData([]);
         }
+        setLoadingRecommendations(false);
     };
 
 
@@ -648,6 +961,58 @@ export default function DashboardPage() {
                                     {systemMetrics.active_workflows} active workflows
                                 </Typography>
                             )}
+                            <Button
+                                variant="outlined"
+                                size="small"
+                                onClick={handleRefreshDashboard}
+                                sx={{ ml: 'auto' }}
+                            >
+                                Refresh Data
+                            </Button>
+                            <Button
+                                variant="contained"
+                                size="small"
+                                onClick={handleRegenerateRecommendations}
+                                sx={{ ml: 1 }}
+                                color="primary"
+                            >
+                                Regenerate Recommendations
+                            </Button>
+                            <Button
+                                variant="contained"
+                                size="small"
+                                onClick={() => {
+                                    console.log('🧪 DEBUG TEST - Current Redux State:');
+                                    console.log('🧪 assessments:', assessments);
+                                    console.log('🧪 assessmentLoading:', assessmentLoading);
+                                    console.log('🧪 Redux store keys:', Object.keys(assessments || {}));
+                                    console.log('🧪 Force loading dashboard data...');
+                                    console.log('🧪 Current visualization state:', {
+                                        costData: costData?.length || 0,
+                                        recommendationScores: recommendationScores?.length || 0,
+                                        assessmentResults: assessmentResults?.length || 0,
+                                        recommendationsData: recommendationsData?.length || 0
+                                    });
+                                    if (Array.isArray(assessments) && assessments.length > 0) {
+                                        loadDashboardData(true);
+                                        // Check state after loading
+                                        setTimeout(() => {
+                                            console.log('🧪 After loading - visualization state:', {
+                                                costData: costData?.length || 0,
+                                                recommendationScores: recommendationScores?.length || 0,
+                                                assessmentResults: assessmentResults?.length || 0,
+                                                recommendationsData: recommendationsData?.length || 0
+                                            });
+                                        }, 2000);
+                                    } else {
+                                        console.log('🚫 Cannot load dashboard data - no valid assessments');
+                                    }
+                                }}
+                                color="secondary"
+                                sx={{ ml: 1 }}
+                            >
+                                Debug & Load
+                            </Button>
                         </Box>
                     </Box>
 
@@ -664,7 +1029,7 @@ export default function DashboardPage() {
                                 <Button
                                     variant="contained"
                                     fullWidth
-                                    onClick={() => router.push('/assessment')}
+                                    onClick={handleNewAssessment}
                                 >
                                     Start Now
                                 </Button>
@@ -857,7 +1222,7 @@ export default function DashboardPage() {
                                         </Typography>
                                         <Button
                                             variant="contained"
-                                            onClick={() => router.push('/assessment')}
+                                            onClick={handleNewAssessment}
                                         >
                                             Start Assessment
                                         </Button>
@@ -919,7 +1284,7 @@ export default function DashboardPage() {
                                             </Typography>
                                             <Button 
                                                 variant="contained" 
-                                                onClick={() => router.push('/assessment')}
+                                                onClick={handleNewAssessment}
                                             >
                                                 Start Assessment
                                             </Button>

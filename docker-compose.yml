@@ -59,7 +59,16 @@ services:
       REDIS_URL: redis://redis:6379
       INFRA_MIND_CORS_ORIGINS: '["http://localhost:3000", "http://frontend:3000", "http://host.docker.internal:3000", "http://127.0.0.1:3000", "https://localhost:3000"]'
       
-      # LLM configuration (set your API key)
+      # LLM configuration - Azure OpenAI (Primary)
+      INFRA_MIND_LLM_PROVIDER: azure_openai
+      INFRA_MIND_AZURE_OPENAI_API_KEY: ${INFRA_MIND_AZURE_OPENAI_API_KEY:-}
+      INFRA_MIND_AZURE_OPENAI_ENDPOINT: ${INFRA_MIND_AZURE_OPENAI_ENDPOINT:-}
+      INFRA_MIND_AZURE_OPENAI_DEPLOYMENT: ${INFRA_MIND_AZURE_OPENAI_DEPLOYMENT:-}
+      INFRA_MIND_AZURE_OPENAI_API_VERSION: ${INFRA_MIND_AZURE_OPENAI_API_VERSION:-}
+      INFRA_MIND_LLM_MODEL: gpt-4
+      INFRA_MIND_LLM_TEMPERATURE: "0.1"
+      
+      # OpenAI (Fallback - disabled due to quota)
       INFRA_MIND_OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       
       # Cloud provider configuration (optional for development)

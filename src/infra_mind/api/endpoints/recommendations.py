@@ -10,6 +10,7 @@ from loguru import logger
 from datetime import datetime
 from decimal import Decimal
 import uuid
+from bson.decimal128 import Decimal128
 
 from ...models.recommendation import Recommendation, ServiceRecommendation
 from ...models.assessment import Assessment
@@ -71,6 +72,17 @@ class RecommendationListResponse(BaseModel):
     summary: Dict[str, Any]
 
 
+def convert_decimal128_to_decimal(value):
+    """Convert Decimal128 to Decimal for Pydantic compatibility."""
+    if isinstance(value, Decimal128):
+        return Decimal(str(value))
+    elif isinstance(value, dict):
+        return {k: convert_decimal128_to_decimal(v) for k, v in value.items()}
+    elif isinstance(value, list):
+        return [convert_decimal128_to_decimal(item) for item in value]
+    return value
+
+
 class GenerateRecommendationsRequest(BaseModel):
     """Request to generate recommendations."""
     agent_names: Optional[List[str]] = Field(
@@ -106,50 +118,62 @@ async def get_recommendations(
         if category_filter:
             query_filters["category"] = category_filter
         
-        # Execute database query
-        recommendations_docs = await Recommendation.find(query_filters).to_list()
+        # Execute database query using direct MongoDB client
+        # Note: Using direct MongoDB until Beanie model is properly aligned with existing data
+        from motor.motor_asyncio import AsyncIOMotorClient
+        import os
+        
+        mongo_uri = os.getenv("INFRA_MIND_MONGODB_URL", "mongodb://admin:password@localhost:27017/infra_mind?authSource=admin")
+        client = AsyncIOMotorClient(mongo_uri)
+        db = client.get_database("infra_mind")
+        
+        cursor = db.recommendations.find(query_filters)
+        recommendations_docs = await cursor.to_list(length=None)
         
         # Convert to response format
         recommendations = []
-        for rec in recommendations_docs:
-            # Convert service recommendations
+        for rec_raw in recommendations_docs:
+            # Apply Decimal128 conversion to entire record first
+            rec = convert_decimal128_to_decimal(rec_raw)
+            
+            # Convert service recommendations (use empty list if not present)
             service_recs = []
-            for service in rec.recommended_services:
+            for service in rec.get('recommended_services', []):
                 service_recs.append(ServiceRecommendationResponse(
-                    service_name=service.service_name,
-                    provider=service.provider,
-                    service_category=service.service_category,
-                    estimated_monthly_cost=service.estimated_monthly_cost,
-                    cost_model=service.cost_model,
-                    configuration=service.configuration,
-                    reasons=service.reasons,
-                    alternatives=service.alternatives,
-                    setup_complexity=service.setup_complexity,
-                    implementation_time_hours=service.implementation_time_hours
+                    service_name=service.get('service_name', ''),
+                    provider=service.get('provider', 'AWS'),
+                    service_category=service.get('service_category', ''),
+                    estimated_monthly_cost=service.get('estimated_monthly_cost'),
+                    cost_model=service.get('cost_model'),
+                    configuration=service.get('configuration', {}),
+                    reasons=service.get('reasons', []),
+                    alternatives=service.get('alternatives', []),
+                    setup_complexity=service.get('setup_complexity', 'medium'),
+                    implementation_time_hours=service.get('implementation_time_hours')
                 ))
             
             recommendations.append(RecommendationResponse(
-                id=str(rec.id),
-                assessment_id=rec.assessment_id,
-                agent_name=rec.agent_name,
-                title=rec.title,
-                summary=rec.summary,
-                confidence_level=rec.confidence_level,
-                confidence_score=rec.confidence_score,
-                recommendation_data=rec.recommendation_data,
+                id=str(rec.get('_id')),
+                assessment_id=rec.get('assessment_id'),
+                agent_name=rec.get('agent_name'),
+                title=rec.get('title'),
+                summary=rec.get('summary'),
+                confidence_level=rec.get('confidence_level'),
+                confidence_score=rec.get('confidence_score'),
+                recommendation_data=rec.get('recommendation_data', {}),
                 recommended_services=service_recs,
-                cost_estimates=rec.cost_estimates,
-                total_estimated_monthly_cost=rec.total_estimated_monthly_cost,
-                implementation_steps=rec.implementation_steps,
-                prerequisites=rec.prerequisites,
-                risks_and_considerations=rec.risks_and_considerations,
-                business_impact=rec.business_impact,
-                alignment_score=rec.alignment_score,
-                tags=rec.tags,
-                priority=rec.priority,
-                category=rec.category,
-                created_at=rec.created_at,
-                updated_at=rec.updated_at
+                cost_estimates=rec.get('cost_estimates', {}),
+                total_estimated_monthly_cost=rec.get('total_estimated_monthly_cost'),
+                implementation_steps=rec.get('implementation_steps', []),
+                prerequisites=rec.get('prerequisites', []),
+                risks_and_considerations=rec.get('risks_and_considerations', []),
+                business_impact=rec.get('business_impact', 'medium'),
+                alignment_score=rec.get('alignment_score'),
+                tags=rec.get('tags', []),
+                priority=rec.get('priority', 'medium'),
+                category=rec.get('category'),
+                created_at=rec.get('created_at'),
+                updated_at=rec.get('updated_at')
             ))
         
         logger.info(f"Retrieved {len(recommendations)} recommendations for assessment: {assessment_id}")
@@ -158,7 +182,7 @@ async def get_recommendations(
         summary = {
             "total_recommendations": len(recommendations),
             "high_confidence_count": len([r for r in recommendations if r.confidence_score >= 0.8]),
-            "total_estimated_cost": sum(r.total_estimated_monthly_cost or 0 for r in recommendations),
+            "total_estimated_cost": sum((r.total_estimated_monthly_cost or 0) for r in recommendations),
             "agents_involved": list(set(r.agent_name for r in recommendations)),
             "categories": list(set(r.category for r in recommendations)),
             "data_source": "database",
@@ -209,6 +233,9 @@ async def generate_recommendations(assessment_id: str, request: GenerateRecommen
         # Create and register workflow
         workflow = AssessmentWorkflow()
         workflow_id = f"assessment_workflow_{assessment_id}_{uuid.uuid4().hex[:8]}"
+        
+        # Set the workflow ID and register it
+        workflow.workflow_id = workflow_id
         workflow_manager.register_workflow(workflow)
         
         # Start asynchronous workflow execution

@@ -72,7 +72,19 @@ export default function AnalyticsPage() {
         try {
             setLoading(true);
             setError(null);
+            
+            // Clear any cached analytics data to ensure fresh data
+            console.log('🔄 Fetching fresh analytics data...');
+            
             const data = await apiClient.getAdvancedAnalyticsDashboard(timeframe);
+            
+            console.log('📊 Fresh analytics data received:', {
+                timestamp: data.timestamp,
+                hasAnalytics: !!data.analytics,
+                hasOptimizations: data.optimization_opportunities?.length || 0,
+                costModelingAvailable: !!data.analytics?.cost_modeling
+            });
+            
             setAnalyticsData(data);
         } catch (err) {
             console.error('Failed to fetch analytics data:', err);
@@ -85,6 +97,23 @@ export default function AnalyticsPage() {
     useEffect(() => {
         fetchAnalyticsData();
     }, [timeframe]);
+    
+    // Listen for assessment completion events to refresh analytics
+    useEffect(() => {
+        const handleAssessmentCompleted = (event: any) => {
+            console.log('Assessment completed, refreshing analytics:', event.detail);
+            // Refresh analytics data when an assessment is completed
+            fetchAnalyticsData();
+        };
+        
+        if (typeof window !== 'undefined') {
+            window.addEventListener('assessment-completed', handleAssessmentCompleted);
+            
+            return () => {
+                window.removeEventListener('assessment-completed', handleAssessmentCompleted);
+            };
+        }
+    }, []);
 
     const handleTimeframeChange = (event: any) => {
         setTimeframe(event.target.value);

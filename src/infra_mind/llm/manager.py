@@ -16,6 +16,7 @@ from .interface import (
     LLMProvider, 
     LLMRequest, 
     LLMResponse,
+    TokenUsage,
     LLMError,
     LLMAuthenticationError,
     LLMRateLimitError,
@@ -23,6 +24,7 @@ from .interface import (
 )
 from .openai_provider import OpenAIProvider
 from .gemini_provider import GeminiProvider
+from openai import AzureOpenAI
 from .cost_tracker import CostTracker
 from .response_validator import ResponseValidator, ValidationResult
 from .prompt_formatter import prompt_formatter
@@ -139,7 +141,7 @@ class LLMManager:
             preferred_provider = 'openai'
         preferred_provider = str(preferred_provider).lower()
         
-        # Initialize only OpenAI provider for this system
+        # Initialize providers based on configuration
         if preferred_provider == 'openai':
             openai_key = self.settings.get_openai_api_key()
             if openai_key:
@@ -159,11 +161,91 @@ class LLMManager:
                     logger.error(f"Failed to initialize OpenAI provider: {str(e)}")
             else:
                 logger.error("OpenAI API key not found - cannot initialize OpenAI provider")
+        elif preferred_provider == 'azure_openai':
+            azure_creds = self.settings.get_azure_openai_credentials()
+            if azure_creds["api_key"] and azure_creds["endpoint"]:
+                try:
+                    # Create Azure OpenAI client directly
+                    self.azure_client = AzureOpenAI(
+                        api_key=azure_creds["api_key"],
+                        azure_endpoint=azure_creds["endpoint"],
+                        api_version=azure_creds["api_version"]
+                    )
+                    # Use a simplified provider for Azure OpenAI
+                    self.providers["azure_openai"] = "azure_openai_client"
+                    self._provider_health["azure_openai"] = True
+                    self._provider_performance["azure_openai"] = 1.0
+                    logger.info(f"Azure OpenAI provider initialized with endpoint: {azure_creds['endpoint']}")
+                    logger.info(f"Azure OpenAI deployment: {azure_creds['deployment']}")
+                except Exception as e:
+                    logger.error(f"Failed to initialize Azure OpenAI provider: {str(e)}")
+            else:
+                logger.error("Azure OpenAI credentials not found - cannot initialize Azure OpenAI provider")
         else:
-            logger.warning(f"Unsupported LLM provider: {preferred_provider}. Only OpenAI is supported.")
+            logger.warning(f"Unsupported LLM provider: {preferred_provider}. Supported: openai, azure_openai")
         
         if not self.providers:
             logger.error("No LLM providers initialized - check API key configuration")
+    
+    async def _generate_azure_openai_response(self, request: LLMRequest) -> LLMResponse:
+        """Generate response using Azure OpenAI."""
+        import time
+        from datetime import datetime, timezone
+        
+        azure_creds = self.settings.get_azure_openai_credentials()
+        deployment = azure_creds["deployment"] or "gpt-4"
+        
+        start_time = time.time()
+        
+        try:
+            # Convert prompt to messages format
+            messages = [{"role": "user", "content": request.prompt}]
+            if request.system_prompt:
+                messages.insert(0, {"role": "system", "content": request.system_prompt})
+            
+            # Make the API call
+            response = self.azure_client.chat.completions.create(
+                model=deployment,
+                messages=messages,
+                temperature=request.temperature,
+                max_tokens=request.max_tokens
+            )
+            
+            # Calculate response time
+            response_time = time.time() - start_time
+            
+            # Extract response content
+            content = response.choices[0].message.content if response.choices else ""
+            
+            # Create token usage
+            token_usage = TokenUsage(
+                prompt_tokens=response.usage.prompt_tokens if response.usage else 0,
+                completion_tokens=response.usage.completion_tokens if response.usage else 0,
+                total_tokens=response.usage.total_tokens if response.usage else 0,
+                estimated_cost=0.0  # Will be calculated by cost tracker
+            )
+            
+            # Create LLM response
+            llm_response = LLMResponse(
+                content=content,
+                provider=LLMProvider.OPENAI,  # Use OPENAI for compatibility
+                model=deployment,
+                token_usage=token_usage,
+                response_time=response_time,
+                request_id=request.request_id,
+                metadata={
+                    "azure_openai": True,
+                    "deployment": deployment,
+                    "endpoint": azure_creds["endpoint"]
+                }
+            )
+            
+            logger.info(f"Azure OpenAI response generated in {response_time:.2f}s")
+            return llm_response
+            
+        except Exception as e:
+            logger.error(f"Azure OpenAI API call failed: {str(e)}")
+            raise LLMError(f"Azure OpenAI error: {str(e)}", LLMProvider.OPENAI)
     
     async def generate_response(
         self, 
@@ -222,13 +304,18 @@ class LLMManager:
                 continue
             
             try:
-                logger.debug(f"Attempting request with {provider_type.value} provider")
+                provider_name = provider_type if isinstance(provider_type, str) else provider_type.value
+                logger.debug(f"Attempting request with {provider_name} provider")
                 
-                # Format request for the specific provider
-                formatted_request = prompt_formatter.format_request_for_provider(request, provider_type)
-                
-                # Generate response
-                response = await provider.generate_response(formatted_request)
+                # Handle Azure OpenAI separately
+                if provider_type == "azure_openai" and hasattr(self, 'azure_client'):
+                    response = await self._generate_azure_openai_response(request)
+                else:
+                    # Format request for the specific provider
+                    formatted_request = prompt_formatter.format_request_for_provider(request, provider_type)
+                    
+                    # Generate response
+                    response = await provider.generate_response(formatted_request)
                 
                 # Track cost
                 self.cost_tracker.track_usage(
@@ -284,7 +371,7 @@ class LLMManager:
                         logger.warning(f"Response caching failed: {e}")
                 
                 logger.info(
-                    f"Successfully generated response using {provider_type.value} - "
+                    f"Successfully generated response using {provider_name} - "
                     f"Tokens: {response.token_usage.total_tokens}, "
                     f"Cost: ${response.token_usage.estimated_cost:.4f}"
                 )
@@ -292,7 +379,7 @@ class LLMManager:
                 return response
                 
             except LLMAuthenticationError as e:
-                logger.error(f"{provider_type.value} authentication failed: {str(e)}")
+                logger.error(f"{provider_name} authentication failed: {str(e)}")
                 self._provider_health[provider_type] = False
                 last_exception = e
                 continue
@@ -311,7 +398,7 @@ class LLMManager:
                 
             except Exception as e:
                 import traceback
-                logger.error(f"{provider_type.value} request failed: {str(e)}")
+                logger.error(f"{provider_name} request failed: {str(e)}")
                 logger.error(f"Full traceback: {traceback.format_exc()}")
                 self._update_provider_performance(provider_type, 0, False)
                 last_exception = e
@@ -322,7 +409,7 @@ class LLMManager:
         logger.error(error_msg)
         raise LLMError(error_msg, list(self.providers.keys())[0] if self.providers else LLMProvider.OPENAI)
     
-    def _get_provider_order(self, request: LLMRequest) -> List[LLMProvider]:
+    def _get_provider_order(self, request: LLMRequest) -> List:
         """
         Get provider order based on load balancing strategy.
         
@@ -348,7 +435,11 @@ class LLMManager:
         
         elif self.load_balancing_strategy == LoadBalancingStrategy.COST_OPTIMIZED:
             # Sort by estimated cost (lower first)
-            def get_estimated_cost(provider_type: LLMProvider) -> float:
+            def get_estimated_cost(provider_type) -> float:
+                # Skip cost estimation for Azure OpenAI for now
+                if provider_type == "azure_openai":
+                    return 0.01  # Reasonable default cost estimate
+                
                 provider = self.providers[provider_type]
                 # Format request for provider to get accurate cost estimate
                 formatted_request = prompt_formatter.format_request_for_provider(request, provider_type)

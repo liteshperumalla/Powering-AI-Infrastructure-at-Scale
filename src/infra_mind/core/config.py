@@ -92,9 +92,27 @@ class Settings(BaseSettings):
         description="Anthropic API key for Claude models"
     )
     
+    # Azure OpenAI Configuration
+    azure_openai_api_key: Optional[SecretStr] = Field(
+        default=None,
+        description="Azure OpenAI API key"
+    )
+    azure_openai_endpoint: Optional[str] = Field(
+        default=None,
+        description="Azure OpenAI endpoint URL"
+    )
+    azure_openai_deployment: Optional[str] = Field(
+        default=None,
+        description="Azure OpenAI deployment name"
+    )
+    azure_openai_api_version: str = Field(
+        default="2024-02-15-preview",
+        description="Azure OpenAI API version"
+    )
+    
     llm_provider: str = Field(
         default="openai",
-        description="Primary LLM provider: openai, gemini, anthropic"
+        description="Primary LLM provider: openai, azure_openai, gemini, anthropic"
     )
     llm_model: str = Field(
         default="gpt-4",
@@ -189,7 +207,8 @@ class Settings(BaseSettings):
             "https://localhost:3000",
             "https://127.0.0.1:3000",
             "http://frontend:3000",
-            "http://host.docker.internal:3000"
+            "http://host.docker.internal:3000",
+            "null"  # Allow for local file testing
         ],
         description="Allowed CORS origins"
     )
@@ -369,6 +388,21 @@ class Settings(BaseSettings):
         if self.gemini_api_key and isinstance(self.gemini_api_key, SecretStr):
             return self.gemini_api_key.get_secret_value()
         return self.gemini_api_key
+    
+    def get_azure_openai_api_key(self) -> Optional[str]:
+        """Get Azure OpenAI API key as string."""
+        if self.azure_openai_api_key and isinstance(self.azure_openai_api_key, SecretStr):
+            return self.azure_openai_api_key.get_secret_value()
+        return self.azure_openai_api_key
+    
+    def get_azure_openai_credentials(self) -> Dict[str, Optional[str]]:
+        """Get Azure OpenAI credentials as dictionary."""
+        return {
+            "api_key": self.get_azure_openai_api_key(),
+            "endpoint": self.azure_openai_endpoint,
+            "deployment": self.azure_openai_deployment,
+            "api_version": self.azure_openai_api_version
+        }
     
     def get_aws_credentials(self) -> Dict[str, Optional[str]]:
         """Get AWS credentials as dictionary."""

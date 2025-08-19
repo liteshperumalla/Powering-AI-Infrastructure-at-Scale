@@ -12,7 +12,6 @@ import math
 
 from .base import BaseAgent, AgentConfig, AgentRole
 from .tools import ToolResult
-from .web_search import get_web_search_client
 from ..models.assessment import Assessment
 from ..llm.manager import LLMManager
 
@@ -221,44 +220,26 @@ class InfrastructureAgent(BaseAgent):
         }
         
         try:
-            search_client = await get_web_search_client()
+            # TODO: Implement web search functionality
+            logger.info("Using placeholder data for compute trends research")
             
-            # Research topics based on workload types
-            research_topics = []
-            for workload in workload_types:
-                research_topics.extend([
-                    f"{workload} cloud computing performance 2024",
-                    f"{workload} infrastructure optimization trends"
-                ])
-            
-            research_topics.extend([
-                "cloud compute performance benchmarks 2024",
-                "serverless vs containers performance comparison",
-                "cloud cost optimization strategies 2024",
-                "GPU cloud computing trends",
-                "edge computing infrastructure"
+            # Add placeholder data for now
+            trends_data["emerging_technologies"].extend([
+                {
+                    "topic": "cloud performance optimization",
+                    "title": "Latest Cloud Performance Optimization Trends",
+                    "summary": "Modern cloud optimization focuses on right-sizing, auto-scaling, and workload distribution",
+                    "source": "placeholder",
+                    "relevance_score": 0.8
+                },
+                {
+                    "topic": "containerization trends",
+                    "title": "Container Performance and Orchestration",
+                    "summary": "Kubernetes adoption continues to grow with improved resource efficiency",
+                    "source": "placeholder", 
+                    "relevance_score": 0.7
+                }
             ])
-            
-            # Perform searches for compute trends
-            for topic in research_topics[:4]:  # Limit to avoid too many API calls
-                try:
-                    search_result = await search_client.search(
-                        query=topic,
-                        max_results=3,
-                        search_type="technical"
-                    )
-                    
-                    if search_result.get("results"):
-                        for result in search_result["results"]:
-                            trends_data["emerging_technologies"].append({
-                                "topic": topic,
-                                "title": result.get("title", ""),
-                                "summary": result.get("snippet", "")[:150],
-                                "source": result.get("url", ""),
-                                "relevance_score": result.get("relevance_score", 0.5)
-                            })
-                except Exception as e:
-                    logger.warning(f"Failed to research topic '{topic}': {e}")
             
         except Exception as e:
             logger.warning(f"Compute trends research failed: {e}")
@@ -276,53 +257,29 @@ class InfrastructureAgent(BaseAgent):
         }
         
         try:
-            search_client = await get_web_search_client()
+            # TODO: Implement web search functionality
+            logger.info("Using placeholder data for performance benchmarks")
             
-            # Search for performance benchmarks
+            # Add placeholder benchmark data
             for workload in workload_types[:3]:  # Limit to top 3 workloads
-                try:
-                    benchmark_query = f"{workload} cloud performance benchmarks comparison AWS Azure GCP"
-                    search_result = await search_client.search(
-                        query=benchmark_query,
-                        max_results=3,
-                        search_type="technical"
-                    )
-                    
-                    if search_result.get("results"):
-                        benchmarks["workload_benchmarks"][workload] = []
-                        for result in search_result["results"]:
-                            benchmarks["workload_benchmarks"][workload].append({
-                                "title": result.get("title", ""),
-                                "summary": result.get("snippet", "")[:200],
-                                "source": result.get("url", ""),
-                                "published_date": result.get("published_date", "")
-                            })
-                
-                except Exception as e:
-                    logger.warning(f"Failed to collect benchmarks for {workload}: {e}")
+                benchmarks["workload_benchmarks"][workload] = [
+                    {
+                        "title": f"{workload.title()} Performance Benchmarks",
+                        "summary": f"Performance comparison of {workload} workloads across cloud providers",
+                        "source": "placeholder",
+                        "published_date": "2024-01-01"
+                    }
+                ]
             
             # General cloud performance comparisons
-            try:
-                comparison_query = "cloud provider performance comparison 2024 compute benchmarks"
-                comparison_result = await search_client.search(
-                    query=comparison_query,
-                    max_results=4,
-                    search_type="technical"
-                )
-                
-                if comparison_result.get("results"):
-                    benchmarks["instance_comparisons"] = [
-                        {
-                            "title": result.get("title", ""),
-                            "summary": result.get("snippet", "")[:200],
-                            "source": result.get("url", ""),
-                            "relevance_score": result.get("relevance_score", 0.5)
-                        }
-                        for result in comparison_result["results"]
-                    ]
-            
-            except Exception as e:
-                logger.warning(f"Failed to collect performance comparisons: {e}")
+            benchmarks["instance_comparisons"] = [
+                {
+                    "title": "Cloud Provider Performance Comparison 2024",
+                    "summary": "Comprehensive performance benchmarks across major cloud providers",
+                    "source": "placeholder",
+                    "relevance_score": 0.8
+                }
+            ]
         
         except Exception as e:
             logger.error(f"Performance benchmark collection failed: {e}")
@@ -341,8 +298,6 @@ class InfrastructureAgent(BaseAgent):
         
         try:
             # Initialize clients for real data collection
-            if not self.web_search_client:
-                self.web_search_client = await get_web_search_client()
             if not self.llm_client:
                 self.llm_client = LLMManager()
             
@@ -1264,11 +1219,12 @@ class InfrastructureAgent(BaseAgent):
             technical_req = assessment_data.get("technical_requirements", {})
             business_req = assessment_data.get("business_requirements", {})
             
-            # Research latest infrastructure trends
-            infra_trends = await self.web_search_client.search(
-                "cloud infrastructure trends 2024 2025 compute optimization scaling best practices",
-                num_results=5
-            )
+            # Research latest infrastructure trends (placeholder)
+            infra_trends = {
+                "results": [
+                    {"title": "Cloud Infrastructure Trends 2024", "snippet": "Latest trends in cloud optimization"}
+                ]
+            }
             
             # Prepare context for LLM analysis
             infrastructure_context = f"""

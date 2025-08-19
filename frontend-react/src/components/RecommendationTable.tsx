@@ -37,12 +37,12 @@ import {
 interface ServiceRecommendation {
     id: string;
     serviceName: string;
-    provider: 'AWS' | 'Azure' | 'GCP';
+    provider: 'AWS' | 'Azure' | 'GCP' | 'MULTI_CLOUD';
     serviceType: string;
     costEstimate: number;
     confidenceScore: number;
     businessAlignment: number;
-    implementationComplexity: 'Low' | 'Medium' | 'High';
+    implementationComplexity: 'low' | 'medium' | 'high';
     pros: string[];
     cons: string[];
     status: 'recommended' | 'alternative' | 'not-recommended';
@@ -53,11 +53,19 @@ interface RecommendationTableProps {
     title?: string;
 }
 
+// Helper function to safely convert cost values to numbers
+const safeParseFloat = (value: any): number => {
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') return parseFloat(value) || 0;
+    return 0;
+};
+
 const getProviderColor = (provider: string) => {
-    switch (provider) {
+    switch (provider.toUpperCase()) {
         case 'AWS': return '#FF9900';
-        case 'Azure': return '#0078D4';
+        case 'AZURE': return '#0078D4';
         case 'GCP': return '#4285F4';
+        case 'MULTI_CLOUD': return '#9C27B0';
         default: return '#666';
     }
 };
@@ -72,10 +80,10 @@ const getStatusIcon = (status: string) => {
 };
 
 const getComplexityColor = (complexity: string) => {
-    switch (complexity) {
-        case 'Low': return 'success';
-        case 'Medium': return 'warning';
-        case 'High': return 'error';
+    switch (complexity.toLowerCase()) {
+        case 'low': return 'success';
+        case 'medium': return 'warning';
+        case 'high': return 'error';
         default: return 'default';
     }
 };
@@ -103,7 +111,7 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
     };
 
     const avgCost = recommendations.length > 0 
-        ? recommendations.reduce((sum, rec) => sum + rec.costEstimate, 0) / recommendations.length 
+        ? recommendations.reduce((sum, rec) => sum + safeParseFloat(rec.costEstimate), 0) / recommendations.length 
         : 0;
 
     // Handle empty state
@@ -171,7 +179,9 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
                             Best Value
                         </Typography>
                         <Typography variant="h6" color="success.main">
-                            {recommendations.find(r => r.status === 'recommended')?.serviceName || 'N/A'}
+                            {recommendations.find(r => r.status === 'recommended')?.serviceName || 
+                             recommendations.sort((a, b) => b.confidenceScore - a.confidenceScore)[0]?.serviceName || 
+                             'No Data'}
                         </Typography>
                     </Box>
                     <Box sx={{ flex: 1 }}>
@@ -238,9 +248,9 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
                                         <TableCell align="right">
                                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 1 }}>
                                                 <Typography variant="body2" fontWeight="medium">
-                                                    ${rec.costEstimate.toFixed(2)}
+                                                    ${safeParseFloat(rec.costEstimate).toFixed(2)}
                                                 </Typography>
-                                                {getCostTrend(rec.costEstimate, avgCost)}
+                                                {getCostTrend(safeParseFloat(rec.costEstimate), avgCost)}
                                             </Box>
                                         </TableCell>
                                         <TableCell align="center">
@@ -270,7 +280,7 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
                                         </TableCell>
                                         <TableCell align="center">
                                             <Chip
-                                                label={rec.implementationComplexity}
+                                                label={rec.implementationComplexity.charAt(0).toUpperCase() + rec.implementationComplexity.slice(1)}
                                                 size="small"
                                                 color={getComplexityColor(rec.implementationComplexity) as 'success' | 'warning' | 'error' | 'default'}
                                                 variant="outlined"
@@ -286,10 +296,10 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
                                                 size="small"
                                                 variant="outlined"
                                                 onClick={() => {
-                                                    console.log('View details for:', rec.serviceName);
+                                                    toggleRowExpansion(rec.id);
                                                 }}
                                             >
-                                                Details
+                                                {expandedRows.has(rec.id) ? 'Hide' : 'Details'}
                                             </Button>
                                         </TableCell>
                                     </TableRow>

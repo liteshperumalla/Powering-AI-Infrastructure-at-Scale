@@ -190,7 +190,7 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
     useEffect(() => {
         if (!isRealTimeEnabled) return;
 
-        const interval = setInterval(async () => {
+        const fetchMetrics = async () => {
             try {
                 // Fetch latest metrics from API
                 const response = await fetch('/api/metrics/current');
@@ -218,7 +218,9 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
             } catch (error) {
                 console.error('Error fetching metrics:', error);
             }
-        }, refreshInterval);
+        };
+
+        const interval = setInterval(fetchMetrics, refreshInterval);
 
         return () => clearInterval(interval);
     }, [isRealTimeEnabled, refreshInterval, maxDataPoints]);

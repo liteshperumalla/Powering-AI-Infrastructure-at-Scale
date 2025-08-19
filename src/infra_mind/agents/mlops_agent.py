@@ -65,6 +65,10 @@ class MLOpsAgent(BaseAgent):
         
         super().__init__(config)
         
+        # Initialize client attributes
+        self.web_search_client = None
+        self.llm_client = None
+        
         # MLOps-specific attributes
         self.mlops_platforms = [
             "kubeflow", "mlflow", "sagemaker", "azure_ml", 

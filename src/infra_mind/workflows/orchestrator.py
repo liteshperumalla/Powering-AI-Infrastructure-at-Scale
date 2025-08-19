@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from ..models.assessment import Assessment
 from ..models.recommendation import Recommendation
 from ..agents.base import BaseAgent, AgentRole, AgentResult, AgentStatus
-from ..agents.base import agent_factory
+from ..agents import agent_factory  # Import from agents package to ensure registration
 from .base import WorkflowManager, workflow_manager
 
 logger = logging.getLogger(__name__)

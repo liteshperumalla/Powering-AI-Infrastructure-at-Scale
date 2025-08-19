@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 
 from ...models.user import User
 import jwt
+from jwt.exceptions import InvalidTokenError
 import os
 
 router = APIRouter()
@@ -57,7 +58,7 @@ def verify_token(token: str) -> dict:
         raise HTTPException(status_code=401, detail="Invalid token audience")
     except jwt.InvalidIssuerError:
         raise HTTPException(status_code=401, detail="Invalid token issuer")
-    except jwt.JWTError:
+    except (jwt.InvalidTokenError, InvalidTokenError):
         raise HTTPException(status_code=401, detail="Invalid token")
 
 async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> User:
