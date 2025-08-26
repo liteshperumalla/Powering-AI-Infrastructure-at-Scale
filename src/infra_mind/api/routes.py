@@ -6,7 +6,7 @@ Supports API versioning for backward compatibility and evolution.
 """
 
 from fastapi import APIRouter, HTTPException, status
-from .endpoints import auth, assessments, recommendations, reports, monitoring, webhooks, admin, testing, resilience, compliance, integrations, compliance_dashboard, business_tools, performance_monitoring, forms, cloud_services, chat, advanced_analytics
+from .endpoints import auth, assessments, recommendations, reports, monitoring, webhooks, admin, testing, resilience, compliance, integrations, compliance_dashboard, business_tools, performance_monitoring, forms, cloud_services, chat, advanced_analytics, scenarios, validation, dashboard
 
 # Create versioned API routers
 api_v1_router = APIRouter()
@@ -64,6 +64,18 @@ api_v1_router.include_router(
     chat.router,
     prefix="/chat",
     tags=["Chat"]
+)
+
+api_v1_router.include_router(
+    cloud_services.router,
+    prefix="/cloud-services",
+    tags=["Cloud Services"]
+)
+
+api_v1_router.include_router(
+    scenarios.router,
+    prefix="/scenarios",
+    tags=["Scenarios"]
 )
 
 # V2 API Routes (Enhanced with new features)
@@ -174,6 +186,24 @@ api_v2_router.include_router(
     tags=["Advanced Analytics"]
 )
 
+api_v2_router.include_router(
+    scenarios.router,
+    prefix="/scenarios",
+    tags=["Scenarios"]
+)
+
+api_v2_router.include_router(
+    validation.router,
+    prefix="/validation",
+    tags=["Data Validation"]
+)
+
+api_v2_router.include_router(
+    dashboard.router,
+    prefix="/dashboard",
+    tags=["Dashboard"]
+)
+
 # Main API router that includes all versions
 api_router = APIRouter()
 
@@ -202,7 +232,7 @@ async def get_api_versions():
                 "sunset_date": None,
                 "description": "Original API with core functionality",
                 "endpoints": [
-                    "/auth", "/assessments", "/recommendations", "/reports", "/forms"
+                    "/auth", "/assessments", "/recommendations", "/reports", "/forms", "/cloud-services"
                 ]
             },
             {

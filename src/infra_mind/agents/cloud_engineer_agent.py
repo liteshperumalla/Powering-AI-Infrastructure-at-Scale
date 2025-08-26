@@ -51,7 +51,7 @@ class CloudEngineerAgent(BaseAgent):
                         "multi_cloud_comparison",
                         "best_practices"
                     ],
-                    "cloud_platforms": ["aws", "azure", "gcp"],
+                    "cloud_platforms": ["aws", "azure", "gcp", "ibm", "alibaba"],
                     "service_categories": [
                         "compute", "storage", "database", 
                         "networking", "security", "ai_ml"
@@ -62,7 +62,7 @@ class CloudEngineerAgent(BaseAgent):
         super().__init__(config)
         
         # Cloud Engineer-specific attributes
-        self.cloud_platforms = ["aws", "azure", "gcp"]
+        self.cloud_platforms = ["aws", "azure", "gcp", "ibm", "alibaba"]
         self.service_categories = [
             "compute", "storage", "database", 
             "networking", "security", "ai_ml"
@@ -115,7 +115,7 @@ class CloudEngineerAgent(BaseAgent):
                 "data_sources": {
                     "llm_powered": True,
                     "real_api_data": True,
-                    "cloud_providers": ["aws", "azure", "gcp"],
+                    "cloud_providers": ["aws", "azure", "gcp", "alibaba", "ibm"],
                     "analysis_depth": "comprehensive"
                 },
                 "timestamp": datetime.now(timezone.utc).isoformat()
@@ -191,19 +191,20 @@ class CloudEngineerAgent(BaseAgent):
             {self._format_service_data_for_llm(service_data)}
             
             Provide recommendations in JSON format with:
-            - primary_provider: (aws/azure/gcp)
-            - secondary_provider: (aws/azure/gcp)
+            - primary_provider: (aws/azure/gcp/alibaba/ibm)
+            - secondary_provider: (aws/azure/gcp/alibaba/ibm)  
             - recommended_services: object with categories (compute, storage, database, networking, security)
             - reasoning: explanation for each recommendation
             - cost_considerations: estimated monthly costs
             - implementation_timeline: expected setup time
             
             Focus on production-ready solutions with real pricing and performance data.
+            Consider all cloud providers: AWS, Azure, GCP, Alibaba Cloud, and IBM Cloud.
             """
             
             llm_response = await self._call_llm(
                 prompt=recommendation_prompt,
-                system_prompt="You are a senior cloud architect with expertise in AWS, Azure, and GCP. Recommend specific services based on real-world requirements and data.",
+                system_prompt="You are a senior cloud architect with expertise in AWS, Azure, GCP, Alibaba Cloud, and IBM Cloud. Recommend specific services based on real-world requirements and data from all major cloud providers.",
                 temperature=0.3
             )
             
@@ -743,7 +744,7 @@ Please respond in JSON format with structured data for each section."""
         try:
             response = await self._call_llm(
                 prompt=prompt,
-                system_prompt="You are an expert Cloud Engineer with deep knowledge of AWS, Azure, and GCP services. Provide detailed, actionable technical analysis based on the assessment data.",
+                system_prompt="You are an expert Cloud Engineer with deep knowledge of AWS, Azure, GCP, Alibaba Cloud, and IBM Cloud services. Provide detailed, actionable technical analysis based on the assessment data.",
                 temperature=0.3,
                 max_tokens=2000
             )
@@ -778,10 +779,10 @@ TECHNICAL ANALYSIS:
 AVAILABLE CLOUD SERVICES:
 {self._format_service_data_for_llm(service_data)}
 
-Please recommend specific cloud services from AWS, Azure, and/or GCP that best match the requirements. For each recommendation, provide:
+Please recommend specific cloud services from AWS, Azure, GCP, Alibaba Cloud, and/or IBM Cloud that best match the requirements. For each recommendation, provide:
 
 1. **Service Details**:
-   - Cloud provider (AWS/Azure/GCP)
+   - Cloud provider (AWS/Azure/GCP/Alibaba/IBM)
    - Service name and type
    - Specific configuration recommendations
 
@@ -811,7 +812,7 @@ Respond in JSON format with an array of recommendations."""
         try:
             response = await self._call_llm(
                 prompt=prompt,
-                system_prompt="You are a Cloud Engineer expert in AWS, Azure, and GCP services. Provide specific, actionable service recommendations with detailed justification.",
+                system_prompt="You are a Cloud Engineer expert in AWS, Azure, GCP, Alibaba Cloud, and IBM Cloud services. Provide specific, actionable service recommendations with detailed justification.",
                 temperature=0.2,
                 max_tokens=2500
             )
@@ -1039,7 +1040,18 @@ Respond in JSON format with structured guidance for each section."""
                 for service in rec_data.get("services", []):
                     try:
                         provider_str = service.get("provider", "aws").lower()
-                        provider = CloudProvider.AWS if provider_str == "aws" else CloudProvider.AZURE if provider_str == "azure" else CloudProvider.GCP
+                        if provider_str == "aws":
+                            provider = CloudProvider.AWS
+                        elif provider_str == "azure":
+                            provider = CloudProvider.AZURE
+                        elif provider_str == "gcp":
+                            provider = CloudProvider.GCP
+                        elif provider_str == "alibaba":
+                            provider = CloudProvider.ALIBABA
+                        elif provider_str == "ibm":
+                            provider = CloudProvider.IBM
+                        else:
+                            provider = CloudProvider.AWS
                         
                         service_rec = ServiceRecommendation(
                             service_name=service.get("name", "Unknown"),
@@ -1735,7 +1747,7 @@ Respond in JSON format with structured guidance for each section."""
         
         return {
             "cost_alignment": cost_alignment,
-            "scalability_alignment": "high" if provider in ["aws", "azure", "gcp"] else "medium",
+            "scalability_alignment": "high" if provider in ["aws", "azure", "gcp", "alibaba", "ibm"] else "medium",
             "reliability_alignment": "high",  # Assume cloud services are reliable
             "overall_alignment": "high" if cost_alignment == "high" else "medium"
         }   

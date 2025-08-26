@@ -1,10 +1,9 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
     Dialog,
     DialogTitle,
     DialogContent,
     DialogActions,
-    TextField,
     Button,
     Box,
     Avatar,
@@ -15,20 +14,20 @@ import {
     List,
     ListItem,
     ListItemText,
-    ListItemSecondaryAction,
-    Switch,
-    FormControlLabel,
+    ListItemIcon,
 } from '@mui/material';
 import {
     Person,
     Email,
     Business,
-    Edit,
-    Save,
-    Cancel,
+    Settings,
+    AdminPanelSettings,
+    CalendarToday,
+    Schedule,
 } from '@mui/icons-material';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { updateProfile, logout } from '@/store/slices/authSlice';
+import { logout } from '@/store/slices/authSlice';
+import { useRouter } from 'next/navigation';
 
 interface UserProfileProps {
     open: boolean;
@@ -37,74 +36,22 @@ interface UserProfileProps {
 
 export default function UserProfile({ open, onClose }: UserProfileProps) {
     const dispatch = useAppDispatch();
-    const { user, loading, error } = useAppSelector(state => state.auth);
-
-    const [isEditing, setIsEditing] = useState(false);
-    const [formData, setFormData] = useState({
-        full_name: user?.full_name || '',
-        company: user?.company || '',
-        preferences: {
-            emailNotifications: true,
-            pushNotifications: false,
-            weeklyReports: true,
-            marketingEmails: false,
-        },
-    });
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const { name, value } = e.target;
-        setFormData(prev => ({
-            ...prev,
-            [name]: value,
-        }));
-    };
-
-    const handlePreferenceChange = (preference: string) => (e: React.ChangeEvent<HTMLInputElement>) => {
-        setFormData(prev => ({
-            ...prev,
-            preferences: {
-                ...prev.preferences,
-                [preference]: e.target.checked,
-            },
-        }));
-    };
-
-    const handleSave = async () => {
-        try {
-            await dispatch(updateProfile({
-                full_name: formData.full_name,
-                company: formData.company,
-                preferences: formData.preferences,
-            })).unwrap();
-
-            setIsEditing(false);
-        } catch (error) {
-            console.error('Failed to update profile:', error);
-        }
-    };
-
-    const handleCancel = () => {
-        // Reset form data
-        setFormData({
-            full_name: user?.full_name || '',
-            company: user?.company || '',
-            preferences: {
-                emailNotifications: true,
-                pushNotifications: false,
-                weeklyReports: true,
-                marketingEmails: false,
-            },
-        });
-        setIsEditing(false);
-    };
+    const router = useRouter();
+    const { user, error } = useAppSelector(state => state.auth);
 
     const handleLogout = async () => {
         try {
             await dispatch(logout()).unwrap();
             onClose();
+            router.push('/auth/login');
         } catch (error) {
             console.error('Logout failed:', error);
         }
+    };
+
+    const handleGoToSettings = () => {
+        onClose();
+        router.push('/settings');
     };
 
     if (!user) {
@@ -116,12 +63,12 @@ export default function UserProfile({ open, onClose }: UserProfileProps) {
             <DialogTitle>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                     <Avatar sx={{ width: 56, height: 56, bgcolor: 'primary.main' }}>
-                        <Person />
+                        {user.full_name?.charAt(0).toUpperCase() || 'U'}
                     </Avatar>
                     <Box>
-                        <Typography variant="h6">User Profile</Typography>
+                        <Typography variant="h6">{user.full_name}</Typography>
                         <Typography variant="body2" color="text.secondary">
-                            Manage your account settings
+                            {user.email}
                         </Typography>
                     </Box>
                 </Box>
@@ -134,154 +81,78 @@ export default function UserProfile({ open, onClose }: UserProfileProps) {
                     </Alert>
                 )}
 
-                {/* Basic Information */}
+                {/* Account Summary */}
                 <Box sx={{ mb: 3 }}>
-                    <Typography variant="subtitle1" gutterBottom>
-                        Basic Information
-                    </Typography>
-
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <TextField
-                            label="Full Name"
-                            name="full_name"
-                            value={formData.full_name}
-                            onChange={handleChange}
-                            disabled={!isEditing}
-                            fullWidth
-                            InputProps={{
-                                startAdornment: <Person sx={{ mr: 1, color: 'text.secondary' }} />,
-                            }}
-                        />
-
-                        <TextField
-                            label="Email"
-                            value={user.email}
-                            disabled
-                            fullWidth
-                            InputProps={{
-                                startAdornment: <Email sx={{ mr: 1, color: 'text.secondary' }} />,
-                            }}
-                        />
-
-                        <TextField
-                            label="Company"
-                            name="company"
-                            value={formData.company}
-                            onChange={handleChange}
-                            disabled={!isEditing}
-                            fullWidth
-                            InputProps={{
-                                startAdornment: <Business sx={{ mr: 1, color: 'text.secondary' }} />,
-                            }}
-                        />
-                    </Box>
-                </Box>
-
-                <Divider sx={{ my: 2 }} />
-
-                {/* Account Details */}
-                <Box sx={{ mb: 3 }}>
-                    <Typography variant="subtitle1" gutterBottom>
-                        Account Details
+                    <Typography variant="subtitle1" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Person color="primary" />
+                        Account Information
                     </Typography>
 
                     <List dense>
                         <ListItem>
+                            <ListItemIcon>
+                                <Email color="action" />
+                            </ListItemIcon>
+                            <ListItemText
+                                primary="Email Address"
+                                secondary={user.email}
+                            />
+                        </ListItem>
+
+                        <ListItem>
+                            <ListItemIcon>
+                                <AdminPanelSettings color="action" />
+                            </ListItemIcon>
                             <ListItemText
                                 primary="Role"
                                 secondary={user.role}
                             />
-                            <ListItemSecondaryAction>
+                            <Box sx={{ ml: 1 }}>
                                 <Chip
                                     label={user.role}
                                     size="small"
                                     color="primary"
+                                    variant="outlined"
                                 />
-                            </ListItemSecondaryAction>
+                            </Box>
                         </ListItem>
 
                         <ListItem>
+                            <ListItemIcon>
+                                <CalendarToday color="action" />
+                            </ListItemIcon>
                             <ListItemText
                                 primary="Member Since"
-                                secondary={new Date(user.created_at).toLocaleDateString()}
+                                secondary={new Date(user.created_at).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'long',
+                                    day: 'numeric'
+                                })}
                             />
                         </ListItem>
 
                         <ListItem>
+                            <ListItemIcon>
+                                <Schedule color="action" />
+                            </ListItemIcon>
                             <ListItemText
                                 primary="Last Login"
-                                secondary={new Date(user.last_login).toLocaleDateString()}
+                                secondary={new Date(user.last_login).toLocaleDateString('en-US', {
+                                    year: 'numeric',
+                                    month: 'short',
+                                    day: 'numeric',
+                                    hour: '2-digit',
+                                    minute: '2-digit'
+                                })}
                             />
                         </ListItem>
                     </List>
                 </Box>
 
-                <Divider sx={{ my: 2 }} />
-
-                {/* Preferences */}
-                <Box sx={{ mb: 3 }}>
-                    <Typography variant="subtitle1" gutterBottom>
-                        Notification Preferences
-                    </Typography>
-
-                    <List dense>
-                        <ListItem>
-                            <ListItemText
-                                primary="Email Notifications"
-                                secondary="Receive notifications about assessments and reports"
-                            />
-                            <ListItemSecondaryAction>
-                                <Switch
-                                    checked={formData.preferences.emailNotifications}
-                                    onChange={handlePreferenceChange('emailNotifications')}
-                                    disabled={!isEditing}
-                                />
-                            </ListItemSecondaryAction>
-                        </ListItem>
-
-                        <ListItem>
-                            <ListItemText
-                                primary="Push Notifications"
-                                secondary="Receive browser push notifications"
-                            />
-                            <ListItemSecondaryAction>
-                                <Switch
-                                    checked={formData.preferences.pushNotifications}
-                                    onChange={handlePreferenceChange('pushNotifications')}
-                                    disabled={!isEditing}
-                                />
-                            </ListItemSecondaryAction>
-                        </ListItem>
-
-                        <ListItem>
-                            <ListItemText
-                                primary="Weekly Reports"
-                                secondary="Receive weekly summary reports"
-                            />
-                            <ListItemSecondaryAction>
-                                <Switch
-                                    checked={formData.preferences.weeklyReports}
-                                    onChange={handlePreferenceChange('weeklyReports')}
-                                    disabled={!isEditing}
-                                />
-                            </ListItemSecondaryAction>
-                        </ListItem>
-
-                        <ListItem>
-                            <ListItemText
-                                primary="Marketing Emails"
-                                secondary="Receive product updates and marketing content"
-                            />
-                            <ListItemSecondaryAction>
-                                <Switch
-                                    checked={formData.preferences.marketingEmails}
-                                    onChange={handlePreferenceChange('marketingEmails')}
-                                    disabled={!isEditing}
-                                />
-                            </ListItemSecondaryAction>
-                        </ListItem>
-                    </List>
-                </Box>
+                <Alert severity="info" sx={{ mb: 2 }}>
+                    To update your profile information, notification preferences, or other settings, 
+                    please visit the Settings page.
+                </Alert>
             </DialogContent>
 
             <DialogActions sx={{ px: 3, pb: 2 }}>
@@ -295,37 +166,16 @@ export default function UserProfile({ open, onClose }: UserProfileProps) {
                     </Button>
 
                     <Box sx={{ display: 'flex', gap: 1 }}>
-                        {isEditing ? (
-                            <>
-                                <Button
-                                    onClick={handleCancel}
-                                    startIcon={<Cancel />}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button
-                                    onClick={handleSave}
-                                    variant="contained"
-                                    startIcon={<Save />}
-                                    disabled={loading}
-                                >
-                                    {loading ? 'Saving...' : 'Save'}
-                                </Button>
-                            </>
-                        ) : (
-                            <>
-                                <Button onClick={onClose}>
-                                    Close
-                                </Button>
-                                <Button
-                                    onClick={() => setIsEditing(true)}
-                                    variant="contained"
-                                    startIcon={<Edit />}
-                                >
-                                    Edit Profile
-                                </Button>
-                            </>
-                        )}
+                        <Button onClick={onClose}>
+                            Close
+                        </Button>
+                        <Button
+                            onClick={handleGoToSettings}
+                            variant="contained"
+                            startIcon={<Settings />}
+                        >
+                            Go to Settings
+                        </Button>
                     </Box>
                 </Box>
             </DialogActions>

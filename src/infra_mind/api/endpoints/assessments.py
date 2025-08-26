@@ -43,6 +43,43 @@ from ...core.rbac import (
 router = APIRouter()
 
 
+async def store_progress_update_in_db(assessment_id, update_data):
+    """Store progress update in database for polling fallback"""
+    try:
+        from motor.motor_asyncio import AsyncIOMotorClient
+        import os
+        
+        mongo_uri = os.getenv("INFRA_MIND_MONGODB_URL", 
+                             "mongodb://admin:password@localhost:27017/infra_mind?authSource=admin")
+        client = AsyncIOMotorClient(mongo_uri)
+        db = client.get_database("infra_mind")
+        
+        # Store in assessment_progress collection for polling
+        progress_doc = {
+            "assessment_id": str(assessment_id),
+            "timestamp": datetime.utcnow(),
+            "progress_data": update_data,
+            "type": "progress_update"
+        }
+        
+        await db.assessment_progress.insert_one(progress_doc)
+        
+        # Clean up old progress updates (keep last 100 per assessment)
+        old_updates = await db.assessment_progress.find({
+            "assessment_id": str(assessment_id)
+        }).sort("timestamp", -1).skip(100).to_list(length=None)
+        
+        if old_updates:
+            old_ids = [doc["_id"] for doc in old_updates]
+            await db.assessment_progress.delete_many({"_id": {"$in": old_ids}})
+            
+        client.close()
+        
+    except Exception as e:
+        logger.error(f"Failed to store progress update in DB: {e}")
+        raise
+
+
 def convert_mongodb_data(data):
     """Convert MongoDB specific types to Python types for Pydantic serialization."""
     if isinstance(data, dict):
@@ -66,7 +103,9 @@ async def start_assessment_workflow(assessment: Assessment, app_state=None):
     
     # Helper function to broadcast updates
     async def broadcast_update(step: str, progress: float, message: str = ""):
+        """Enhanced broadcast function with error handling and fallback"""
         try:
+            # Primary: Try WebSocket broadcast
             if app_state and hasattr(app_state, 'broadcast_workflow_update'):
                 update_data = {
                     "assessment_id": str(assessment.id),
@@ -93,11 +132,77 @@ async def start_assessment_workflow(assessment: Assessment, app_state=None):
                         {"name": "Completed", "status": "completed" if progress >= 100 else "pending"}
                     ]
                 }
-                await app_state.broadcast_workflow_update(str(assessment.id), update_data)
+                
+                try:
+                    await app_state.broadcast_workflow_update(str(assessment.id), update_data)
+                    logger.debug(f"✅ WebSocket update sent - Step: {step}, Progress: {progress}%")
+                except Exception as ws_error:
+                    logger.warning(f"⚠️ WebSocket broadcast failed: {ws_error}")
+                    
+                    # Fallback 1: Store update in database for polling
+                    try:
+                        await store_progress_update_in_db(assessment.id, update_data)
+                        logger.info(f"📊 Progress stored in DB as fallback - Step: {step}")
+                    except Exception as db_error:
+                        logger.error(f"❌ Fallback DB storage failed: {db_error}")
+                    
+                    # Fallback 2: Update assessment record directly
+                    try:
+                        assessment.progress = {
+                            "current_step": step,
+                            "progress_percentage": progress,
+                            "message": message,
+                            "last_update": datetime.utcnow(),
+                            "websocket_failed": True
+                        }
+                        assessment.progress_percentage = progress
+                        await assessment.save()
+                        logger.info(f"💾 Assessment progress updated directly in DB")
+                    except Exception as save_error:
+                        logger.error(f"❌ Direct assessment update failed: {save_error}")
             else:
-                logger.debug(f"No WebSocket available for updates - Step: {step}, Progress: {progress}%")
+                # No WebSocket available - use database polling fallback
+                logger.info(f"🔄 No WebSocket - using DB polling fallback for {step}")
+                try:
+                    await store_progress_update_in_db(assessment.id, {
+                        "current_step": step,
+                        "progress_percentage": progress,
+                        "message": message,
+                        "websocket_available": False
+                    })
+                except:
+                    pass  # Non-critical fallback
+                
+                # Also update assessment directly
+                try:
+                    assessment.progress = {
+                        "current_step": step,
+                        "progress_percentage": progress,
+                        "message": message,
+                        "last_update": datetime.utcnow(),
+                        "websocket_available": False
+                    }
+                    assessment.progress_percentage = progress
+                    await assessment.save()
+                except Exception as save_error:
+                    logger.error(f"❌ Assessment update failed: {save_error}")
+                
         except Exception as e:
-            logger.warning(f"Failed to broadcast WebSocket update: {e}")
+            logger.error(f"❌ Critical error in broadcast_update: {e}")
+            # Emergency fallback - just update the assessment
+            try:
+                assessment.progress = {
+                    "current_step": step,
+                    "progress_percentage": progress,
+                    "message": f"Update failed, step: {step}",
+                    "emergency_fallback": True
+                }
+                assessment.progress_percentage = progress
+                await assessment.save()
+                logger.info(f"🚑 Emergency fallback applied for step: {step}")
+            except:
+                logger.critical(f"🚨 Complete fallback failure for assessment {assessment.id}")
+                pass  # Last resort - don't fail the workflow
     
     try:
         # Step 1: Initialize workflow with 11 agents
@@ -704,32 +809,48 @@ async def create_assessment(
         description = assessment_data.get('description', 'AI infrastructure assessment')
         business_goal = assessment_data.get('business_goal', 'Improve infrastructure')
         
-        # Transform frontend business_requirements to backend format
+        # Use enhanced business_requirements - preserve ALL fields from frontend
         frontend_business_req = assessment_data.get('business_requirements', {})
-        business_requirements = {
-            "company_size": frontend_business_req.get('company_size', 'startup'),
-            "industry": frontend_business_req.get('industry', 'technology'),
-            "business_goals": frontend_business_req.get('business_goals', [
-                {
-                    "goal": business_goal,
-                    "priority": "high",
-                    "timeline_months": 6,
-                    "success_metrics": ["Performance improvement", "Cost optimization"]
-                }
-            ]),
-            "growth_projection": frontend_business_req.get('growth_projection', {
+        
+        # DEBUG: Log what we received
+        logger.info(f"FRONTEND BUSINESS REQ KEYS: {list(frontend_business_req.keys())}")
+        logger.info(f"COMPANY NAME RECEIVED: {frontend_business_req.get('company_name', 'MISSING')}")
+        
+        # Start with all frontend data and add defaults only for missing fields
+        business_requirements = dict(frontend_business_req)  # Copy all fields from frontend
+        
+        # DEBUG: Log what we're storing
+        logger.info(f"BUSINESS REQ AFTER COPY: {list(business_requirements.keys())}")
+        logger.info(f"COMPANY NAME TO STORE: {business_requirements.get('company_name', 'MISSING')}")
+        
+        # Add default values only for missing core fields
+        if 'company_size' not in business_requirements:
+            business_requirements['company_size'] = 'startup'
+        if 'industry' not in business_requirements:
+            business_requirements['industry'] = 'technology'
+        if 'business_goals' not in business_requirements:
+            business_requirements['business_goals'] = [{
+                "goal": business_goal,
+                "priority": "high",
+                "timeline_months": 6,
+                "success_metrics": ["Performance improvement", "Cost optimization"]
+            }]
+        if 'growth_projection' not in business_requirements:
+            business_requirements['growth_projection'] = {
                 "current_users": 1000,
                 "projected_users_6m": 2000,
                 "projected_users_12m": 5000,
                 "current_revenue": "500000",
                 "projected_revenue_12m": "1000000"
-            }),
-            "budget_constraints": frontend_business_req.get('budget_constraints', {
+            }
+        if 'budget_constraints' not in business_requirements:
+            business_requirements['budget_constraints'] = {
                 "total_budget_range": "10k_50k",
                 "monthly_budget_limit": 25000,
                 "cost_optimization_priority": "high"
-            }),
-            "team_structure": frontend_business_req.get('team_structure', {
+            }
+        if 'team_structure' not in business_requirements:
+            business_requirements['team_structure'] = {
                 "total_developers": 5,
                 "senior_developers": 2,
                 "devops_engineers": 1,
@@ -737,26 +858,38 @@ async def create_assessment(
                 "cloud_expertise_level": 3,
                 "kubernetes_expertise": 2,
                 "database_expertise": 3
-            }),
-            "compliance_requirements": frontend_business_req.get('compliance_requirements', ["none"]),
-            "project_timeline_months": frontend_business_req.get('project_timeline_months', 6),
-            "urgency_level": "medium",
-            "current_pain_points": ["Scalability challenges"],
-            "success_criteria": ["Improved performance", "Cost reduction"],
-            "multi_cloud_acceptable": True
-        }
+            }
+        if 'compliance_requirements' not in business_requirements:
+            business_requirements['compliance_requirements'] = ["none"]
+        if 'project_timeline_months' not in business_requirements:
+            business_requirements['project_timeline_months'] = 6
+        if 'urgency_level' not in business_requirements:
+            business_requirements['urgency_level'] = "medium"
+        if 'current_pain_points' not in business_requirements:
+            business_requirements['current_pain_points'] = ["Scalability challenges"]
+        if 'success_criteria' not in business_requirements:
+            business_requirements['success_criteria'] = ["Improved performance", "Cost reduction"]
+        if 'multi_cloud_acceptable' not in business_requirements:
+            business_requirements['multi_cloud_acceptable'] = True
         
-        # Transform frontend technical_requirements to backend format
+        # Use enhanced technical_requirements - preserve ALL fields from frontend
         frontend_technical_req = assessment_data.get('technical_requirements', {})
-        technical_requirements = {
-            "workload_types": frontend_technical_req.get('workload_types', ["web_application", "api_service"]),
-            "performance_requirements": frontend_technical_req.get('performance_requirements', {
+        
+        # Start with all frontend data and add defaults only for missing fields
+        technical_requirements = dict(frontend_technical_req)  # Copy all fields from frontend
+        
+        # Add default values only for missing core fields
+        if 'workload_types' not in technical_requirements:
+            technical_requirements['workload_types'] = ["web_application", "api_service"]
+        if 'performance_requirements' not in technical_requirements:
+            technical_requirements['performance_requirements'] = {
                 "api_response_time_ms": 200,
                 "requests_per_second": 1000,
                 "concurrent_users": 500,
                 "uptime_percentage": 99.9
-            }),
-            "scalability_requirements": frontend_technical_req.get('scalability_requirements', {
+            }
+        if 'scalability_requirements' not in technical_requirements:
+            technical_requirements['scalability_requirements'] = {
                 "current_data_size_gb": 100,
                 "current_daily_transactions": 10000,
                 "expected_data_growth_rate": "20% monthly",
@@ -765,8 +898,9 @@ async def create_assessment(
                 "global_distribution_required": False,
                 "cdn_required": True,
                 "planned_regions": ["us-east-1"]
-            }),
-            "security_requirements": frontend_technical_req.get('security_requirements', {
+            }
+        if 'security_requirements' not in technical_requirements:
+            technical_requirements['security_requirements'] = {
                 "encryption_at_rest_required": True,
                 "encryption_in_transit_required": True,
                 "multi_factor_auth_required": False,
@@ -780,8 +914,9 @@ async def create_assessment(
                 "vulnerability_scanning_required": False,
                 "data_loss_prevention_required": False,
                 "backup_encryption_required": True
-            }),
-            "integration_requirements": frontend_technical_req.get('integration_requirements', {
+            }
+        if 'integration_requirements' not in technical_requirements:
+            technical_requirements['integration_requirements'] = {
                 "existing_databases": [],
                 "existing_apis": [],
                 "legacy_systems": [],
@@ -793,12 +928,15 @@ async def create_assessment(
                 "websocket_support_required": False,
                 "real_time_sync_required": False,
                 "batch_sync_acceptable": True
-            }),
-            "preferred_programming_languages": ["Python", "JavaScript"],
-            "monitoring_requirements": ["Performance monitoring", "Error tracking"],
-            "backup_requirements": ["Daily backups", "Point-in-time recovery"],
-            "ci_cd_requirements": ["Automated deployment", "Testing pipeline"]
-        }
+            }
+        if 'preferred_programming_languages' not in technical_requirements:
+            technical_requirements['preferred_programming_languages'] = ["Python", "JavaScript"]
+        if 'monitoring_requirements' not in technical_requirements:
+            technical_requirements['monitoring_requirements'] = ["Performance monitoring", "Error tracking"]
+        if 'backup_requirements' not in technical_requirements:
+            technical_requirements['backup_requirements'] = ["Daily backups", "Point-in-time recovery"]
+        if 'ci_cd_requirements' not in technical_requirements:
+            technical_requirements['ci_cd_requirements'] = ["Automated deployment", "Testing pipeline"]
         
         # Create and save Assessment document
         assessment = Assessment(
@@ -1211,12 +1349,25 @@ async def list_assessments(
                         if isinstance(tech_workload_types, list):
                             workload_types = tech_workload_types
                 
+                # Calculate proper progress percentage from database fields
+                progress_pct = 0.0
+                if hasattr(assessment, 'completion_percentage') and assessment.completion_percentage is not None:
+                    progress_pct = float(assessment.completion_percentage)
+                elif hasattr(assessment, 'progress_percentage') and assessment.progress_percentage is not None:
+                    progress_pct = float(assessment.progress_percentage)
+                elif assessment.progress and isinstance(assessment.progress, dict):
+                    progress_pct = assessment.progress.get("progress_percentage", 0.0)
+                
+                # Override progress if status is completed
+                if assessment.status == "completed":
+                    progress_pct = 100.0
+                
                 assessment_summaries.append(AssessmentSummary(
                     id=str(assessment.id),
                     title=assessment.title or "Untitled Assessment",
                     status=assessment.status,
                     priority=assessment.priority,
-                    progress_percentage=assessment.progress.get("progress_percentage", 0.0) if assessment.progress else 0.0,
+                    progress_percentage=progress_pct,
                     created_at=assessment.created_at,
                     updated_at=assessment.updated_at,
                     company_size=company_size,

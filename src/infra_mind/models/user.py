@@ -36,6 +36,8 @@ class User(Document):
     
     # Role and permissions
     role: str = Field(default="user", description="User role (user, admin, manager, analyst, viewer)")
+    is_admin: bool = Field(default=False, description="Whether user has admin privileges")
+    is_superuser: bool = Field(default=False, description="Whether user has superuser privileges")
     
     # User preferences
     preferred_cloud_providers: List[str] = Field(

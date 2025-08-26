@@ -155,6 +155,18 @@ class Settings(BaseSettings):
     gcp_region: str = "us-central1"
     google_application_credentials: Optional[str] = None
     
+    # IBM Cloud Configuration
+    ibm_api_key: Optional[SecretStr] = None
+    ibm_account_id: Optional[str] = None
+    ibm_region: str = "us-south"
+    ibm_resource_group_id: Optional[str] = None
+    
+    # Alibaba Cloud Configuration
+    alibaba_access_key_id: Optional[SecretStr] = None
+    alibaba_access_key_secret: Optional[SecretStr] = None
+    alibaba_region: str = "cn-beijing"
+    alibaba_security_token: Optional[SecretStr] = None
+    
     # Terraform Cloud Configuration
     tf_cloud_token: Optional[SecretStr] = None
     tf_cloud_organization: Optional[str] = None
@@ -181,6 +193,14 @@ class Settings(BaseSettings):
     gcp_rate_limit: int = Field(
         default=100,
         description="GCP API requests per minute"
+    )
+    ibm_rate_limit: int = Field(
+        default=100,
+        description="IBM Cloud API requests per minute"
+    )
+    alibaba_rate_limit: int = Field(
+        default=100,
+        description="Alibaba Cloud API requests per minute"
     )
     
     # Cache Configuration

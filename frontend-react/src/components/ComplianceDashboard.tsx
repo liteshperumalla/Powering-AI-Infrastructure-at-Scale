@@ -168,11 +168,10 @@ const ComplianceDashboard: React.FC = () => {
                     const consentData = await consentResponse.json();
                     setConsentSummary(consentData.consent_summary || consentData || {});
                 } else if (consentResponse.status === 401) {
-                    console.warn('Authentication failed for compliance data');
-                    // Optionally redirect to login or clear invalid token
+                    // Silently handle auth issues
                     localStorage.removeItem('auth_token');
                 } else {
-                    console.error('Failed to load consent status:', consentResponse.status, consentResponse.statusText);
+                    // Silently handle missing compliance endpoints - feature not implemented
                 }
             } catch (consentError) {
                 console.error('Error fetching consent data:', consentError);
@@ -192,11 +191,10 @@ const ComplianceDashboard: React.FC = () => {
                     const policiesData = await policiesResponse.json();
                     setRetentionPolicies(policiesData.policies || {});
                 } else {
-                    console.warn('Failed to load retention policies:', policiesResponse.status);
+                    // Silently handle missing endpoints
                 }
             } catch (e) {
-                // User might not have admin access or network error
-                console.log('Retention policies not accessible (admin only or network error)');
+                // Silently handle missing compliance endpoints
                 setRetentionPolicies({});
             }
 
@@ -212,11 +210,10 @@ const ComplianceDashboard: React.FC = () => {
                     const auditData = await auditResponse.json();
                     setAuditEvents(auditData.audit_summary?.recent_events || []);
                 } else {
-                    console.warn('Failed to load audit events:', auditResponse.status);
+                    // Silently handle missing endpoints
                 }
             } catch (e) {
-                // User might not have admin access or network error
-                console.log('Audit data not accessible (admin only or network error)');
+                // Silently handle missing compliance endpoints
                 setAuditEvents([]);
             }
 

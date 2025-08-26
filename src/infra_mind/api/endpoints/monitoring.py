@@ -38,7 +38,7 @@ async def get_monitoring_dashboard(
         metrics_collector = get_metrics_collector()
         
         # Get health status
-        health_status = health_manager.get_comprehensive_status()
+        health_status = health_manager.get_system_health_summary()
         
         # Get metrics
         metrics_data = await metrics_collector.get_metrics_dashboard_data()
@@ -110,7 +110,7 @@ async def get_system_health(
         
         else:
             # Get overall system health
-            health_summary = health_manager.get_comprehensive_status()
+            health_summary = health_manager.get_system_health_summary()
             
             return {
                 "success": True,
@@ -410,7 +410,7 @@ async def monitoring_websocket(websocket: WebSocket):
         # Send initial data
         initial_data = {
             "type": "initial_data",
-            "health_status": health_manager.get_comprehensive_status(),
+            "health_status": health_manager.get_system_health_summary(),
             "metrics": await metrics_collector.get_metrics_dashboard_data(),
             "timestamp": datetime.utcnow().isoformat()
         }

@@ -47,6 +47,7 @@ export default function ApiTester() {
     const [results, setResults] = useState<TestResult[]>([]);
     const [loading, setLoading] = useState(false);
     const [expandedResults, setExpandedResults] = useState<string[]>([]);
+    const [isAuthenticated, setIsAuthenticated] = useState(apiClient.isAuthenticated());
 
     const apiTests: ApiTest[] = [
         {
@@ -78,7 +79,7 @@ export default function ApiTester() {
             test: async () => {
                 return await apiClient.getCloudServiceProviders();
             },
-            requiresAuth: true,
+            requiresAuth: false,
         },
         {
             name: 'Cloud Service Categories',
@@ -86,7 +87,7 @@ export default function ApiTester() {
             test: async () => {
                 return await apiClient.getCloudServiceCategories();
             },
-            requiresAuth: true,
+            requiresAuth: false,
         },
         {
             name: 'Assessments List',
@@ -130,6 +131,18 @@ export default function ApiTester() {
         },
     ];
 
+    const quickLogin = async () => {
+        try {
+            await apiClient.login({
+                email: 'liteshperumalla@gmail.com',
+                password: 'Litesh@#12345'
+            });
+            setIsAuthenticated(true);
+        } catch (error) {
+            console.error('Quick login failed:', error);
+        }
+    };
+
     const runAllTests = async () => {
         setLoading(true);
         setResults([]);
@@ -163,7 +176,7 @@ export default function ApiTester() {
                 });
             } catch (error) {
                 const duration = Date.now() - startTime;
-                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+                const errorMessage = error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Unknown error';
                 
                 testResults.push({
                     name: test.name,
@@ -218,14 +231,25 @@ export default function ApiTester() {
                     <Typography variant="h6">
                         API Integration Test Suite
                     </Typography>
-                    <Button
-                        variant="contained"
-                        startIcon={loading ? <CircularProgress size={16} /> : <PlayArrow />}
-                        onClick={runAllTests}
-                        disabled={loading}
-                    >
-                        {loading ? 'Running Tests...' : 'Run All Tests'}
-                    </Button>
+                    <Box sx={{ display: 'flex', gap: 2 }}>
+                        {!isAuthenticated && (
+                            <Button
+                                variant="outlined"
+                                onClick={quickLogin}
+                                disabled={loading}
+                            >
+                                Quick Login
+                            </Button>
+                        )}
+                        <Button
+                            variant="contained"
+                            startIcon={loading ? <CircularProgress size={16} /> : <PlayArrow />}
+                            onClick={runAllTests}
+                            disabled={loading}
+                        >
+                            {loading ? 'Running Tests...' : 'Run All Tests'}
+                        </Button>
+                    </Box>
                 </Box>
 
                 {results.length > 0 && (
@@ -251,9 +275,14 @@ export default function ApiTester() {
                             />
                         </Box>
                         
-                        {!apiClient.isAuthenticated() && (
+                        {!isAuthenticated && (
                             <Alert severity="info" sx={{ mb: 2 }}>
-                                Some tests require authentication. Please log in to run all tests.
+                                Some tests require authentication. Click "Quick Login" to authenticate and run all tests.
+                            </Alert>
+                        )}
+                        {isAuthenticated && (
+                            <Alert severity="success" sx={{ mb: 2 }}>
+                                ✅ Authenticated - All tests can be run
                             </Alert>
                         )}
                     </Box>

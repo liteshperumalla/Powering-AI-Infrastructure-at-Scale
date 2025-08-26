@@ -19,6 +19,8 @@ class CloudProvider(str, Enum):
     AWS = "aws"
     AZURE = "azure"
     GCP = "gcp"
+    ALIBABA = "alibaba"
+    IBM = "ibm"
 
 
 class ServiceCategory(str, Enum):

@@ -1,98 +1,140 @@
 #!/usr/bin/env python3
 """
-Create a test user for testing authenticated chat features.
+Create a test user for login testing
 """
 
-import os
 import asyncio
-import uuid
-from datetime import datetime, timezone
-import bcrypt
+import os
+import sys
+from datetime import datetime
 from motor.motor_asyncio import AsyncIOMotorClient
-from bson import ObjectId
-
-# Database configuration
-MONGODB_URL = os.getenv("INFRA_MIND_MONGODB_URL", "mongodb://admin:password@localhost:27017/infra_mind?authSource=admin")
-
-async def hash_password(password: str) -> str:
-    """Proper bcrypt password hashing to match the backend."""
-    # Use bcrypt with 12 rounds to match backend settings
-    salt = bcrypt.gensalt(rounds=12)
-    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
-    return hashed.decode('utf-8')
+import bcrypt
 
 async def create_test_user():
-    """Create a test user in the database."""
+    """Create a test user in the database"""
     
-    print("🔧 Creating test user for chat testing...")
+    # Database connection
+    mongo_uri = os.getenv("INFRA_MIND_MONGODB_URL", 
+                         "mongodb://admin:password@localhost:27017/infra_mind?authSource=admin")
     
-    # Connect to MongoDB
-    client = AsyncIOMotorClient(MONGODB_URL)
-    db = client.infra_mind
+    client = AsyncIOMotorClient(mongo_uri)
+    db = client.get_database("infra_mind")
     
     try:
-        # Delete existing test user if it exists
-        existing_user = await db.users.find_one({"email": "liteshperumalla@gmail.com"})
+        # Check if users collection exists and has any users
+        users_count = await db.users.count_documents({})
+        print(f"📊 Current users in database: {users_count}")
+        
+        # Check if test user already exists
+        test_email = "test@infra-mind.com"
+        existing_user = await db.users.find_one({"email": test_email})
+        
         if existing_user:
-            print("🔄 Deleting existing test user...")
-            await db.users.delete_one({"email": "liteshperumalla@gmail.com"})
+            print(f"✅ Test user already exists: {test_email}")
+            print(f"   Full Name: {existing_user.get('full_name', 'Unknown')}")
+            print(f"   Is Active: {existing_user.get('is_active', False)}")
+        else:
+            # Create test user
+            test_password = "password123"
+            hashed_password = bcrypt.hashpw(test_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            
+            test_user = {
+                "email": test_email,
+                "hashed_password": hashed_password,
+                "full_name": "Test User",
+                "company_name": "Infra Mind Test",
+                "job_title": "Test Engineer",
+                "role": "user",
+                "is_active": True,
+                "is_verified": True,
+                "is_admin": False,
+                "is_superuser": False,
+                "preferred_cloud_providers": [],
+                "notification_preferences": {
+                    "email_reports": True,
+                    "assessment_updates": True,
+                    "security_alerts": True,
+                    "marketing": False
+                },
+                "subscription": {
+                    "plan": "premium",
+                    "status": "active",
+                    "started_at": datetime.utcnow(),
+                    "features": ["unlimited_assessments", "advanced_analytics", "priority_support"]
+                },
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow(),
+                "last_login": None,
+                "last_active": datetime.utcnow(),
+                "login_count": 0
+            }
+            
+            result = await db.users.insert_one(test_user)
+            print(f"✅ Created test user successfully!")
+            print(f"   Email: {test_email}")
+            print(f"   Password: {test_password}")
+            print(f"   User ID: {result.inserted_id}")
         
-        # Create test user document
-        user_id = str(uuid.uuid4())
-        hashed_password = await hash_password("Litesh@#12345")
+        # Also check for an admin user and create if needed
+        admin_email = "admin@infra-mind.com"
+        existing_admin = await db.users.find_one({"email": admin_email})
         
-        user_doc = {
-            "_id": user_id,
-            "email": "liteshperumalla@gmail.com",
-            "hashed_password": hashed_password,
-            "full_name": "Litesh Perumalla",
-            "company_name": "AI Infrastructure Solutions",
-            "role": "user",
-            "is_active": True,
-            "preferences": {
-                "notifications_enabled": True,
-                "default_context": "general_inquiry"
-            },
-            "created_at": datetime.now(timezone.utc),
-            "updated_at": datetime.now(timezone.utc)
-        }
+        if not existing_admin:
+            admin_password = "admin123"
+            hashed_admin_password = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            
+            admin_user = {
+                "email": admin_email,
+                "hashed_password": hashed_admin_password,
+                "full_name": "Admin User",
+                "company_name": "Infra Mind",
+                "job_title": "System Administrator",
+                "role": "admin",
+                "is_active": True,
+                "is_verified": True,
+                "is_admin": True,
+                "is_superuser": True,
+                "preferred_cloud_providers": ["aws", "azure", "gcp"],
+                "notification_preferences": {
+                    "email_reports": True,
+                    "assessment_updates": True,
+                    "security_alerts": True,
+                    "marketing": False
+                },
+                "subscription": {
+                    "plan": "enterprise",
+                    "status": "active",
+                    "started_at": datetime.utcnow(),
+                    "features": ["unlimited_assessments", "advanced_analytics", "priority_support", "api_access"]
+                },
+                "created_at": datetime.utcnow(),
+                "updated_at": datetime.utcnow(),
+                "last_login": None,
+                "last_active": datetime.utcnow(),
+                "login_count": 0
+            }
+            
+            result = await db.users.insert_one(admin_user)
+            print(f"✅ Created admin user successfully!")
+            print(f"   Email: {admin_email}")
+            print(f"   Password: {admin_password}")
+            print(f"   User ID: {result.inserted_id}")
+        else:
+            print(f"✅ Admin user already exists: {admin_email}")
         
-        # Insert user
-        result = await db.users.insert_one(user_doc)
-        print(f"✅ Test user created successfully!")
-        print(f"   User ID: {result.inserted_id}")
-        print(f"   Email: liteshperumalla@gmail.com")
-        print(f"   Password: Litesh@#12345")
+        # Final count
+        final_count = await db.users.count_documents({})
+        print(f"\n📊 Total users in database: {final_count}")
         
-        return user_doc
+        print(f"\n🔑 Login Credentials for Testing:")
+        print(f"   Regular User: {test_email} / password123")
+        print(f"   Admin User: {admin_email} / admin123")
         
     except Exception as e:
-        print(f"❌ Failed to create test user: {str(e)}")
-        raise
+        print(f"❌ Error: {e}")
+        sys.exit(1)
     finally:
         client.close()
 
-async def main():
-    """Main function."""
-    print("🚀 Test User Creation Script")
-    print("=" * 40)
-    
-    try:
-        user = await create_test_user()
-        print("\n🎉 Success! You can now log in with:")
-        print("   Email: liteshperumalla@gmail.com")
-        print("   Password: Litesh@#12345")
-        print("\nUse these credentials to test:")
-        print("• Start conversations")
-        print("• Chat settings")
-        print("• End chat functionality")
-        
-    except Exception as e:
-        print(f"\n❌ Error: {str(e)}")
-        return 1
-    
-    return 0
-
 if __name__ == "__main__":
-    exit_code = asyncio.run(main())
-    exit(exit_code)
+    asyncio.run(create_test_user())

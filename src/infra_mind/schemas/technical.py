@@ -18,6 +18,44 @@ from .base import (
 )
 
 
+class AIMaturityLevel(str, Enum):
+    """AI maturity levels for companies."""
+    NONE = "none"
+    PILOT = "pilot"
+    PRODUCTION = "production"
+    ADVANCED = "advanced"
+    OTHER = "other"
+
+
+class InfrastructureAge(str, Enum):
+    """Age of current infrastructure."""
+    NEW = "new"         # Less than 1 year
+    RECENT = "recent"   # 1-3 years
+    ESTABLISHED = "established"  # 3-5 years
+    LEGACY = "legacy"   # 5+ years
+
+
+class ContainerizationLevel(str, Enum):
+    """Containerization adoption level."""
+    NONE = "none"
+    DOCKER = "docker"
+    DOCKER_COMPOSE = "docker-compose"
+    KUBERNETES = "kubernetes"
+    MANAGED_K8S = "managed-k8s"
+    SERVERLESS = "serverless"
+
+
+class DeploymentStrategy(str, Enum):
+    """Deployment strategy preferences."""
+    MANUAL = "manual"
+    BASIC_CICD = "basic-cicd"
+    ADVANCED_CICD = "advanced-cicd"
+    BLUE_GREEN = "blue-green"
+    CANARY = "canary"
+    ROLLING = "rolling"
+    GITOPS = "gitops"
+
+
 class DatabaseType(str, Enum):
     """Database technology preferences."""
     RELATIONAL = "relational"  # PostgreSQL, MySQL
@@ -46,6 +84,45 @@ class DeploymentModel(str, Enum):
     BARE_METAL = "bare_metal"
     HYBRID = "hybrid"
     NO_PREFERENCE = "no_preference"
+
+
+class NetworkSetup(str, Enum):
+    """Network configuration types."""
+    PUBLIC_CLOUD = "public-cloud"
+    VPC = "vpc"
+    HYBRID = "hybrid"
+    MULTI_CLOUD = "multi-cloud"
+    ON_PREMISE = "on-premise"
+    EDGE = "edge"
+
+
+class DisasterRecoveryLevel(str, Enum):
+    """Disaster recovery setup levels."""
+    NONE = "none"
+    BASIC = "basic"
+    AUTOMATED = "automated"
+    MULTI_REGION = "multi-region"
+    ACTIVE_ACTIVE = "active-active"
+    COMPREHENSIVE = "comprehensive"
+
+
+class OrchestrationPlatform(str, Enum):
+    """Container orchestration platforms."""
+    NONE = "none"
+    KUBERNETES = "kubernetes"
+    DOCKER_SWARM = "docker-swarm"
+    ECS = "ecs"
+    FARGATE = "fargate"
+    CLOUD_RUN = "cloud-run"
+    CONTAINER_INSTANCES = "container-instances"
+
+
+class VersionControlSystem(str, Enum):
+    """Version control systems."""
+    GIT = "git"
+    SVN = "svn"
+    MERCURIAL = "mercurial"
+    OTHER = "other"
 
 
 class PerformanceRequirement(BaseSchema):
@@ -306,10 +383,241 @@ class TechnicalRequirements(BaseSchema):
     
     Learning Note: This model captures all technical constraints
     and preferences that will guide infrastructure recommendations.
+    Enhanced to include all new form fields for better LLM context.
     """
     
-    # Application characteristics
+    # Current Infrastructure Details (Enhanced)
+    current_cloud_providers: List[str] = Field(
+        default_factory=list,
+        description="Current cloud providers being used"
+    )
+    current_services: List[str] = Field(
+        default_factory=list,
+        description="Current cloud services being used"
+    )
+    monthly_budget: Optional[str] = Field(
+        default=None,
+        description="Monthly cloud budget range"
+    )
+    technical_team_size: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description="Size of technical team"
+    )
+    infrastructure_age: Optional[InfrastructureAge] = Field(
+        default=None,
+        description="Age of current infrastructure"
+    )
+    current_architecture: Optional[ArchitecturePattern] = Field(
+        default=None,
+        description="Current architecture pattern"
+    )
+    data_storage_solutions: List[str] = Field(
+        default_factory=list,
+        description="Current data storage solutions"
+    )
+    network_setup: Optional[NetworkSetup] = Field(
+        default=None,
+        description="Current network setup"
+    )
+    disaster_recovery_setup: Optional[DisasterRecoveryLevel] = Field(
+        default=None,
+        description="Current disaster recovery setup"
+    )
+    monitoring_tools: List[str] = Field(
+        default_factory=list,
+        description="Current monitoring tools in use"
+    )
+    
+    # Technical Architecture Details (New Section)
+    application_types: List[str] = Field(
+        default_factory=list,
+        description="Types of applications being developed"
+    )
+    development_frameworks: List[str] = Field(
+        default_factory=list,
+        description="Development frameworks in use"
+    )
+    programming_languages: List[str] = Field(
+        default_factory=list,
+        description="Programming languages used by team"
+    )
+    database_types: List[str] = Field(
+        default_factory=list,
+        description="Database types in use or preferred"
+    )
+    integration_patterns: List[str] = Field(
+        default_factory=list,
+        description="Integration patterns used"
+    )
+    deployment_strategy: Optional[DeploymentStrategy] = Field(
+        default=None,
+        description="Current deployment strategy"
+    )
+    containerization: Optional[ContainerizationLevel] = Field(
+        default=None,
+        description="Level of containerization adoption"
+    )
+    orchestration_platform: Optional[OrchestrationPlatform] = Field(
+        default=None,
+        description="Container orchestration platform"
+    )
+    cicd_tools: List[str] = Field(
+        default_factory=list,
+        description="CI/CD tools in use"
+    )
+    version_control_system: Optional[VersionControlSystem] = Field(
+        default=None,
+        description="Version control system in use"
+    )
+    
+    # AI Requirements & Use Cases (Enhanced)
+    ai_use_cases: List[str] = Field(
+        default_factory=list,
+        description="AI/ML use cases to support"
+    )
+    current_ai_maturity: Optional[AIMaturityLevel] = Field(
+        default=None,
+        description="Current AI maturity level"
+    )
+    expected_data_volume: Optional[str] = Field(
+        default=None,
+        description="Expected data volume for AI workloads"
+    )
+    data_types: List[str] = Field(
+        default_factory=list,
+        description="Types of data to be processed"
+    )
+    real_time_requirements: Optional[str] = Field(
+        default=None,
+        description="Real-time processing requirements"
+    )
+    ml_model_types: List[str] = Field(
+        default_factory=list,
+        description="Types of ML models to be deployed"
+    )
+    training_frequency: Optional[str] = Field(
+        default=None,
+        description="Frequency of model training"
+    )
+    inference_volume: Optional[str] = Field(
+        default=None,
+        description="Expected inference volume"
+    )
+    data_processing_needs: List[str] = Field(
+        default_factory=list,
+        description="Data processing requirements"
+    )
+    ai_integration_complexity: Optional[str] = Field(
+        default=None,
+        description="Complexity of AI system integration"
+    )
+    existing_ml_infrastructure: List[str] = Field(
+        default_factory=list,
+        description="Existing ML infrastructure components"
+    )
+    
+    # Performance & Scalability (Enhanced)
+    current_user_load: Optional[str] = Field(
+        default=None,
+        description="Current user load"
+    )
+    peak_traffic_patterns: Optional[str] = Field(
+        default=None,
+        description="Peak traffic patterns"
+    )
+    expected_growth_rate: Optional[str] = Field(
+        default=None,
+        description="Expected growth rate"
+    )
+    response_time_requirements: Optional[str] = Field(
+        default=None,
+        description="Response time requirements"
+    )
+    availability_requirements: Optional[str] = Field(
+        default=None,
+        description="Availability requirements"
+    )
+    global_distribution: Optional[str] = Field(
+        default=None,
+        description="Global distribution requirements"
+    )
+    load_patterns: Optional[str] = Field(
+        default=None,
+        description="Load patterns and characteristics"
+    )
+    failover_requirements: Optional[str] = Field(
+        default=None,
+        description="Failover requirements"
+    )
+    scaling_triggers: List[str] = Field(
+        default_factory=list,
+        description="Triggers for scaling events"
+    )
+    
+    # Security & Compliance (Enhanced)
+    data_classification: List[str] = Field(
+        default_factory=list,
+        description="Data classification levels"
+    )
+    security_incident_history: Optional[str] = Field(
+        default=None,
+        description="History of security incidents"
+    )
+    access_control_requirements: List[str] = Field(
+        default_factory=list,
+        description="Access control requirements"
+    )
+    encryption_requirements: List[str] = Field(
+        default_factory=list,
+        description="Encryption requirements"
+    )
+    security_monitoring: List[str] = Field(
+        default_factory=list,
+        description="Security monitoring requirements"
+    )
+    vulnerability_management: Optional[str] = Field(
+        default=None,
+        description="Vulnerability management approach"
+    )
+    
+    # Budget & Timeline (New Section)
+    budget_flexibility: Optional[str] = Field(
+        default=None,
+        description="Budget flexibility level"
+    )
+    cost_optimization_priority: Optional[str] = Field(
+        default=None,
+        description="Priority of cost optimization"
+    )
+    total_budget_range: Optional[str] = Field(
+        default=None,
+        description="Total budget range for project"
+    )
+    migration_budget: Optional[str] = Field(
+        default=None,
+        description="Budget allocated for migration"
+    )
+    operational_budget_split: Optional[str] = Field(
+        default=None,
+        description="Split between operational and infrastructure budget"
+    )
+    roi_expectations: Optional[str] = Field(
+        default=None,
+        description="ROI expectations and timeline"
+    )
+    payment_model: Optional[str] = Field(
+        default=None,
+        description="Preferred payment model (pay-as-you-go, reserved, etc.)"
+    )
+    scaling_timeline: Optional[str] = Field(
+        default=None,
+        description="Timeline for scaling implementation"
+    )
+    
+    # Application characteristics (Existing - kept for compatibility)
     workload_types: List[WorkloadType] = Field(
+        default_factory=list,
         description="Types of workloads to support"
     )
     architecture_preference: ArchitecturePattern = Field(

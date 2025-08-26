@@ -96,6 +96,18 @@ interface AnalyticsData {
     }[];
 }
 
+// Helper function to get provider colors
+const getProviderColor = (provider: string) => {
+    switch (provider) {
+        case 'AWS': return '#FF9900';
+        case 'Azure': return '#0078D4';
+        case 'GCP': return '#4285F4';
+        case 'Alibaba': return '#FF6A00';
+        case 'IBM': return '#006699';
+        default: return '#666';
+    }
+};
+
 export default function ComprehensiveAnalyticsDashboard() {
     const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -442,7 +454,7 @@ export default function ComprehensiveAnalyticsDashboard() {
                                 service: d.service,
                                 provider: d.provider,
                                 performance: d.score,
-                                color: d.provider === 'AWS' ? '#FF9900' : d.provider === 'Azure' ? '#0078D4' : '#4285F4'
+                                color: getProviderColor(d.provider)
                             }))}
                             title=""
                         />
@@ -458,10 +470,12 @@ export default function ComprehensiveAnalyticsDashboard() {
                         </Typography>
                         <CostComparisonChart
                             data={[
-                                { provider: 'AWS', total: analytics.cost_breakdown.aws, color: '#FF9900' },
-                                { provider: 'Azure', total: analytics.cost_breakdown.azure, color: '#0078D4' },
-                                { provider: 'GCP', total: analytics.cost_breakdown.gcp, color: '#4285F4' },
-                            ]}
+                                { provider: 'AWS', total: analytics.cost_breakdown.aws, color: getProviderColor('AWS') },
+                                { provider: 'Azure', total: analytics.cost_breakdown.azure, color: getProviderColor('Azure') },
+                                { provider: 'GCP', total: analytics.cost_breakdown.gcp, color: getProviderColor('GCP') },
+                                { provider: 'Alibaba', total: analytics.cost_breakdown.alibaba || 0, color: getProviderColor('Alibaba') },
+                                { provider: 'IBM', total: analytics.cost_breakdown.ibm || 0, color: getProviderColor('IBM') },
+                            ].filter(item => item.total > 0)
                             title=""
                             showBreakdown={false}
                         />

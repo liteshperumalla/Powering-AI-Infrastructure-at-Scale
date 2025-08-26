@@ -803,6 +803,15 @@ class HealthCheckManager:
             for result in history
         ]
     
+    def get_comprehensive_status(self) -> Dict[str, Any]:
+        """
+        Get comprehensive status (alias for get_system_health_summary for backward compatibility).
+        
+        Returns:
+            System health summary
+        """
+        return self.get_system_health_summary()
+    
     async def _send_notifications(self, result: HealthCheckResult) -> None:
         """Send notifications for health status changes."""
         try:

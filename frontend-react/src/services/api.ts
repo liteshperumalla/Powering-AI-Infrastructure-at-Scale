@@ -8,29 +8,24 @@
 import { Assessment, BusinessRequirements, TechnicalRequirements } from '../store/slices/assessmentSlice';
 
 // API Configuration
-// Use different URLs for client-side (browser) vs server-side (SSR) requests
+// Always use the public URL that browsers can reach, even for SSR
 const getApiBaseUrl = () => {
-    if (typeof window === 'undefined') {
-        // Server-side: use internal Docker service name for internal container communication
-        return process.env.API_URL || 'http://api:8000';
-    } else {
-        // Client-side: use public URL that the browser can reach
-        const envUrl = process.env.NEXT_PUBLIC_API_URL;
-        if (envUrl) {
-            console.log('🔧 Using NEXT_PUBLIC_API_URL from env:', envUrl);
-            return envUrl;
-        }
-
-        // Fallback to localhost for development
-        const fallbackUrl = 'http://localhost:8000';
-        console.log('🔧 Using hardcoded fallback URL:', fallbackUrl);
-        return fallbackUrl;
+    // Always prefer the public API URL for consistency between SSR and client-side
+    const envUrl = process.env.NEXT_PUBLIC_API_URL;
+    if (envUrl) {
+        console.log('🔧 Using NEXT_PUBLIC_API_URL from env:', envUrl);
+        return envUrl;
     }
+
+    // Fallback to localhost for development
+    const fallbackUrl = 'http://localhost:8000';
+    console.log('🔧 Using hardcoded fallback URL:', fallbackUrl);
+    return fallbackUrl;
 };
 
 const API_BASE_URL = getApiBaseUrl();
 const API_VERSION = 'v1';
-const API_PREFIX = `/api/${API_VERSION}`;
+const API_PREFIX = `/api`; // Remove v1 prefix as backend doesn't use it
 
 // Debug environment variables with fallback check
 const debugEnvVars = {
@@ -116,8 +111,12 @@ export interface RegisterRequest {
 export interface CreateAssessmentRequest {
     title: string;
     description?: string;
+    business_goal?: string;
+    priority?: 'low' | 'medium' | 'high' | 'critical';
     business_requirements: BusinessRequirements;
     technical_requirements: TechnicalRequirements;
+    source?: string;
+    tags?: string[];
 }
 
 export interface Recommendation {
@@ -287,6 +286,12 @@ class ApiClient {
 
         const headers: Record<string, string> = {
             'Content-Type': 'application/json',
+            // Aggressive cache busting headers
+            'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+            'Pragma': 'no-cache',
+            'Expires': '0',
+            'If-None-Match': '*',
+            'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT',
             // Temporarily remove custom headers to debug CORS issues
             // 'X-Client-Version': '2.0.0',
             // 'X-Request-ID': this.generateRequestId(),
@@ -438,11 +443,24 @@ class ApiClient {
             'token validation failed',
             'invalid token signature',
             'invalid token issuer',
-            'invalid token audience'
+            'invalid token audience',
+            'unauthorized',
+            'could not validate credentials'
         ];
 
         const errorMessage = errorData.message?.toLowerCase() || errorData.error?.toLowerCase() || '';
         const shouldLogout = tokenErrors.some(err => errorMessage.includes(err));
+        
+        // More aggressive: if we get multiple 401s in a row, logout
+        // This prevents users from getting stuck with expired tokens
+        if (!shouldLogout && errorData.status_code === 401) {
+            // Check if we have a stored token - if yes and getting 401, likely expired
+            const hasToken = typeof window !== 'undefined' && localStorage.getItem('auth_token');
+            if (hasToken) {
+                console.log('🔒 401 error with stored token - likely expired, logging out');
+                return true;
+            }
+        }
         
         console.log('🔍 Checking 401 error:', {
             endpoint,
@@ -568,9 +586,17 @@ class ApiClient {
     }
 
     async getAssessments(): Promise<{ assessments: Assessment[], total: number, page: number, limit: number, pages: number }> {
-        // Temporarily disable cache buster to debug CORS issues
-        const url = '/assessments/';
-        const response = await this.request<{ assessments: Assessment[], total: number, page: number, limit: number, pages: number }>(url);
+        // Aggressive cache busting for assessments
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substr(2, 9);
+        const url = `/assessments/?_t=${timestamp}&_cb=${random}&_fresh=true`;
+        const response = await this.request<{ assessments: Assessment[], total: number, page: number, limit: number, pages: number }>(url, {
+            headers: {
+                'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0',
+                'Pragma': 'no-cache',
+                'Expires': '0'
+            }
+        });
         return response;
     }
 
@@ -594,6 +620,24 @@ class ApiClient {
     async deleteAssessment(id: string): Promise<void> {
         return this.request<void>(`/assessments/${id}`, {
             method: 'DELETE',
+        });
+    }
+
+    // Phase 2: Bulk Operations
+    async bulkDeleteAssessments(ids: string[]): Promise<void> {
+        return this.request<void>('/assessments/bulk/delete', {
+            method: 'POST',
+            body: JSON.stringify({ assessment_ids: ids }),
+        });
+    }
+
+    async bulkUpdateAssessments(ids: string[], updates: Partial<Assessment>): Promise<void> {
+        return this.request<void>('/assessments/bulk/update', {
+            method: 'POST',
+            body: JSON.stringify({ 
+                assessment_ids: ids,
+                updates 
+            }),
         });
     }
 
@@ -709,11 +753,18 @@ class ApiClient {
     }
 
     async getRecommendations(assessmentId: string): Promise<Recommendation[]> {
-        // Use cache buster to ensure fresh recommendations data
-        const url = cacheBuster.bustCache(`/recommendations/${assessmentId}`, `recommendations_${assessmentId}`);
+        // Super aggressive cache busting for recommendations
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substr(2, 9);
+        const microtime = performance.now();
+        const url = `/recommendations/${assessmentId}?_t=${timestamp}&_cb=${random}&_mt=${microtime}&_nocache=true&_fresh=true`;
         const response = await this.request<{ recommendations: Recommendation[], total: number, assessment_id: string, summary: any }>(url, {
             headers: {
-                ...getNoCacheHeaders()
+                'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0',
+                'Pragma': 'no-cache',
+                'Expires': '0',
+                'If-None-Match': '*',
+                'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT'
             }
         });
         return response.recommendations;
@@ -826,6 +877,21 @@ class ApiClient {
         return response.blob();
     }
 
+    async shareReport(reportId: string, shareOptions: {
+        isPublic?: boolean;
+        sharedWith?: string[];
+        expiresAt?: string;
+        requireAuth?: boolean;
+        allowDownload?: boolean;
+        allowComments?: boolean;
+        customMessage?: string;
+    }): Promise<{ shareUrl: string }> {
+        return this.request<{ shareUrl: string }>(`/reports/${reportId}/share`, {
+            method: 'POST',
+            body: JSON.stringify(shareOptions),
+        });
+    }
+
     // Monitoring methods
     async getWorkflowStatus(workflowId: string): Promise<{
         id: string;
@@ -853,7 +919,25 @@ class ApiClient {
         }>;
         timestamp: string;
     }> {
-        return this.request('/health/detailed');
+        const response = await this.request<{
+            success: boolean;
+            data: {
+                overall_status: 'healthy' | 'degraded' | 'unhealthy';
+                components: Record<string, {
+                    status: 'healthy' | 'degraded' | 'unhealthy';
+                    response_time_ms?: number;
+                    last_check?: string;
+                    error_message?: string;
+                }>;
+                timestamp: string;
+            };
+        }>('/monitoring/health');
+        
+        return {
+            status: response.data.overall_status,
+            components: response.data.components,
+            timestamp: response.data.timestamp
+        };
     }
 
     // User management methods
@@ -963,7 +1047,7 @@ class ApiClient {
                 category?: string;
                 search?: string;
             };
-        }>(`${API_BASE_URL}/api/cloud-services?${params.toString()}`, { ...options, useFullUrl: true });
+        }>(`${API_BASE_URL}/api/cloud-services?${params.toString()}`, { useFullUrl: true });
     }
 
     async getCloudServiceDetails(serviceId: string): Promise<CloudService> {
@@ -992,7 +1076,7 @@ class ApiClient {
         }>;
         total_providers: number;
     }> {
-        return this.request('/cloud-services/providers');
+        return this.request(`${API_BASE_URL}/api/cloud-services/providers`, { useFullUrl: true });
     }
 
     async getCloudServiceCategories(): Promise<{
@@ -1449,16 +1533,32 @@ class ApiClient {
             params.append('timeframe', timeframe);
         }
         
-        // Force cache busting for analytics data to ensure fresh data
-        params.append('t', Date.now().toString());
-        params.append('nocache', 'true');
+        // Ultra aggressive cache busting for analytics data
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).substr(2, 9);
+        const microtime = performance.now();
+        const sessionId = Math.random().toString(36).substr(2, 15);
         
-        // Use v2 API explicitly for advanced analytics with cache busting
+        params.append('_t', timestamp.toString());
+        params.append('_cb', random);
+        params.append('_mt', microtime.toString());
+        params.append('_sid', sessionId);
+        params.append('_nocache', 'true');
+        params.append('_fresh', 'true');
+        params.append('_bust', Date.now().toString());
+        
+        // Use v2 API explicitly for advanced analytics with ultra cache busting
         const url = `${getApiBaseUrl()}/api/v2/advanced-analytics/dashboard?${params.toString()}`;
         return this.request(url, { 
             useFullUrl: true,
             headers: {
-                ...getNoCacheHeaders(),
+                'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0',
+                'Pragma': 'no-cache',
+                'Expires': '0',
+                'If-None-Match': '*',
+                'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT',
+                'X-No-Cache': 'true',
+                'X-Fresh-Data': 'true'
             }
         });
     }

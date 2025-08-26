@@ -211,9 +211,37 @@ class BusinessRequirements(BaseSchema):
     form but provide rich data for AI analysis.
     """
     
-    # Company Information
+    # Company Information (Enhanced)
+    company_name: str = Field(description="Company name")
     company_size: CompanySize = Field(description="Size of the company")
     industry: Industry = Field(description="Primary industry")
+    industry_other: Optional[str] = Field(default=None, description="Custom industry if 'other' selected")
+    
+    # Geographic and Market Context
+    geographic_regions: List[str] = Field(
+        default_factory=list,
+        description="Geographic regions where company operates"
+    )
+    customer_base_size: Optional[str] = Field(
+        default=None,
+        description="Size of customer base (small, medium, large, enterprise)"
+    )
+    revenue_model: Optional[str] = Field(
+        default=None,
+        description="Primary revenue model (subscription, transaction, etc.)"
+    )
+    growth_stage: Optional[str] = Field(
+        default=None,
+        description="Company growth stage (pre-seed, seed, series-a, etc.)"
+    )
+    key_competitors: Optional[str] = Field(
+        default=None,
+        description="Key competitors in the market"
+    )
+    mission_critical_systems: List[str] = Field(
+        default_factory=list,
+        description="Systems that are mission-critical for business operations"
+    )
     
     # Business Context
     business_goals: List[BusinessGoal] = Field(

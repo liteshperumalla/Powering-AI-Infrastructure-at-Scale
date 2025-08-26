@@ -852,7 +852,7 @@ export default function ChatPage() {
                                     <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: 600 }}>
                                         {isAuthenticated 
                                             ? "I'm here to help you with infrastructure planning, assessments, reports, technical questions, and decision-making. Start a conversation to begin!"
-                                            : "Ask me anything about cloud infrastructure, DevOps, Kubernetes, AWS, Azure, GCP, and more! Type your question below to get started."
+                                            : "Ask me anything about cloud infrastructure, DevOps, Kubernetes, AWS, Azure, GCP, Alibaba Cloud, IBM Cloud, and more! Type your question below to get started."
                                         }
                                     </Typography>
                                     {isAuthenticated && (

@@ -525,6 +525,8 @@ class ReportGeneratorAgent(BaseAgent):
             'aws': 'AWS cloud services',
             'azure': 'Microsoft Azure services', 
             'gcp': 'Google Cloud Platform',
+            'alibaba': 'Alibaba Cloud services',
+            'ibm': 'IBM Cloud services',
             'kubernetes': 'Kubernetes orchestration',
             'docker': 'Docker containerization',
             'serverless': 'serverless computing',

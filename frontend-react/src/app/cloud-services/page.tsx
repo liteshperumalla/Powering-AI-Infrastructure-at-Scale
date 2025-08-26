@@ -40,7 +40,7 @@ export default function CloudServicesPage() {
     const [services, setServices] = useState<CloudService[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
-    const [selectedProvider, setSelectedProvider] = useState<string[]>([]);
+    const [selectedProvider, setSelectedProvider] = useState<string>('');
     const [selectedCategory, setSelectedCategory] = useState<string>('');
     const [availableCategories, setAvailableCategories] = useState<string[]>([]);
     const [selectedService, setSelectedService] = useState<CloudService | null>(null);
@@ -69,9 +69,8 @@ export default function CloudServicesPage() {
                 
                 // Build filters from current state
                 const filters: any = {};
-                if (selectedProvider.length > 0) {
-                    // For now, use the first selected provider since API doesn't support multiple
-                    filters.provider = selectedProvider[0];
+                if (selectedProvider) {
+                    filters.provider = selectedProvider;
                 }
                 if (selectedCategory) {
                     filters.category = selectedCategory;
@@ -80,9 +79,24 @@ export default function CloudServicesPage() {
                     filters.search = searchQuery;
                 }
                 
+                // Debug logging
+                console.log('🔍 Cloud Services Filter Debug:', {
+                    selectedProvider,
+                    selectedCategory,
+                    searchQuery,
+                    filters
+                });
+                
                 const response = await apiClient.getCloudServices({
                     ...filters,
                     limit: 50 // Get up to 50 services
+                });
+                
+                console.log('📡 API Response:', {
+                    servicesCount: response.services.length,
+                    firstService: response.services[0]?.name,
+                    firstProvider: response.services[0]?.provider,
+                    allProviders: [...new Set(response.services.map(s => s.provider))]
                 });
                 
                 setServices(response.services);
@@ -100,9 +114,9 @@ export default function CloudServicesPage() {
 
     const handleProviderChange = (
         event: React.MouseEvent<HTMLElement>,
-        newProviders: string[],
+        newProvider: string,
     ) => {
-        setSelectedProvider(newProviders);
+        setSelectedProvider(newProvider);
     };
 
     const handleServiceDetails = (service: CloudService) => {
@@ -120,6 +134,10 @@ export default function CloudServicesPage() {
             case 'AWS': return <CloudQueue />;
             case 'Azure': return <Computer />;
             case 'GCP': return <Storage />;
+            case 'Alibaba': 
+            case 'alibaba': return <Cloud />;
+            case 'IBM': 
+            case 'ibm': return <CloudQueue />;
             default: return <Cloud />;
         }
     };
@@ -129,6 +147,10 @@ export default function CloudServicesPage() {
             case 'AWS': return '#FF9900';
             case 'Azure': return '#0078D4';
             case 'GCP': return '#4285F4';
+            case 'Alibaba':
+            case 'alibaba': return '#FF6A00';
+            case 'IBM':
+            case 'ibm': return '#006699';
             default: return '#666';
         }
     };
@@ -171,31 +193,42 @@ export default function CloudServicesPage() {
                                     />
                                 </Grid>
 
-                                <Grid item xs={12} md={4}>
+                                <Grid item xs={12} md={8}>
                                     <Typography variant="body2" gutterBottom>
                                         Cloud Providers
                                     </Typography>
-                                    <ToggleButtonGroup 
-                                        value={selectedProvider} 
-                                        onChange={handleProviderChange}
-                                        size="small"
-                                    >
-                                        <ToggleButton value="AWS">
-                                            <CloudQueue sx={{ mr: 1 }} />
-                                            AWS
-                                        </ToggleButton>
-                                        <ToggleButton value="Azure">
-                                            <Computer sx={{ mr: 1 }} />
-                                            Azure
-                                        </ToggleButton>
-                                        <ToggleButton value="GCP">
-                                            <Storage sx={{ mr: 1 }} />
-                                            GCP
-                                        </ToggleButton>
-                                    </ToggleButtonGroup>
+                                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                        <ToggleButtonGroup 
+                                            value={selectedProvider} 
+                                            onChange={handleProviderChange}
+                                            exclusive
+                                            size="small"
+                                        >
+                                            <ToggleButton value="AWS">
+                                                <CloudQueue sx={{ mr: 1 }} />
+                                                AWS
+                                            </ToggleButton>
+                                            <ToggleButton value="Azure">
+                                                <Computer sx={{ mr: 1 }} />
+                                                Azure
+                                            </ToggleButton>
+                                            <ToggleButton value="GCP">
+                                                <Storage sx={{ mr: 1 }} />
+                                                GCP
+                                            </ToggleButton>
+                                            <ToggleButton value="Alibaba">
+                                                <Cloud sx={{ mr: 1, color: '#FF6A00' }} />
+                                                Alibaba
+                                            </ToggleButton>
+                                            <ToggleButton value="IBM">
+                                                <CloudQueue sx={{ mr: 1, color: '#006699' }} />
+                                                IBM
+                                            </ToggleButton>
+                                        </ToggleButtonGroup>
+                                    </Box>
                                 </Grid>
 
-                                <Grid item xs={12} md={4}>
+                                <Grid item xs={12}>
                                     <Typography variant="body2" gutterBottom>
                                         Category
                                     </Typography>

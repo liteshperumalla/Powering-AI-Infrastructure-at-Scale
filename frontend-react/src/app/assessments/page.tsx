@@ -21,7 +21,8 @@ import {
     TableRow,
     Paper,
     IconButton,
-    Tooltip
+    Tooltip,
+    Checkbox
 } from '@mui/material';
 import {
     Add as AddIcon,
@@ -29,7 +30,12 @@ import {
     Edit as EditIcon,
     Delete as DeleteIcon,
     PlayArrow as StartIcon,
-    Assessment as AssessmentIcon
+    Assessment as AssessmentIcon,
+    SelectAll as SelectAllIcon,
+    GetApp as ExportIcon,
+    DeleteSweep as BulkDeleteIcon,
+    CheckBox,
+    CheckBoxOutlineBlank
 } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '../../services/api';
@@ -39,6 +45,8 @@ interface AssessmentsPageState {
     assessments: Assessment[];
     loading: boolean;
     error: string | null;
+    selectedAssessments: string[];
+    bulkOperationLoading: boolean;
 }
 
 const AssessmentsPage: React.FC = () => {
@@ -46,7 +54,9 @@ const AssessmentsPage: React.FC = () => {
     const [state, setState] = useState<AssessmentsPageState>({
         assessments: [],
         loading: true,
-        error: null
+        error: null,
+        selectedAssessments: [],
+        bulkOperationLoading: false
     });
 
     useEffect(() => {
@@ -95,6 +105,96 @@ const AssessmentsPage: React.FC = () => {
         } catch (error) {
             console.error('Failed to delete assessment:', error);
             alert('Failed to delete assessment. Please try again.');
+        }
+    };
+
+    // Phase 2: Multi-selection and bulk operations
+    const handleSelectAssessment = (assessmentId: string, checked: boolean) => {
+        setState(prev => ({
+            ...prev,
+            selectedAssessments: checked 
+                ? [...prev.selectedAssessments, assessmentId]
+                : prev.selectedAssessments.filter(id => id !== assessmentId)
+        }));
+    };
+
+    const handleSelectAll = (checked: boolean) => {
+        setState(prev => ({
+            ...prev,
+            selectedAssessments: checked ? state.assessments.map(a => a.id) : []
+        }));
+    };
+
+    const handleBulkDelete = async () => {
+        if (state.selectedAssessments.length === 0) return;
+        
+        if (!confirm(`Are you sure you want to delete ${state.selectedAssessments.length} assessment(s)?`)) {
+            return;
+        }
+
+        setState(prev => ({ ...prev, bulkOperationLoading: true }));
+        
+        try {
+            // Try bulk delete API first, fallback to sequential delete
+            try {
+                await apiClient.bulkDeleteAssessments(state.selectedAssessments);
+            } catch (bulkError) {
+                console.log('Bulk delete not available, using sequential delete');
+                // Delete assessments sequentially to avoid overwhelming the API
+                for (const assessmentId of state.selectedAssessments) {
+                    await apiClient.deleteAssessment(assessmentId);
+                }
+            }
+            await loadAssessments();
+            setState(prev => ({ ...prev, selectedAssessments: [], bulkOperationLoading: false }));
+        } catch (error) {
+            console.error('Failed to bulk delete assessments:', error);
+            alert('Failed to delete some assessments. Please try again.');
+            setState(prev => ({ ...prev, bulkOperationLoading: false }));
+        }
+    };
+
+    const handleBulkExport = async () => {
+        if (state.selectedAssessments.length === 0) return;
+        
+        setState(prev => ({ ...prev, bulkOperationLoading: true }));
+        
+        try {
+            // Create CSV data for selected assessments
+            const selectedData = state.assessments.filter(a => 
+                state.selectedAssessments.includes(a.id)
+            );
+            
+            const csvHeaders = ['Title', 'Status', 'Progress', 'Created', 'Updated'];
+            const csvData = selectedData.map(assessment => [
+                assessment.title,
+                assessment.status || 'Unknown',
+                `${assessment.completion_percentage || 0}%`,
+                formatDate(assessment.created_at),
+                formatDate(assessment.updated_at)
+            ]);
+            
+            const csvContent = [
+                csvHeaders.join(','),
+                ...csvData.map(row => row.map(cell => `"${cell}"`).join(','))
+            ].join('\n');
+            
+            // Download CSV
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `assessments_export_${new Date().toISOString().split('T')[0]}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            
+            setState(prev => ({ ...prev, bulkOperationLoading: false }));
+        } catch (error) {
+            console.error('Failed to export assessments:', error);
+            alert('Failed to export assessments. Please try again.');
+            setState(prev => ({ ...prev, bulkOperationLoading: false }));
         }
     };
 
@@ -153,6 +253,51 @@ const AssessmentsPage: React.FC = () => {
                 <Alert severity="error" sx={{ mb: 3 }} onClose={() => setState(prev => ({ ...prev, error: null }))}>
                     {state.error}
                 </Alert>
+            )}
+
+            {/* Phase 2: Bulk Actions Toolbar */}
+            {state.selectedAssessments.length > 0 && (
+                <Card sx={{ mb: 3, bgcolor: 'action.selected' }}>
+                    <CardContent sx={{ py: 2 }}>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <Typography variant="subtitle1" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <SelectAllIcon color="primary" />
+                                {state.selectedAssessments.length} assessment(s) selected
+                            </Typography>
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                                <Button
+                                    variant="outlined"
+                                    startIcon={<ExportIcon />}
+                                    onClick={handleBulkExport}
+                                    disabled={state.bulkOperationLoading}
+                                    size="small"
+                                >
+                                    Export CSV
+                                </Button>
+                                <Button
+                                    variant="outlined"
+                                    color="error"
+                                    startIcon={<BulkDeleteIcon />}
+                                    onClick={handleBulkDelete}
+                                    disabled={state.bulkOperationLoading}
+                                    size="small"
+                                >
+                                    Delete Selected
+                                </Button>
+                                <Button
+                                    variant="text"
+                                    onClick={() => setState(prev => ({ ...prev, selectedAssessments: [] }))}
+                                    size="small"
+                                >
+                                    Clear Selection
+                                </Button>
+                            </Box>
+                        </Box>
+                        {state.bulkOperationLoading && (
+                            <LinearProgress sx={{ mt: 1 }} />
+                        )}
+                    </CardContent>
+                </Card>
             )}
 
             {/* Summary Cards */}
@@ -246,6 +391,20 @@ const AssessmentsPage: React.FC = () => {
                             <Table>
                                 <TableHead>
                                     <TableRow>
+                                        <TableCell padding="checkbox">
+                                            <Checkbox
+                                                indeterminate={
+                                                    state.selectedAssessments.length > 0 && 
+                                                    state.selectedAssessments.length < state.assessments.length
+                                                }
+                                                checked={
+                                                    state.assessments.length > 0 && 
+                                                    state.selectedAssessments.length === state.assessments.length
+                                                }
+                                                onChange={(event) => handleSelectAll(event.target.checked)}
+                                                inputProps={{ 'aria-label': 'select all assessments' }}
+                                            />
+                                        </TableCell>
                                         <TableCell>Title</TableCell>
                                         <TableCell>Status</TableCell>
                                         <TableCell>Progress</TableCell>
@@ -257,6 +416,13 @@ const AssessmentsPage: React.FC = () => {
                                 <TableBody>
                                     {state.assessments.map((assessment) => (
                                         <TableRow key={assessment.id} hover>
+                                            <TableCell padding="checkbox">
+                                                <Checkbox
+                                                    checked={state.selectedAssessments.includes(assessment.id)}
+                                                    onChange={(event) => handleSelectAssessment(assessment.id, event.target.checked)}
+                                                    inputProps={{ 'aria-label': `select assessment ${assessment.title}` }}
+                                                />
+                                            </TableCell>
                                             <TableCell>
                                                 <Box>
                                                     <Typography variant="body1" fontWeight="medium">

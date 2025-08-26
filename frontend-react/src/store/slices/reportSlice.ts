@@ -97,35 +97,85 @@ export const generateReport = createAsyncThunk(
 
 export const exportReport = createAsyncThunk(
     'report/export',
-    async ({ reportId, format }: { reportId: string; format: string }) => {
-        // Simulate export process with progress
-        return new Promise<{ url: string; format: string }>((resolve) => {
-            let progress = 0;
-            const interval = setInterval(() => {
-                progress += 20;
-                if (progress >= 100) {
-                    clearInterval(interval);
-                    resolve({
-                        url: `https://example.com/reports/${reportId}.${format}`,
-                        format,
-                    });
+    async ({ reportId, format }: { reportId: string; format: string }, { dispatch }) => {
+        try {
+            // First get the report to find the assessment ID
+            const report = await apiClient.getReportById(reportId);
+            
+            // Update progress
+            dispatch(setExportProgress(20));
+            
+            // Download the report file
+            const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+            const token = localStorage.getItem('auth_token');
+            
+            dispatch(setExportProgress(50));
+            
+            const response = await fetch(
+                `${API_BASE_URL}/api/v1/assessments/${report.assessment_id}/reports/${reportId}/download?format=${format}`,
+                {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                    },
                 }
-            }, 200);
-        });
+            );
+            
+            dispatch(setExportProgress(80));
+            
+            if (!response.ok) {
+                throw new Error('Failed to download report');
+            }
+            
+            // Create blob and download
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            
+            // Get filename from Content-Disposition header or use default
+            const contentDisposition = response.headers.get('Content-Disposition');
+            let filename = `report_${reportId}.${format}`;
+            if (contentDisposition) {
+                const filenameMatch = contentDisposition.match(/filename="?([^"]+)"?/);
+                if (filenameMatch) {
+                    filename = filenameMatch[1];
+                }
+            }
+            
+            // Trigger download
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Clean up
+            window.URL.revokeObjectURL(url);
+            
+            dispatch(setExportProgress(100));
+            
+            return { url, format };
+        } catch (error) {
+            dispatch(setExportProgress(0));
+            throw error;
+        }
     }
 );
 
 export const shareReport = createAsyncThunk(
     'report/share',
-    async ({ reportId }: { reportId: string }) => {
-        // Simulate API call
-        const response = await new Promise<{ shareUrl: string }>((resolve) => {
-            setTimeout(() => {
-                resolve({
-                    shareUrl: `https://example.com/shared/reports/${reportId}`,
-                });
-            }, 1000);
-        });
+    async ({ reportId, settings }: { 
+        reportId: string; 
+        settings?: {
+            isPublic?: boolean;
+            sharedWith?: string[];
+            expiresAt?: string;
+            requireAuth?: boolean;
+            allowDownload?: boolean;
+            allowComments?: boolean;
+            customMessage?: string;
+        };
+    }) => {
+        const response = await apiClient.shareReport(reportId, settings || {});
         return response;
     }
 );

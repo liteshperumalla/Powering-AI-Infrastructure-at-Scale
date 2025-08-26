@@ -61,7 +61,7 @@ class TerraformGenerator:
     """
     Generates Terraform Infrastructure as Code from assessment data.
     
-    Supports multi-cloud deployments with AWS, Azure, and GCP providers.
+    Supports multi-cloud deployments with AWS, Azure, GCP, IBM, and Alibaba Cloud providers.
     """
     
     def __init__(self):
@@ -87,6 +87,22 @@ class TerraformGenerator:
                     "google": {
                         "source": "hashicorp/google",
                         "version": "~> 4.0"
+                    }
+                }
+            },
+            CloudProvider.IBM: {
+                "required_providers": {
+                    "ibm": {
+                        "source": "IBM-Cloud/ibm",
+                        "version": "~> 1.0"
+                    }
+                }
+            },
+            CloudProvider.ALIBABA: {
+                "required_providers": {
+                    "alicloud": {
+                        "source": "aliyun/alicloud",
+                        "version": "~> 1.0"
                     }
                 }
             }

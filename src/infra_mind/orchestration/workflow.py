@@ -286,7 +286,7 @@ class WorkflowEngine:
     
     async def _execute_workflow_steps(self, workflow: WorkflowState) -> None:
         """Execute workflow steps with dependency management."""
-        max_parallel = 3  # Maximum parallel agent executions
+        max_parallel = 10  # Maximum parallel agent executions - increased for comprehensive multi-agent analysis
         
         while workflow.pending_steps and workflow.status == WorkflowStatus.RUNNING:
             # Get steps ready to execute

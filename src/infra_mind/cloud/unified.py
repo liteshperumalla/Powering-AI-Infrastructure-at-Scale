@@ -12,6 +12,8 @@ from datetime import datetime, timezone
 from .aws import AWSClient
 from .azure import AzureClient
 from .gcp import GCPClient
+from .alibaba import AlibabaCloudClient
+from .ibm import IBMCloudClient
 from .terraform import TerraformClient
 from .base import (
     BaseCloudClient, CloudProvider, CloudService, CloudServiceResponse,
@@ -33,10 +35,13 @@ class UnifiedCloudClient:
     """
     
     def __init__(self, aws_region: str = "us-east-1", azure_region: str = "eastus", gcp_region: str = "us-central1",
+                 alibaba_region: str = "cn-beijing", ibm_region: str = "us-south",
                  aws_access_key_id: Optional[str] = None, aws_secret_access_key: Optional[str] = None,
                  azure_subscription_id: Optional[str] = None, azure_client_id: Optional[str] = None,
                  azure_client_secret: Optional[str] = None,
                  gcp_project_id: Optional[str] = None, gcp_service_account_path: Optional[str] = None,
+                 alibaba_access_key_id: Optional[str] = None, alibaba_access_key_secret: Optional[str] = None,
+                 ibm_api_key: Optional[str] = None, ibm_account_id: Optional[str] = None,
                  terraform_token: Optional[str] = None, terraform_organization: Optional[str] = None):
         """
         Initialize the unified cloud client.
@@ -59,7 +64,9 @@ class UnifiedCloudClient:
         self.provider_regions = {
             CloudProvider.AWS: aws_region,
             CloudProvider.AZURE: azure_region,
-            CloudProvider.GCP: gcp_region
+            CloudProvider.GCP: gcp_region,
+            CloudProvider.ALIBABA: alibaba_region,
+            CloudProvider.IBM: ibm_region
         }
         
         # Initialize cloud clients
@@ -98,6 +105,24 @@ class UnifiedCloudClient:
                 logger.info("GCP project ID not provided, skipping GCP client initialization")
         except Exception as e:
             logger.error(f"Unexpected error initializing GCP client: {e}")
+        
+        try:
+            if alibaba_access_key_id and alibaba_access_key_secret:
+                self.clients[CloudProvider.ALIBABA] = AlibabaCloudClient()
+                logger.info("Alibaba Cloud client initialized successfully")
+            else:
+                logger.info("Alibaba Cloud credentials not provided, skipping initialization")
+        except Exception as e:
+            logger.error(f"Unexpected error initializing Alibaba Cloud client: {e}")
+        
+        try:
+            if ibm_api_key and ibm_account_id:
+                self.clients[CloudProvider.IBM] = IBMCloudClient()
+                logger.info("IBM Cloud client initialized successfully")
+            else:
+                logger.info("IBM Cloud credentials not provided, skipping initialization")
+        except Exception as e:
+            logger.error(f"Unexpected error initializing IBM Cloud client: {e}")
         
         # Initialize Terraform client (always available for registry access)
         try:

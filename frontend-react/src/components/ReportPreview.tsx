@@ -120,6 +120,8 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
     onCreateTemplate,
     onEdit
 }) => {
+    // Component initialization - removed excessive debug logging
+    
     const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
     const [shareDialogOpen, setShareDialogOpen] = useState(false);
     const [versionDialogOpen, setVersionDialogOpen] = useState(false);
@@ -128,6 +130,49 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
     const [newVersionName, setNewVersionName] = useState('');
     const [shareEmail, setShareEmail] = useState('');
     const [sharePermission, setSharePermission] = useState('view');
+    
+    // Debug logging
+    // Report validation - removed excessive debug logging
+    
+    // Guard clause to handle undefined report
+    if (!report) {
+        console.log('❌ Report is null/undefined, showing fallback');
+        return (
+            <Card>
+                <CardContent>
+                    <Typography variant="h6" color="text.secondary">
+                        No report data available
+                    </Typography>
+                </CardContent>
+            </Card>
+        );
+    }
+
+    // Ensure all required properties exist with defaults
+    const safeReport = {
+        // First spread the report to get all properties
+        ...report,
+        // Then override with safe defaults to ensure arrays are always defined
+        id: report.id || '',
+        title: report.title || 'Unknown Report',
+        status: report.status || 'draft',
+        generatedDate: report.generatedDate || new Date().toISOString(),
+        sections: Array.isArray(report.sections) ? report.sections : [],
+        keyFindings: Array.isArray(report.keyFindings) ? report.keyFindings : [],
+        recommendations: Array.isArray(report.recommendations) ? report.recommendations : [],
+        estimatedSavings: report.estimatedSavings || 0,
+        complianceScore: report.complianceScore || 0,
+        versions: Array.isArray(report.versions) ? report.versions : [],
+        sharedWith: Array.isArray(report.sharedWith) ? report.sharedWith : [],
+        isPublic: report.isPublic || false,
+        canEdit: report.canEdit !== false,
+        canShare: report.canShare !== false,
+        hasInteractiveContent: report.hasInteractiveContent || false
+    };
+    
+    // Debug the safe report
+    // SafeReport created - removed excessive debug logging
+    
     return (
         <Card>
             <CardContent>
@@ -135,15 +180,15 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                     <Box>
                         <Typography variant="h6" gutterBottom>
-                            {report.title}
+                            {safeReport.title}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                            Generated: {new Date(report.generatedDate).toLocaleDateString()}
+                            Generated: {safeReport.generatedDate ? new Date(safeReport.generatedDate).toLocaleDateString() : 'Unknown'}
                         </Typography>
                     </Box>
                     <Chip
-                        label={report.status.toUpperCase()}
-                        color={getStatusColor(report.status) as 'success' | 'warning' | 'info' | 'default'}
+                        label={safeReport.status.toUpperCase()}
+                        color={getStatusColor(safeReport.status) as 'success' | 'warning' | 'info' | 'default'}
                         size="small"
                     />
                 </Box>
@@ -151,28 +196,28 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                 <Divider sx={{ my: 2 }} />
 
                 {/* Key Metrics */}
-                {(report.estimatedSavings || report.complianceScore) && (
+                {(safeReport.estimatedSavings || safeReport.complianceScore) && (
                     <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                        {report.estimatedSavings && (
+                        {safeReport.estimatedSavings && (
                             <Card variant="outlined" sx={{ flex: 1 }}>
                                 <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
                                     <Typography variant="body2" color="text.secondary">
                                         Estimated Savings
                                     </Typography>
                                     <Typography variant="h6" color="success.main">
-                                        ${report.estimatedSavings.toLocaleString()}
+                                        ${safeReport.estimatedSavings.toLocaleString()}
                                     </Typography>
                                 </CardContent>
                             </Card>
                         )}
-                        {report.complianceScore && (
+                        {safeReport.complianceScore && (
                             <Card variant="outlined" sx={{ flex: 1 }}>
                                 <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
                                     <Typography variant="body2" color="text.secondary">
                                         Compliance Score
                                     </Typography>
                                     <Typography variant="h6" color="primary.main">
-                                        {report.complianceScore}%
+                                        {safeReport.complianceScore}%
                                     </Typography>
                                 </CardContent>
                             </Card>
@@ -186,7 +231,7 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                         Report Sections
                     </Typography>
                     <List dense>
-                        {report.sections.map((section, index) => {
+                        {(safeReport.sections || []).map((section, index) => {
                             // Handle both string arrays and section objects
                             const sectionData = typeof section === 'string' 
                                 ? { title: section.replace('_', ' ').toUpperCase(), content: '', type: section }
@@ -208,13 +253,13 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                 </Box>
 
                 {/* Key Findings */}
-                {report.keyFindings && report.keyFindings.length > 0 && (
+                {safeReport.keyFindings && Array.isArray(safeReport.keyFindings) && safeReport.keyFindings.length > 0 && (
                     <Box sx={{ mb: 2 }}>
                         <Typography variant="subtitle2" gutterBottom>
                             Key Findings
                         </Typography>
                         <List dense>
-                            {(report.keyFindings || []).slice(0, 3).map((finding, index) => (
+                            {(safeReport.keyFindings || []).slice(0, 3).map((finding, index) => (
                                 <ListItem key={index} sx={{ pl: 0 }}>
                                     <ListItemText
                                         primary={
@@ -230,13 +275,13 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                 )}
 
                 {/* Top Recommendations */}
-                {report.recommendations && report.recommendations.length > 0 && (
+                {safeReport.recommendations && Array.isArray(safeReport.recommendations) && safeReport.recommendations.length > 0 && (
                     <Box sx={{ mb: 2 }}>
                         <Typography variant="subtitle2" gutterBottom>
                             Top Recommendations
                         </Typography>
                         <List dense>
-                            {(report.recommendations || []).slice(0, 3).map((rec, index) => (
+                            {(safeReport.recommendations || []).slice(0, 3).map((rec, index) => (
                                 <ListItem key={index} sx={{ pl: 0 }}>
                                     <ListItemText
                                         primary={
@@ -254,17 +299,17 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                 <Divider sx={{ my: 2 }} />
 
                 {/* Version History */}
-                {report.versions && report.versions.length > 1 && (
+                {safeReport.versions && Array.isArray(safeReport.versions) && safeReport.versions.length > 1 && (
                     <Box sx={{ mb: 2 }}>
                         <Accordion>
                             <AccordionSummary expandIcon={<ExpandMore />}>
                                 <Typography variant="subtitle2">
-                                    Version History ({report.versions.length} versions)
+                                    Version History ({(safeReport.versions || []).length} versions)
                                 </Typography>
                             </AccordionSummary>
                             <AccordionDetails>
                                 <List dense>
-                                    {report.versions.map((version) => (
+                                    {(safeReport.versions || []).map((version) => (
                                         <ListItem key={version.id} sx={{ pl: 0 }}>
                                             <ListItemText
                                                 primary={
@@ -297,13 +342,13 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                 )}
 
                 {/* Sharing Info */}
-                {(report.sharedWith && report.sharedWith.length > 0) || report.isPublic && (
+                {(safeReport.sharedWith && Array.isArray(safeReport.sharedWith) && safeReport.sharedWith.length > 0) || safeReport.isPublic && (
                     <Box sx={{ mb: 2 }}>
                         <Typography variant="subtitle2" gutterBottom>
                             Sharing
                         </Typography>
                         <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                            {report.isPublic && (
+                            {safeReport.isPublic && (
                                 <Chip
                                     icon={<Public />}
                                     label="Public"
@@ -311,10 +356,10 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                                     color="info"
                                 />
                             )}
-                            {report.sharedWith && report.sharedWith.length > 0 && (
+                            {safeReport.sharedWith && Array.isArray(safeReport.sharedWith) && safeReport.sharedWith.length > 0 && (
                                 <Chip
                                     icon={<People />}
-                                    label={`Shared with ${report.sharedWith.length} users`}
+                                    label={`Shared with ${safeReport.sharedWith.length} users`}
                                     size="small"
                                     color="secondary"
                                 />
@@ -324,7 +369,7 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                 )}
 
                 {/* Interactive Content Indicator */}
-                {report.hasInteractiveContent && (
+                {safeReport.hasInteractiveContent && (
                     <Box sx={{ mb: 2 }}>
                         <Chip
                             label="Interactive Content Available"
@@ -343,21 +388,21 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                         <Button
                             variant="outlined"
                             startIcon={<Visibility />}
-                            onClick={() => onView?.(report.id)}
+                            onClick={() => onView?.(safeReport.id)}
                         >
-                            {report.hasInteractiveContent ? 'Interactive View' : 'View Report'}
+                            {safeReport.hasInteractiveContent ? 'Interactive View' : 'View Report'}
                         </Button>
                         <Button
                             variant="contained"
                             startIcon={<GetApp />}
-                            onClick={() => onDownload?.(report.id)}
+                            onClick={() => onDownload?.(safeReport.id)}
                         >
                             Download
                         </Button>
                     </Box>
 
                     <Box>
-                        {report.canShare && (
+                        {safeReport.canShare && (
                             <Tooltip title="Share Report">
                                 <IconButton
                                     onClick={() => setShareDialogOpen(true)}
@@ -381,10 +426,10 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                             open={Boolean(menuAnchor)}
                             onClose={() => setMenuAnchor(null)}
                         >
-                            {report.canEdit && (
+                            {safeReport.canEdit && (
                                 <MenuItem onClick={() => {
                                     setMenuAnchor(null);
-                                    onEdit?.(report.id);
+                                    onEdit?.(safeReport.id);
                                 }}>
                                     <Edit sx={{ mr: 1 }} />
                                     Edit Report
@@ -399,7 +444,7 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                                 Create Version
                             </MenuItem>
 
-                            {report.versions && report.versions.length > 1 && (
+                            {safeReport.versions && Array.isArray(safeReport.versions) && safeReport.versions.length > 1 && (
                                 <MenuItem onClick={() => {
                                     setMenuAnchor(null);
                                     setCompareDialogOpen(true);
@@ -411,7 +456,7 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
 
                             <MenuItem onClick={() => {
                                 setMenuAnchor(null);
-                                onCreateTemplate?.(report.id);
+                                onCreateTemplate?.(safeReport.id);
                             }}>
                                 <FileCopy sx={{ mr: 1 }} />
                                 Create Template
@@ -447,7 +492,7 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                         <Button onClick={() => setShareDialogOpen(false)}>Cancel</Button>
                         <Button
                             onClick={() => {
-                                onShare?.(report.id);
+                                onShare?.(safeReport.id);
                                 setShareDialogOpen(false);
                                 setShareEmail('');
                             }}
@@ -475,7 +520,7 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                         <Button onClick={() => setVersionDialogOpen(false)}>Cancel</Button>
                         <Button
                             onClick={() => {
-                                onCreateVersion?.(report.id);
+                                onCreateVersion?.(safeReport.id);
                                 setVersionDialogOpen(false);
                                 setNewVersionName('');
                             }}
@@ -496,7 +541,7 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                                 value={selectedVersionForCompare}
                                 onChange={(e) => setSelectedVersionForCompare(e.target.value)}
                             >
-                                {report.versions?.map((version) => (
+                                {(safeReport.versions || []).map((version) => (
                                     <MenuItem key={version.id} value={version.id}>
                                         Version {version.version} ({new Date(version.createdDate).toLocaleDateString()})
                                     </MenuItem>
@@ -508,7 +553,7 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                         <Button onClick={() => setCompareDialogOpen(false)}>Cancel</Button>
                         <Button
                             onClick={() => {
-                                onCompareVersions?.(report.id, selectedVersionForCompare);
+                                onCompareVersions?.(safeReport.id, selectedVersionForCompare);
                                 setCompareDialogOpen(false);
                             }}
                             variant="contained"

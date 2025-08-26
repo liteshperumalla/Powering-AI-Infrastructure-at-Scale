@@ -145,6 +145,10 @@ export default function AdvancedReportExport({ open, onClose, reportId }: Advanc
                 expiresAt: shareOptions.expiresIn !== 'never'
                     ? new Date(Date.now() + parseInt(shareOptions.expiresIn) * 24 * 60 * 60 * 1000).toISOString()
                     : undefined,
+                requireAuth: shareOptions.requireAuth,
+                allowDownload: shareOptions.allowDownload,
+                allowComments: shareOptions.allowComments,
+                customMessage: shareOptions.customMessage,
             };
 
             await dispatch(shareReport({ reportId, settings })).unwrap();

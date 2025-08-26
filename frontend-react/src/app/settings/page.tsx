@@ -29,15 +29,21 @@ import {
     Palette,
     Save,
     Edit,
+    Storage,
+    Delete,
+    Analytics,
 } from '@mui/icons-material';
 import Navigation from '@/components/Navigation';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { updateProfile } from '@/store/slices/authSlice';
+import { updatePreferences } from '@/store/slices/uiSlice';
+import { addNotification } from '@/store/slices/uiSlice';
 
 export default function SettingsPage() {
     const dispatch = useAppDispatch();
     const { user, loading } = useAppSelector(state => state.auth);
+    const { preferences: uiPreferences } = useAppSelector(state => state.ui);
     
     const [profileData, setProfileData] = useState({
         fullName: user?.full_name || '',
@@ -54,6 +60,10 @@ export default function SettingsPage() {
         pushNotifications: true,
         weeklyReports: true,
         securityAlerts: true,
+        chartType: uiPreferences.chartType,
+        dataRefreshInterval: uiPreferences.dataRefreshInterval / 1000, // Convert to seconds for UI
+        autoSave: uiPreferences.autoSave,
+        compactView: uiPreferences.compactView,
     });
     
     const [securitySettings, setSecuritySettings] = useState({
@@ -99,14 +109,51 @@ export default function SettingsPage() {
     const handleSaveProfile = async () => {
         try {
             setSaveStatus('saving');
+            
+            // Update UI preferences in Redux
+            dispatch(updatePreferences({
+                chartType: preferences.chartType,
+                dataRefreshInterval: preferences.dataRefreshInterval * 1000, // Convert back to ms
+                autoSave: preferences.autoSave,
+                compactView: preferences.compactView,
+            }));
+            
+            // Update user profile and preferences
             await dispatch(updateProfile({
                 full_name: profileData.fullName,
                 company: profileData.company,
-                preferences: preferences
+                preferences: {
+                    theme: preferences.theme,
+                    language: preferences.language,
+                    timezone: preferences.timezone,
+                    emailNotifications: preferences.emailNotifications,
+                    pushNotifications: preferences.pushNotifications,
+                    weeklyReports: preferences.weeklyReports,
+                    securityAlerts: preferences.securityAlerts,
+                }
             })).unwrap();
+            
+            // Send success notification to the notification bell
+            dispatch(addNotification({
+                type: 'success',
+                title: 'Settings Updated',
+                message: 'Your settings have been saved successfully!',
+                duration: 5000,
+                persistent: false
+            }));
+            
             setSaveStatus('success');
             setTimeout(() => setSaveStatus('idle'), 3000);
         } catch (error) {
+            // Send error notification to the notification bell
+            dispatch(addNotification({
+                type: 'error',
+                title: 'Settings Save Failed',
+                message: 'Failed to save settings. Please try again.',
+                duration: 8000,
+                persistent: false
+            }));
+            
             setSaveStatus('error');
             setTimeout(() => setSaveStatus('idle'), 3000);
         }
@@ -139,7 +186,7 @@ export default function SettingsPage() {
                             Settings
                         </Typography>
                         <Typography variant="body1" color="text.secondary">
-                            Manage your account preferences and security settings.
+                            Comprehensive configuration hub for your profile, preferences, notifications, and security settings.
                         </Typography>
                     </Box>
 
@@ -339,6 +386,72 @@ export default function SettingsPage() {
                             </Card>
                         </Grid>
 
+                        {/* Dashboard Preferences */}
+                        <Grid item xs={12} md={6}>
+                            <Card>
+                                <CardContent>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                                        <Analytics color="primary" />
+                                        <Typography variant="h6">Dashboard Preferences</Typography>
+                                    </Box>
+
+                                    <Grid container spacing={2}>
+                                        <Grid item xs={12}>
+                                            <FormControl fullWidth size="small">
+                                                <InputLabel>Default Chart Type</InputLabel>
+                                                <Select
+                                                    value={preferences.chartType}
+                                                    onChange={(e) => handlePreferenceChange('chartType', e.target.value)}
+                                                    label="Default Chart Type"
+                                                >
+                                                    <MenuItem value="bar">Bar Chart</MenuItem>
+                                                    <MenuItem value="line">Line Chart</MenuItem>
+                                                    <MenuItem value="area">Area Chart</MenuItem>
+                                                </Select>
+                                            </FormControl>
+                                        </Grid>
+                                        <Grid item xs={12}>
+                                            <FormControl fullWidth size="small">
+                                                <InputLabel>Data Refresh Interval</InputLabel>
+                                                <Select
+                                                    value={preferences.dataRefreshInterval}
+                                                    onChange={(e) => handlePreferenceChange('dataRefreshInterval', e.target.value)}
+                                                    label="Data Refresh Interval"
+                                                >
+                                                    <MenuItem value={15}>15 seconds</MenuItem>
+                                                    <MenuItem value={30}>30 seconds</MenuItem>
+                                                    <MenuItem value={60}>1 minute</MenuItem>
+                                                    <MenuItem value={300}>5 minutes</MenuItem>
+                                                </Select>
+                                            </FormControl>
+                                        </Grid>
+                                        <Grid item xs={12}>
+                                            <FormControlLabel
+                                                control={
+                                                    <Switch 
+                                                        checked={preferences.autoSave}
+                                                        onChange={(e) => handlePreferenceChange('autoSave', e.target.checked)}
+                                                    />
+                                                }
+                                                label="Auto-save Changes"
+                                            />
+                                        </Grid>
+                                        <Grid item xs={12}>
+                                            <FormControlLabel
+                                                control={
+                                                    <Switch 
+                                                        checked={preferences.compactView}
+                                                        onChange={(e) => handlePreferenceChange('compactView', e.target.checked)}
+                                                    />
+                                                }
+                                                label="Compact View Mode"
+                                            />
+                                        </Grid>
+                                    </Grid>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+
                         {/* Security */}
                         <Grid item xs={12} md={6}>
                             <Card>
@@ -381,6 +494,73 @@ export default function SettingsPage() {
                                             </Select>
                                         </FormControl>
                                     </Box>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+
+                        {/* Data & Privacy */}
+                        <Grid item xs={12}>
+                            <Card>
+                                <CardContent>
+                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                                        <Storage color="primary" />
+                                        <Typography variant="h6">Data & Privacy</Typography>
+                                    </Box>
+
+                                    <Grid container spacing={3}>
+                                        <Grid item xs={12} md={6}>
+                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                                <Typography variant="subtitle2" gutterBottom>
+                                                    Data Management
+                                                </Typography>
+                                                <Button
+                                                    variant="outlined"
+                                                    size="small"
+                                                    sx={{ justifyContent: 'flex-start' }}
+                                                >
+                                                    Export My Data
+                                                </Button>
+                                                <Typography variant="caption" color="text.secondary">
+                                                    Download a copy of your assessment data, reports, and preferences
+                                                </Typography>
+                                            </Box>
+                                        </Grid>
+                                        
+                                        <Grid item xs={12} md={6}>
+                                            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                                <Typography variant="subtitle2" gutterBottom>
+                                                    Privacy Controls
+                                                </Typography>
+                                                <FormControlLabel
+                                                    control={<Switch defaultChecked />}
+                                                    label="Allow Analytics"
+                                                />
+                                                <Typography variant="caption" color="text.secondary">
+                                                    Help improve our service by sharing anonymous usage data
+                                                </Typography>
+                                            </Box>
+                                        </Grid>
+
+                                        <Grid item xs={12}>
+                                            <Alert severity="warning" sx={{ mt: 2 }}>
+                                                <Typography variant="subtitle2" gutterBottom>
+                                                    Danger Zone
+                                                </Typography>
+                                                <Button
+                                                    variant="outlined"
+                                                    color="error"
+                                                    size="small"
+                                                    startIcon={<Delete />}
+                                                    sx={{ mt: 1 }}
+                                                >
+                                                    Delete Account
+                                                </Button>
+                                                <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                                                    Permanently delete your account and all associated data. This action cannot be undone.
+                                                </Typography>
+                                            </Alert>
+                                        </Grid>
+                                    </Grid>
                                 </CardContent>
                             </Card>
                         </Grid>

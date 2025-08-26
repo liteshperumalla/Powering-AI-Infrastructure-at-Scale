@@ -56,6 +56,18 @@ interface ScenarioComparisonProps {
     onClose: () => void;
 }
 
+// Helper function to get provider chip colors
+const getProviderChipColor = (provider: string): "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
+    switch (provider) {
+        case 'AWS': return 'warning';
+        case 'Azure': return 'info';
+        case 'GCP': return 'success';
+        case 'Alibaba': return 'secondary';
+        case 'IBM': return 'primary';
+        default: return 'default';
+    }
+};
+
 export default function ScenarioComparison({ open, onClose }: ScenarioComparisonProps) {
     const dispatch = useAppDispatch();
     const { scenarios, comparisonScenarios } = useAppSelector(state => state.scenario);
@@ -73,6 +85,10 @@ export default function ScenarioComparison({ open, onClose }: ScenarioComparison
             dispatch(addToComparison(scenario));
             setSelectedScenario('');
         }
+    };
+
+    const handleQuickAddScenario = (scenario: Scenario) => {
+        dispatch(addToComparison(scenario));
     };
 
     const handleRemoveScenario = (scenarioId: string) => {
@@ -190,23 +206,70 @@ export default function ScenarioComparison({ open, onClose }: ScenarioComparison
             <DialogContent>
                 {comparisonScenarios.length === 0 ? (
                     <Alert severity="info" sx={{ mb: 2 }}>
-                        Select scenarios to compare. You can compare up to 3 scenarios side by side.
+                        Select a scenario to view detailed analysis. You can add up to 2 additional scenarios for comparison.
                     </Alert>
                 ) : comparisonScenarios.length === 1 ? (
-                    <Alert severity="warning" sx={{ mb: 2 }}>
-                        Add at least one more scenario to enable comparison features.
+                    <Alert severity="success" sx={{ mb: 2 }}>
+                        Scenario loaded. Add one more scenario to enable comparison features.
                     </Alert>
                 ) : null}
 
-                {/* Add Scenario Section */}
-                {comparisonScenarios.length < 3 && availableScenarios.length > 0 && (
+                {/* Available Scenarios Section */}
+                {comparisonScenarios.length === 0 && availableScenarios.length > 0 && (
+                    <Box sx={{ mb: 3 }}>
+                        <Typography variant="h6" gutterBottom>
+                            Available Scenarios
+                        </Typography>
+                        <Grid container spacing={2}>
+                            {availableScenarios.slice(0, 6).map(scenario => (
+                                <Grid item xs={12} md={6} key={scenario.id}>
+                                    <Card sx={{ cursor: 'pointer', '&:hover': { elevation: 4 } }}>
+                                        <CardContent>
+                                            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                                <Box sx={{ flex: 1 }}>
+                                                    <Typography variant="h6" gutterBottom>
+                                                        {scenario.name}
+                                                    </Typography>
+                                                    <Typography variant="body2" color="text.secondary" gutterBottom>
+                                                        {scenario.description}
+                                                    </Typography>
+                                                    {scenario.result && (
+                                                        <Box sx={{ mt: 2 }}>
+                                                            <Typography variant="h6" color="primary">
+                                                                {formatCurrency(scenario.result.totalCost)}
+                                                            </Typography>
+                                                            <Typography variant="body2">
+                                                                Performance: {scenario.result.performanceScore}%
+                                                            </Typography>
+                                                        </Box>
+                                                    )}
+                                                </Box>
+                                                <Button
+                                                    onClick={() => handleQuickAddScenario(scenario)}
+                                                    variant="contained"
+                                                    size="small"
+                                                    startIcon={<Add />}
+                                                >
+                                                    Select
+                                                </Button>
+                                            </Box>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            ))}
+                        </Grid>
+                    </Box>
+                )}
+
+                {/* Add Additional Scenario Section */}
+                {comparisonScenarios.length > 0 && comparisonScenarios.length < 3 && availableScenarios.length > 0 && (
                     <Box sx={{ mb: 3, p: 2, bgcolor: 'background.default', borderRadius: 1 }}>
                         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                             <FormControl size="small" sx={{ minWidth: 300 }}>
-                                <InputLabel>Add Scenario</InputLabel>
+                                <InputLabel>Add Another Scenario</InputLabel>
                                 <Select
                                     value={selectedScenario}
-                                    label="Add Scenario"
+                                    label="Add Another Scenario"
                                     onChange={(e) => setSelectedScenario(e.target.value)}
                                 >
                                     {availableScenarios.map(scenario => (
@@ -222,7 +285,7 @@ export default function ScenarioComparison({ open, onClose }: ScenarioComparison
                                 variant="outlined"
                                 startIcon={<Add />}
                             >
-                                Add to Comparison
+                                Add for Comparison
                             </Button>
                         </Box>
                     </Box>
@@ -566,10 +629,7 @@ export default function ScenarioComparison({ open, onClose }: ScenarioComparison
                                                                         <Chip
                                                                             label={service.provider}
                                                                             size="small"
-                                                                            color={
-                                                                                service.provider === 'AWS' ? 'warning' :
-                                                                                    service.provider === 'Azure' ? 'info' : 'success'
-                                                                            }
+                                                                            color={getProviderChipColor(service.provider)}
                                                                         />
                                                                     </TableCell>
                                                                     <TableCell>{service.type}</TableCell>

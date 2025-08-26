@@ -217,7 +217,27 @@ export function useProgressSteps() {
         const assessmentProgress = currentAssessment?.progress || {};
         const currentStep = assessmentProgress.current_step || 'created';
         const completedSteps = assessmentProgress.completed_steps || [];
-        const progressPercentage = assessmentProgress.progress_percentage || 0;
+        
+        // FIXED: Use backend progress data accurately - if status is completed, show 100%
+        // but if backend progress_percentage is 0, use that instead of assuming completion
+        let progressPercentage = assessmentProgress.progress_percentage || currentAssessment?.progress_percentage || 0;
+        
+        // Override with 100% only if assessment status is explicitly 'completed' and we have completed steps
+        if (currentAssessment?.status === 'completed' && completedSteps.length > 0) {
+            progressPercentage = 100;
+        }
+        
+        // Debug progress synchronization
+        console.log('🔍 Progress Debug:', {
+            assessmentId: currentAssessment?.id,
+            status: currentAssessment?.status,
+            backendProgressPercentage: assessmentProgress.progress_percentage,
+            topLevelProgressPercentage: currentAssessment?.progress_percentage,
+            calculatedProgressPercentage: progressPercentage,
+            currentStep,
+            completedSteps,
+            completedStepsCount: completedSteps.length
+        });
         
         // Define the correct workflow order matching the backend assessments.py
         const workflowSteps = [

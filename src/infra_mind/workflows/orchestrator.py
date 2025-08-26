@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class OrchestrationConfig:
     """Configuration for agent orchestration."""
-    max_parallel_agents: int = 3
+    max_parallel_agents: int = 10
     agent_timeout_seconds: int = 300
     retry_failed_agents: bool = True
     max_retries: int = 2

@@ -29,18 +29,39 @@ export default function Home() {
   return (
     <>
       {/* Navigation Bar */}
-      <AppBar position="static" elevation={1}>
+      <AppBar 
+        position="static" 
+        elevation={1}
+        sx={{ 
+          bgcolor: theme.palette.mode === 'dark' ? 'grey.900' : 'white',
+          color: theme.palette.mode === 'dark' ? 'white' : 'primary.main',
+          borderBottom: `1px solid ${theme.palette.divider}`
+        }}
+      >
         <Toolbar>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Infra Mind
           </Typography>
-          <Button color="inherit" onClick={() => router.push('/auth/login')}>
+          <Button 
+            sx={{ 
+              color: theme.palette.mode === 'dark' ? 'white' : 'primary.main',
+              '&:hover': { bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(25,118,210,0.1)' }
+            }} 
+            onClick={() => router.push('/auth/login')}
+          >
             Login
           </Button>
           <Button
-            color="inherit"
             variant="outlined"
-            sx={{ ml: 1 }}
+            sx={{ 
+              ml: 1,
+              color: theme.palette.mode === 'dark' ? 'white' : 'primary.main',
+              borderColor: theme.palette.mode === 'dark' ? 'white' : 'primary.main',
+              '&:hover': { 
+                borderColor: theme.palette.mode === 'dark' ? 'white' : 'primary.main',
+                bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(25,118,210,0.1)'
+              }
+            }}
             onClick={() => router.push('/auth/register')}
           >
             Get Started
@@ -51,7 +72,9 @@ export default function Home() {
       {/* Hero Section */}
       <Box
         sx={{
-          background: 'linear-gradient(135deg, #1976d2 0%, #42a5f5 100%)',
+          background: theme.palette.mode === 'dark' 
+            ? 'linear-gradient(135deg, #1565c0 0%, #1976d2 100%)'
+            : 'linear-gradient(135deg, #1976d2 0%, #42a5f5 100%)',
           color: 'white',
           py: { xs: 8, md: 12 },
         }}
@@ -102,7 +125,7 @@ export default function Home() {
                     color: 'white',
                     '&:hover': { borderColor: 'grey.300', bgcolor: 'rgba(255,255,255,0.1)' },
                   }}
-                  onClick={() => router.push('/auth/login')}
+                  onClick={() => router.push('/about')}
                 >
                   Learn More
                 </Button>
@@ -163,7 +186,7 @@ export default function Home() {
                 Multi-Cloud Intelligence
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Deep expertise across AWS, Azure, and GCP platforms with real-time pricing and service recommendations.
+                Deep expertise across AWS, Azure, GCP, Alibaba Cloud, and IBM Cloud platforms with real-time pricing and service recommendations.
               </Typography>
             </CardContent>
           </Card>
@@ -204,9 +227,14 @@ export default function Home() {
       </Container>
 
       {/* CTA Section */}
-      <Box sx={{ bgcolor: 'grey.50', py: 8 }}>
+      <Box sx={{ bgcolor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50', py: 8 }}>
         <Container maxWidth="md" sx={{ textAlign: 'center' }}>
-          <Typography variant="h4" component="h2" gutterBottom>
+          <Typography 
+            variant="h4" 
+            component="h2" 
+            gutterBottom
+            sx={{ color: 'text.primary' }}
+          >
             Ready to Scale Your AI Infrastructure?
           </Typography>
           <Typography variant="h6" color="text.secondary" sx={{ mb: 4 }}>
@@ -244,7 +272,7 @@ export default function Home() {
               </Typography>
             </Box>
             <Typography variant="body2" color="grey.400">
-              © 2024 Infra Mind. All rights reserved.
+              © 2025 Infra Mind. All rights reserved.
             </Typography>
           </Box>
         </Container>

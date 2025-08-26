@@ -59,6 +59,9 @@ services:
       REDIS_URL: redis://redis:6379
       INFRA_MIND_CORS_ORIGINS: '["http://localhost:3000", "http://frontend:3000", "http://host.docker.internal:3000", "http://127.0.0.1:3000", "https://localhost:3000"]'
       
+      # Authentication configuration
+      ACCESS_TOKEN_EXPIRE_MINUTES: "480"  # 8 hours
+      
       # LLM configuration - Azure OpenAI (Primary)
       INFRA_MIND_LLM_PROVIDER: azure_openai
       INFRA_MIND_AZURE_OPENAI_API_KEY: ${INFRA_MIND_AZURE_OPENAI_API_KEY:-}

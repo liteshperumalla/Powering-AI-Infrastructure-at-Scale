@@ -89,6 +89,8 @@ class CloudProvider(str, Enum):
     AWS = "aws"
     AZURE = "azure"
     GCP = "gcp"
+    IBM = "ibm"
+    ALIBABA = "alibaba"
     MULTI_CLOUD = "multi_cloud"
 
 

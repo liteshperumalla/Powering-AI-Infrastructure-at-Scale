@@ -262,6 +262,8 @@ class TechnicalRequirementsForm(BaseForm):
                 {"value": "aws", "label": "Amazon Web Services (AWS)"},
                 {"value": "azure", "label": "Microsoft Azure"},
                 {"value": "gcp", "label": "Google Cloud Platform (GCP)"},
+                {"value": "alibaba", "label": "Alibaba Cloud"},
+                {"value": "ibm", "label": "IBM Cloud"},
                 {"value": "other_cloud", "label": "Other cloud provider"},
                 {"value": "hybrid", "label": "Hybrid (mix of on-premises and cloud)"},
                 {"value": "none", "label": "No existing infrastructure"}
@@ -408,6 +410,8 @@ class TechnicalRequirementsForm(BaseForm):
                 {"value": "aws", "label": "Amazon Web Services (AWS)"},
                 {"value": "azure", "label": "Microsoft Azure"},
                 {"value": "gcp", "label": "Google Cloud Platform (GCP)"},
+                {"value": "alibaba", "label": "Alibaba Cloud"},
+                {"value": "ibm", "label": "IBM Cloud"},
                 {"value": "multi_cloud", "label": "Multi-cloud approach"},
                 {"value": "no_preference", "label": "No preference"}
             ]

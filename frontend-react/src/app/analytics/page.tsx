@@ -46,6 +46,7 @@ import {
 import Navigation from '@/components/Navigation';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { apiClient } from '@/services/api';
+import { cacheBuster, forceRefresh } from '@/utils/cache-buster';
 
 interface AnalyticsData {
     timestamp: string;
@@ -73,8 +74,24 @@ export default function AnalyticsPage() {
             setLoading(true);
             setError(null);
             
-            // Clear any cached analytics data to ensure fresh data
-            console.log('🔄 Fetching fresh analytics data...');
+            // Ultra-aggressive cache clearing for analytics data
+            console.log('🔄 Fetching ultra-fresh analytics data with cache busting...');
+            
+            // Clear all caches and force refresh
+            cacheBuster.clearAllCache();
+            forceRefresh();
+            
+            // Clear analytics-specific storage
+            if (typeof window !== 'undefined') {
+                try {
+                    localStorage.removeItem('analytics_cache');
+                    localStorage.removeItem('advanced_analytics_cache');
+                    localStorage.removeItem(`analytics_${timeframe}_cache`);
+                    sessionStorage.removeItem('analytics_data');
+                } catch (e) {
+                    console.warn('Analytics cache clear failed:', e);
+                }
+            }
             
             const data = await apiClient.getAdvancedAnalyticsDashboard(timeframe);
             
@@ -94,7 +111,20 @@ export default function AnalyticsPage() {
         }
     };
 
+    // Mount effect with aggressive cache clearing
     useEffect(() => {
+        // Clear all caches on analytics page mount
+        if (typeof window !== 'undefined') {
+            console.log('🔄 Analytics page mounted - clearing all caches');
+            cacheBuster.clearAllCache();
+            forceRefresh();
+            
+            // Dispatch custom event for cache clearing
+            window.dispatchEvent(new CustomEvent('analyticsPageMount', {
+                detail: { timestamp: Date.now(), clearCache: true }
+            }));
+        }
+        
         fetchAnalyticsData();
     }, [timeframe]);
     

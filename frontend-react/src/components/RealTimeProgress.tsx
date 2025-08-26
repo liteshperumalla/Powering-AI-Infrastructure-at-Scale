@@ -24,6 +24,8 @@ import {
     PlayArrow,
 } from '@mui/icons-material';
 import { useAssessmentWebSocket } from '@/hooks/useWebSocket';
+import { useDispatch } from 'react-redux';
+import { addNotification } from '@/store/slices/uiSlice';
 
 interface WorkflowStep {
     name: string;
@@ -61,11 +63,6 @@ interface RealTimeProgressProps {
     onError?: (error: string) => void;
 }
 
-interface Notification {
-    type: 'info' | 'warning' | 'error' | 'alert';
-    title: string;
-    message: string;
-}
 
 export default function RealTimeProgress({
     assessmentId,
@@ -73,9 +70,9 @@ export default function RealTimeProgress({
     onComplete,
     onError,
 }: RealTimeProgressProps) {
+    const dispatch = useDispatch();
     const [progress, setProgress] = useState<WorkflowProgress | null>(null);
     const [agentStatuses, setAgentStatuses] = useState<Record<string, AgentStatus>>({});
-    const [notifications, setNotifications] = useState<Notification[]>([]);
     const [expanded, setExpanded] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -106,8 +103,24 @@ export default function RealTimeProgress({
                     setProgress(progressData);
                     
                     if (message.data.status === 'completed') {
+                        // Send completion notification to bell icon
+                        dispatch(addNotification({
+                            type: 'success',
+                            title: 'Assessment Complete',
+                            message: 'Your AI infrastructure assessment has been completed successfully!',
+                            duration: 10000, // Show completion for 10 seconds
+                            persistent: false
+                        }));
                         onComplete?.(progressData);
                     } else if (message.data.status === 'failed') {
+                        // Send failure notification to bell icon
+                        dispatch(addNotification({
+                            type: 'error',
+                            title: 'Assessment Failed',
+                            message: message.data.error || 'The assessment workflow encountered an error.',
+                            duration: 0, // Make error notifications persistent
+                            persistent: true
+                        }));
                         setError(message.data.error || 'Workflow failed');
                         onError?.(message.data.error || 'Workflow failed');
                     }
@@ -118,6 +131,25 @@ export default function RealTimeProgress({
                         ...prev,
                         [message.data.agent_name]: message.data
                     }));
+                    
+                    // Send agent completion notifications
+                    if (message.data.status === 'completed') {
+                        dispatch(addNotification({
+                            type: 'success',
+                            title: 'Agent Complete',
+                            message: `${message.data.agent_name.replace('_', ' ').toUpperCase()} agent has completed analysis.`,
+                            duration: 5000,
+                            persistent: false
+                        }));
+                    } else if (message.data.status === 'failed') {
+                        dispatch(addNotification({
+                            type: 'error',
+                            title: 'Agent Failed',
+                            message: `${message.data.agent_name.replace('_', ' ').toUpperCase()} agent encountered an error: ${message.data.error || 'Unknown error'}`,
+                            duration: 8000,
+                            persistent: false
+                        }));
+                    }
                     break;
 
                 case 'step_completed':
@@ -130,14 +162,25 @@ export default function RealTimeProgress({
                     break;
 
                 case 'notification':
-                    setNotifications(prev => [message.data, ...(prev || []).slice(0, 4)]); // Keep last 5
+                    // Send workflow notifications to the main notification system
+                    dispatch(addNotification({
+                        type: message.data.type || 'info',
+                        title: message.data.title || 'Workflow Update',
+                        message: message.data.message,
+                        duration: 6000, // Show workflow notifications for 6 seconds
+                        persistent: false
+                    }));
                     break;
 
                 case 'alert':
-                    setNotifications(prev => [
-                        { ...message.data, type: 'alert' },
-                        ...(prev || []).slice(0, 4)
-                    ]);
+                    // Send workflow alerts to the main notification system
+                    dispatch(addNotification({
+                        type: message.data.type === 'alert' ? 'warning' : (message.data.type || 'warning'),
+                        title: message.data.title || 'Workflow Alert',
+                        message: message.data.message,
+                        duration: 8000, // Show alerts for 8 seconds
+                        persistent: message.data.type === 'critical' // Make critical alerts persistent
+                    }));
                     break;
 
                 case 'error':
@@ -148,7 +191,7 @@ export default function RealTimeProgress({
         } catch (err) {
             console.error('Error parsing WebSocket message:', err);
         }
-    }, [onComplete, onError]);
+    }, [dispatch, assessmentId, onComplete, onError]);
 
     // Subscribe to WebSocket messages
     useEffect(() => {
@@ -406,32 +449,6 @@ export default function RealTimeProgress({
                                 </Box>
                             )}
 
-                            {notifications.length > 0 && (
-                                <Box>
-                                    <Typography variant="subtitle2" gutterBottom>
-                                        Recent Updates
-                                    </Typography>
-                                    {notifications.map((notification, index) => (
-                                        <Alert
-                                            key={index}
-                                            severity={
-                                                notification.type === 'error' ? 'error' :
-                                                    notification.type === 'warning' ? 'warning' :
-                                                        notification.type === 'alert' ? 'warning' :
-                                                            'info'
-                                            }
-                                            sx={{ mb: 1 }}
-                                        >
-                                            <Typography variant="body2">
-                                                <strong>{notification.title}</strong>
-                                            </Typography>
-                                            <Typography variant="caption">
-                                                {notification.message}
-                                            </Typography>
-                                        </Alert>
-                                    ))}
-                                </Box>
-                            )}
                         </Collapse>
                     </>
                 )}

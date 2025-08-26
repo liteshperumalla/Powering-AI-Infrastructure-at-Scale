@@ -40,8 +40,20 @@ export interface TeamStructure {
 }
 
 export interface BusinessRequirements {
+    // Core fields
     company_size: 'startup' | 'small' | 'medium' | 'large' | 'enterprise';
     industry: string;
+    
+    // Enhanced business fields from Step 1
+    company_name?: string;
+    geographic_regions?: string[];
+    customer_base_size?: 'small' | 'medium' | 'enterprise' | 'enterprise_global';
+    revenue_model?: 'subscription' | 'saas' | 'platform_fees' | 'transaction_based' | 'licensing';
+    growth_stage?: 'startup' | 'early_stage' | 'growing' | 'series-a' | 'series-b' | 'series-c' | 'late_stage' | 'public';
+    key_competitors?: string;
+    mission_critical_systems?: string[];
+    
+    // Existing structured fields
     business_goals: BusinessGoal[];
     growth_projection: GrowthProjection;
     budget_constraints: BudgetConstraints;
@@ -54,29 +66,153 @@ export interface BusinessRequirements {
 }
 
 export interface TechnicalRequirements {
-    current_infrastructure: string;
+    // Core fields
+    current_infrastructure?: string;
     workload_types: string[];
-    performance_requirements: Record<string, unknown>;
-    scalability_requirements: Record<string, unknown>;
-    security_requirements: Record<string, unknown>;
-    integration_requirements: Record<string, unknown>;
+    
+    // Enhanced technical fields from Steps 2-6
+    current_cloud_providers?: string[];
+    current_services?: string[];
+    technical_team_size?: number;
+    infrastructure_age?: 'legacy' | 'established' | 'recent' | 'modern';
+    current_architecture?: 'monolithic' | 'microservices' | 'serverless' | 'event_driven_microservices';
+    
+    // AI/ML fields
+    ai_use_cases?: string[];
+    current_ai_maturity?: 'beginner' | 'intermediate' | 'advanced' | 'expert';
+    expected_data_volume?: string;
+    data_types?: string[];
+    
+    // Performance fields
+    current_user_load?: string;
+    expected_growth_rate?: string;
+    budget_flexibility?: 'low' | 'medium' | 'high';
+    total_budget_range?: string;
+    
+    // Programming and frameworks
+    preferred_programming_languages?: string[];
+    development_frameworks?: string[];
+    database_types?: string[];
+    
+    // Operations
+    monitoring_requirements?: string[];
+    ci_cd_requirements?: string[];
+    backup_requirements?: string[];
+    deployment_preferences?: string[];
+    
+    // Existing structured fields (enhanced)
+    performance_requirements?: {
+        api_response_time_ms?: number;
+        requests_per_second?: number;
+        concurrent_users?: number;
+        uptime_percentage?: number;
+        response_time_requirement?: string;
+        requests_per_second_requirement?: string;
+        uptime_requirement?: string;
+        peak_load_multiplier?: number;
+        auto_scaling_required?: boolean;
+        global_distribution?: boolean;
+    };
+    
+    scalability_requirements?: {
+        current_data_size_gb?: number;
+        current_daily_transactions?: number;
+        expected_data_growth_rate?: string;
+        peak_load_multiplier?: number;
+        auto_scaling_required?: boolean;
+        global_distribution_required?: boolean;
+        cdn_required?: boolean;
+        planned_regions?: string[];
+    };
+    
+    security_requirements?: {
+        encryption_at_rest_required?: boolean;
+        encryption_in_transit_required?: boolean;
+        multi_factor_auth_required?: boolean;
+        single_sign_on_required?: boolean;
+        role_based_access_control?: boolean;
+        vpc_isolation_required?: boolean;
+        firewall_required?: boolean;
+        ddos_protection_required?: boolean;
+        security_monitoring_required?: boolean;
+        audit_logging_required?: boolean;
+        vulnerability_scanning_required?: boolean;
+        data_loss_prevention_required?: boolean;
+        backup_encryption_required?: boolean;
+        encryption_requirements?: string[];
+        access_control_methods?: string[];
+        network_security?: string[];
+        data_classification?: string;
+        security_level?: 'basic' | 'standard' | 'high' | 'critical';
+    };
+    
+    integration_requirements?: {
+        existing_databases?: string[];
+        existing_apis?: string[];
+        legacy_systems?: string[];
+        payment_processors?: string[];
+        analytics_platforms?: string[];
+        marketing_tools?: string[];
+        rest_api_required?: boolean;
+        graphql_api_required?: boolean;
+        websocket_support_required?: boolean;
+        real_time_sync_required?: boolean;
+        batch_sync_acceptable?: boolean;
+        data_storage_solution?: string[];
+        networking_requirements?: string[];
+    };
 }
 
 export interface Assessment {
     id: string;
     businessRequirements?: BusinessRequirements;
     technicalRequirements?: TechnicalRequirements;
+    business_requirements?: BusinessRequirements; // Backend naming
+    technical_requirements?: TechnicalRequirements; // Backend naming
     status: 'draft' | 'in_progress' | 'completed' | 'failed';
     progress_percentage: number;
     title: string;
+    description?: string;
+    business_goal?: string;
+    priority?: 'low' | 'medium' | 'high' | 'critical';
+    
+    // Core fields for display
     company_size: string;
     industry: string;
     budget_range: string;
     workload_types: string[];
+    
+    // Enhanced fields for display (extracted from requirements)
+    company_name?: string;
+    geographic_regions?: string[];
+    ai_use_cases?: string[];
+    technical_team_size?: number;
+    expected_data_volume?: string;
+    
+    // Status and progress
     recommendations_generated: boolean;
     reports_generated: boolean;
+    workflow_id?: string;
+    agent_states?: Record<string, unknown>;
+    workflow_progress?: Record<string, unknown>;
+    progress?: {
+        current_step?: string;
+        completed_steps?: string[];
+        total_steps?: number;
+        progress_percentage?: number;
+        error?: string;
+    };
+    
+    // Timestamps
     created_at: string;
     updated_at: string;
+    started_at?: string;
+    completed_at?: string;
+    
+    // Metadata
+    source?: string;
+    tags?: string[];
+    metadata?: Record<string, unknown>;
 }
 
 interface AssessmentState {

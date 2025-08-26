@@ -37,7 +37,7 @@ import {
 interface ServiceRecommendation {
     id: string;
     serviceName: string;
-    provider: 'AWS' | 'Azure' | 'GCP' | 'MULTI_CLOUD';
+    provider: 'AWS' | 'Azure' | 'GCP' | 'Alibaba' | 'IBM' | 'MULTI_CLOUD';
     serviceType: string;
     costEstimate: number;
     confidenceScore: number;
@@ -65,6 +65,8 @@ const getProviderColor = (provider: string) => {
         case 'AWS': return '#FF9900';
         case 'AZURE': return '#0078D4';
         case 'GCP': return '#4285F4';
+        case 'ALIBABA': return '#FF6A00';
+        case 'IBM': return '#006699';
         case 'MULTI_CLOUD': return '#9C27B0';
         default: return '#666';
     }
