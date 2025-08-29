@@ -84,7 +84,7 @@ interface ReportPreviewProps {
     report: ReportData;
     onDownload?: (reportId: string) => void;
     onView?: (reportId: string) => void;
-    onShare?: (reportId: string) => void;
+    onShare?: (reportId: string, email: string, permission: string) => void;
     onCreateVersion?: (reportId: string) => void;
     onCompareVersions?: (reportId1: string, reportId2: string) => void;
     onCreateTemplate?: (reportId: string) => void;
@@ -491,12 +491,24 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                     <DialogActions>
                         <Button onClick={() => setShareDialogOpen(false)}>Cancel</Button>
                         <Button
-                            onClick={() => {
-                                onShare?.(safeReport.id);
-                                setShareDialogOpen(false);
-                                setShareEmail('');
+                            onClick={async () => {
+                                if (shareEmail && onShare) {
+                                    try {
+                                        await onShare(safeReport.id, shareEmail, sharePermission);
+                                        setShareDialogOpen(false);
+                                        setShareEmail('');
+                                    } catch (error) {
+                                        console.error('Failed to share report:', error);
+                                        // You might want to show an error message here
+                                    }
+                                } else {
+                                    onShare?.(safeReport.id, shareEmail, sharePermission);
+                                    setShareDialogOpen(false);
+                                    setShareEmail('');
+                                }
                             }}
                             variant="contained"
+                            disabled={!shareEmail}
                         >
                             Share
                         </Button>

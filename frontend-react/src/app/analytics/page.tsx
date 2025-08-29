@@ -74,18 +74,11 @@ export default function AnalyticsPage() {
             setLoading(true);
             setError(null);
             
-            // Ultra-aggressive cache clearing for analytics data
-            console.log('🔄 Fetching ultra-fresh analytics data with cache busting...');
+            console.log(`🔄 Fetching analytics data for timeframe: ${timeframe}`);
             
-            // Clear all caches and force refresh
-            cacheBuster.clearAllCache();
-            forceRefresh();
-            
-            // Clear analytics-specific storage
+            // Clear analytics-specific storage for fresh data
             if (typeof window !== 'undefined') {
                 try {
-                    localStorage.removeItem('analytics_cache');
-                    localStorage.removeItem('advanced_analytics_cache');
                     localStorage.removeItem(`analytics_${timeframe}_cache`);
                     sessionStorage.removeItem('analytics_data');
                 } catch (e) {
@@ -95,11 +88,13 @@ export default function AnalyticsPage() {
             
             const data = await apiClient.getAdvancedAnalyticsDashboard(timeframe);
             
-            console.log('📊 Fresh analytics data received:', {
+            console.log('📊 Analytics data received:', {
                 timestamp: data.timestamp,
+                timeframe: data.timeframe,
                 hasAnalytics: !!data.analytics,
                 hasOptimizations: data.optimization_opportunities?.length || 0,
-                costModelingAvailable: !!data.analytics?.cost_modeling
+                hasMessage: !!data.message,
+                costModelingTotal: data.analytics?.cost_modeling?.current_analysis?.total_monthly_cost || 0
             });
             
             setAnalyticsData(data);
@@ -111,20 +106,9 @@ export default function AnalyticsPage() {
         }
     };
 
-    // Mount effect with aggressive cache clearing
+    // Effect to fetch data when timeframe changes
     useEffect(() => {
-        // Clear all caches on analytics page mount
-        if (typeof window !== 'undefined') {
-            console.log('🔄 Analytics page mounted - clearing all caches');
-            cacheBuster.clearAllCache();
-            forceRefresh();
-            
-            // Dispatch custom event for cache clearing
-            window.dispatchEvent(new CustomEvent('analyticsPageMount', {
-                detail: { timestamp: Date.now(), clearCache: true }
-            }));
-        }
-        
+        console.log(`🔄 Analytics timeframe changed to: ${timeframe}`);
         fetchAnalyticsData();
     }, [timeframe]);
     
@@ -257,7 +241,15 @@ export default function AnalyticsPage() {
                     </Box>
 
                     {analyticsData ? (
-                        <Grid container spacing={3}>
+                        <>  
+                            {analyticsData.message && (
+                                <Alert severity="info" sx={{ mb: 3 }}>
+                                    <Typography variant="body2">
+                                        {analyticsData.message}
+                                    </Typography>
+                                </Alert>
+                            )}
+                            <Grid container spacing={3}>
                             {/* Cost Modeling */}
                             <Grid item xs={12} lg={6}>
                                 <Card>
@@ -267,7 +259,7 @@ export default function AnalyticsPage() {
                                             <Typography variant="h6">Cost Analysis</Typography>
                                         </Box>
                                         
-                                        {analyticsData.analytics.cost_modeling?.current_analysis && (
+                                        {analyticsData.analytics.cost_modeling?.current_analysis ? (
                                             <>
                                                 <Box sx={{ mb: 2 }}>
                                                     <Typography variant="h4" color="primary">
@@ -281,6 +273,14 @@ export default function AnalyticsPage() {
                                                 <Typography variant="body2" sx={{ mb: 2 }}>
                                                     Assessments analyzed: {analyticsData.analytics.cost_modeling.current_analysis.assessments_analyzed}
                                                 </Typography>
+                                                
+                                                {analyticsData.analytics.cost_modeling.current_analysis.assessments_analyzed === 0 && (
+                                                    <Alert severity="info" sx={{ mt: 2 }}>
+                                                        <Typography variant="body2">
+                                                            Complete your first assessment to see detailed cost analysis and optimization opportunities.
+                                                        </Typography>
+                                                    </Alert>
+                                                )}
                                                 
                                                 {analyticsData.analytics.cost_modeling.cost_optimization_opportunities?.length > 0 && (
                                                     <Accordion>
@@ -307,6 +307,12 @@ export default function AnalyticsPage() {
                                                     </Accordion>
                                                 )}
                                             </>
+                                        ) : (
+                                            <Alert severity="info">
+                                                <Typography variant="body2">
+                                                    Complete assessments to see detailed cost modeling and optimization opportunities.
+                                                </Typography>
+                                            </Alert>
                                         )}
                                     </CardContent>
                                 </Card>
@@ -321,7 +327,7 @@ export default function AnalyticsPage() {
                                             <Typography variant="h6">Performance Benchmarks</Typography>
                                         </Box>
                                         
-                                        {analyticsData.analytics.performance_benchmarks?.performance_analysis && (
+                                        {analyticsData.analytics.performance_benchmarks?.performance_analysis ? (
                                             <>
                                                 <Box sx={{ mb: 2 }}>
                                                     <Typography variant="body2" color="text.secondary">Best Performance:</Typography>
@@ -344,6 +350,12 @@ export default function AnalyticsPage() {
                                                     </Typography>
                                                 </Box>
                                             </>
+                                        ) : (
+                                            <Alert severity="info">
+                                                <Typography variant="body2">
+                                                    Complete assessments to see performance benchmarks and analysis.
+                                                </Typography>
+                                            </Alert>
                                         )}
                                     </CardContent>
                                 </Card>
@@ -358,7 +370,7 @@ export default function AnalyticsPage() {
                                             <Typography variant="h6">Security Status</Typography>
                                         </Box>
                                         
-                                        {analyticsData.analytics.security_analytics?.global_security?.threat_landscape && (
+                                        {analyticsData.analytics.security_analytics?.global_security?.threat_landscape ? (
                                             <>
                                                 <Box sx={{ mb: 3 }}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -414,6 +426,12 @@ export default function AnalyticsPage() {
                                                     </Accordion>
                                                 )}
                                             </>
+                                        ) : (
+                                            <Alert severity="info">
+                                                <Typography variant="body2">
+                                                    Complete assessments to see security analytics and compliance status.
+                                                </Typography>
+                                            </Alert>
                                         )}
                                     </CardContent>
                                 </Card>
@@ -428,7 +446,7 @@ export default function AnalyticsPage() {
                                             <Typography variant="h6">Multi-Cloud Strategy</Typography>
                                         </Box>
                                         
-                                        {analyticsData.analytics.multi_cloud_analysis?.global_strategy?.recommended_distribution && (
+                                        {analyticsData.analytics.multi_cloud_analysis?.global_strategy?.recommended_distribution ? (
                                             <>
                                                 <Box sx={{ mb: 2 }}>
                                                     <Typography variant="body2" color="text.secondary">Recommended Distribution:</Typography>
@@ -467,6 +485,12 @@ export default function AnalyticsPage() {
                                                     </Accordion>
                                                 )}
                                             </>
+                                        ) : (
+                                            <Alert severity="info">
+                                                <Typography variant="body2">
+                                                    Complete assessments to see multi-cloud strategy recommendations.
+                                                </Typography>
+                                            </Alert>
                                         )}
                                     </CardContent>
                                 </Card>
@@ -594,6 +618,7 @@ export default function AnalyticsPage() {
                                 </Grid>
                             )}
                         </Grid>
+                        </>
                     ) : (
                         <Alert severity="info">
                             <AlertTitle>No Analytics Data</AlertTitle>

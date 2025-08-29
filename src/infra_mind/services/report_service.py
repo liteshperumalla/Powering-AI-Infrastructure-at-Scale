@@ -267,19 +267,67 @@ class ReportService:
     ) -> None:
         """Share a report with another user."""
         try:
-            # Get the report
-            report = await Report.get(report_id)
-            if not report:
+            from motor.motor_asyncio import AsyncIOMotorClient
+            import os
+            from bson import ObjectId
+            
+            # Connect to database directly for reliability
+            mongo_uri = os.getenv("INFRA_MIND_MONGODB_URL", "mongodb://admin:password@localhost:27017/infra_mind?authSource=admin")
+            client = AsyncIOMotorClient(mongo_uri)
+            db_conn = client.get_database("infra_mind")
+            
+            # Get the report by ObjectId
+            try:
+                report_doc = await db_conn.reports.find_one({"_id": ObjectId(report_id)})
+            except Exception:
+                # If ObjectId conversion fails, might be a string ID
+                report_doc = await db_conn.reports.find_one({"report_id": report_id})
+            
+            if not report_doc:
                 raise ValueError(f"Report {report_id} not found")
             
-            # Check if user is owner or has admin permission
-            if not (report.user_id == owner_id or report.can_user_access(owner_id, "admin")):
+            # Check if user is owner or already has admin permission
+            user_id_str = str(report_doc.get("user_id", ""))
+            shared_with = report_doc.get("shared_with", [])
+            sharing_permissions = report_doc.get("sharing_permissions", {})
+            
+            if not (user_id_str == owner_id or sharing_permissions.get(owner_id) == "admin"):
                 raise PermissionError("User does not have permission to share this report")
             
-            # Share with user
-            report.share_with_user(share_with_user_id, permission)
-            await report.save()
+            # Update sharing information
+            if share_with_user_id not in shared_with:
+                shared_with.append(share_with_user_id)
+            sharing_permissions[share_with_user_id] = permission
             
+            # Update the report in database
+            try:
+                update_result = await db_conn.reports.update_one(
+                    {"_id": ObjectId(report_id)},
+                    {
+                        "$set": {
+                            "shared_with": shared_with,
+                            "sharing_permissions": sharing_permissions,
+                            "updated_at": datetime.now(timezone.utc)
+                        }
+                    }
+                )
+            except Exception:
+                # Try with report_id field if ObjectId fails
+                update_result = await db_conn.reports.update_one(
+                    {"report_id": report_id},
+                    {
+                        "$set": {
+                            "shared_with": shared_with,
+                            "sharing_permissions": sharing_permissions,
+                            "updated_at": datetime.now(timezone.utc)
+                        }
+                    }
+                )
+            
+            if update_result.matched_count == 0:
+                raise ValueError(f"Failed to update report {report_id}")
+            
+            await client.close()
             logger.info(f"Shared report {report_id} with user {share_with_user_id} ({permission})")
             
         except Exception as e:
@@ -293,21 +341,64 @@ class ReportService:
     ) -> str:
         """Create a public link for a report."""
         try:
-            # Get the report
-            report = await Report.get(report_id)
-            if not report:
+            from motor.motor_asyncio import AsyncIOMotorClient
+            import os
+            from bson import ObjectId
+            
+            # Connect to database directly for reliability
+            mongo_uri = os.getenv("INFRA_MIND_MONGODB_URL", "mongodb://admin:password@localhost:27017/infra_mind?authSource=admin")
+            client = AsyncIOMotorClient(mongo_uri)
+            db_conn = client.get_database("infra_mind")
+            
+            # Get the report by ObjectId
+            try:
+                report_doc = await db_conn.reports.find_one({"_id": ObjectId(report_id)})
+            except Exception:
+                # If ObjectId conversion fails, might be a string ID
+                report_doc = await db_conn.reports.find_one({"report_id": report_id})
+            
+            if not report_doc:
                 raise ValueError(f"Report {report_id} not found")
             
-            # Check permissions
-            if not report.can_user_access(user_id, "admin"):
+            # Check permissions - user must be owner or have admin access
+            user_id_str = str(report_doc.get("user_id", ""))
+            sharing_permissions = report_doc.get("sharing_permissions", {})
+            
+            if not (user_id_str == user_id or sharing_permissions.get(user_id) == "admin"):
                 raise PermissionError("User does not have admin access to this report")
             
             # Generate public link token
             public_token = str(uuid.uuid4())
-            report.is_public = True
-            report.public_link_token = public_token
-            await report.save()
             
+            # Update the report in database
+            try:
+                update_result = await db_conn.reports.update_one(
+                    {"_id": ObjectId(report_id)},
+                    {
+                        "$set": {
+                            "is_public": True,
+                            "public_link_token": public_token,
+                            "updated_at": datetime.now(timezone.utc)
+                        }
+                    }
+                )
+            except Exception:
+                # Try with report_id field if ObjectId fails
+                update_result = await db_conn.reports.update_one(
+                    {"report_id": report_id},
+                    {
+                        "$set": {
+                            "is_public": True,
+                            "public_link_token": public_token,
+                            "updated_at": datetime.now(timezone.utc)
+                        }
+                    }
+                )
+            
+            if update_result.matched_count == 0:
+                raise ValueError(f"Failed to update report {report_id}")
+            
+            await client.close()
             logger.info(f"Created public link for report {report_id}")
             return public_token
             

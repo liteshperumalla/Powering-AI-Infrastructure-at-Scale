@@ -32,6 +32,13 @@ import {
     Storage,
     Delete,
     Analytics,
+    AdminPanelSettings,
+    MonitorHeart,
+    People,
+    Cloud as CloudSync,
+    Folder,
+    GetApp as Backup,
+    Build,
 } from '@mui/icons-material';
 import Navigation from '@/components/Navigation';
 import ProtectedRoute from '@/components/ProtectedRoute';
@@ -173,6 +180,109 @@ export default function SettingsPage() {
             case 'success': return 'success';
             case 'error': return 'error';
             default: return 'primary';
+        }
+    };
+
+    const handleDataExport = async () => {
+        try {
+            setSaveStatus('saving');
+            
+            // Send notification about export start
+            dispatch(addNotification({
+                type: 'info',
+                title: 'Data Export Started',
+                message: 'Your data export is being prepared. This may take a few moments...',
+                duration: 5000,
+                persistent: false
+            }));
+
+            const authToken = localStorage.getItem('auth_token');
+            if (!authToken) {
+                throw new Error('No authentication token found');
+            }
+
+            // Try the compliance endpoint first
+            let response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v2/compliance/data/export`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${authToken}`
+                },
+                body: JSON.stringify({
+                    data_categories: ['personal_data', 'assessment_data', 'report_data'],
+                    format: 'json'
+                })
+            });
+
+            // If compliance endpoint doesn't exist, use a generic user data export
+            if (response.status === 404 || response.status === 501) {
+                response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v2/users/export`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+            }
+
+            if (response.ok) {
+                const data = await response.json();
+                
+                // Create export data object
+                const exportData = {
+                    export_timestamp: new Date().toISOString(),
+                    user_profile: {
+                        full_name: user?.full_name,
+                        email: user?.email,
+                        role: user?.role,
+                        created_at: user?.created_at
+                    },
+                    user_data: data.export_data || data,
+                    export_format: 'json',
+                    data_categories: ['personal_data', 'assessment_data', 'report_data']
+                };
+
+                // Download the exported data
+                const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+                    type: 'application/json'
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `user_data_export_${new Date().toISOString().split('T')[0]}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                // Send success notification
+                dispatch(addNotification({
+                    type: 'success',
+                    title: 'Data Export Complete',
+                    message: 'Your data has been exported successfully and downloaded!',
+                    duration: 8000,
+                    persistent: false
+                }));
+                
+                setSaveStatus('success');
+            } else {
+                throw new Error(`Export failed with status: ${response.status}`);
+            }
+        } catch (error) {
+            console.error('Data export failed:', error);
+            
+            // Send error notification
+            dispatch(addNotification({
+                type: 'error',
+                title: 'Data Export Failed',
+                message: 'Unable to export your data. Please try again later or contact support.',
+                duration: 10000,
+                persistent: false
+            }));
+            
+            setSaveStatus('error');
+        } finally {
+            setTimeout(() => setSaveStatus('idle'), 3000);
         }
     };
 
@@ -498,6 +608,242 @@ export default function SettingsPage() {
                             </Card>
                         </Grid>
 
+                        {/* Admin Controls - Only visible to admin users */}
+                        {user?.role === 'admin' && (
+                            <>
+                                {/* System Administration */}
+                                <Grid item xs={12} md={6}>
+                                    <Card sx={{ border: '2px solid', borderColor: 'warning.main' }}>
+                                        <CardContent>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                                                <AdminPanelSettings color="warning" />
+                                                <Typography variant="h6" color="warning.main">
+                                                    System Administration
+                                                </Typography>
+                                            </Box>
+
+                                            <Grid container spacing={2}>
+                                                <Grid item xs={12}>
+                                                    <Button
+                                                        variant="outlined"
+                                                        color="warning"
+                                                        startIcon={<MonitorHeart />}
+                                                        fullWidth
+                                                        size="small"
+                                                        onClick={() => window.open('/system-status', '_blank')}
+                                                        sx={{ justifyContent: 'flex-start', mb: 1 }}
+                                                    >
+                                                        System Status Dashboard
+                                                    </Button>
+                                                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+                                                        Monitor system health, API connectivity, and service status
+                                                    </Typography>
+                                                </Grid>
+
+                                                <Grid item xs={12}>
+                                                    <Button
+                                                        variant="outlined"
+                                                        color="warning"
+                                                        startIcon={<Build />}
+                                                        fullWidth
+                                                        size="small"
+                                                        sx={{ justifyContent: 'flex-start', mb: 1 }}
+                                                    >
+                                                        System Maintenance
+                                                    </Button>
+                                                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+                                                        Schedule maintenance windows and system updates
+                                                    </Typography>
+                                                </Grid>
+
+                                                <Grid item xs={12}>
+                                                    <FormControlLabel
+                                                        control={<Switch defaultChecked color="warning" />}
+                                                        label="Debug Mode"
+                                                    />
+                                                    <Typography variant="caption" color="text.secondary" display="block">
+                                                        Enable detailed logging and error reporting
+                                                    </Typography>
+                                                </Grid>
+                                            </Grid>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+
+                                {/* User Management */}
+                                <Grid item xs={12} md={6}>
+                                    <Card sx={{ border: '2px solid', borderColor: 'info.main' }}>
+                                        <CardContent>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                                                <People color="info" />
+                                                <Typography variant="h6" color="info.main">
+                                                    User Management
+                                                </Typography>
+                                            </Box>
+
+                                            <Grid container spacing={2}>
+                                                <Grid item xs={12}>
+                                                    <Button
+                                                        variant="outlined"
+                                                        color="info"
+                                                        startIcon={<People />}
+                                                        fullWidth
+                                                        size="small"
+                                                        sx={{ justifyContent: 'flex-start', mb: 1 }}
+                                                    >
+                                                        Manage Users
+                                                    </Button>
+                                                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+                                                        Add, edit, and deactivate user accounts
+                                                    </Typography>
+                                                </Grid>
+
+                                                <Grid item xs={12}>
+                                                    <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                                                        <InputLabel>Default User Role</InputLabel>
+                                                        <Select
+                                                            defaultValue="user"
+                                                            label="Default User Role"
+                                                            color="info"
+                                                        >
+                                                            <MenuItem value="user">User</MenuItem>
+                                                            <MenuItem value="admin">Admin</MenuItem>
+                                                        </Select>
+                                                    </FormControl>
+                                                </Grid>
+
+                                                <Grid item xs={12}>
+                                                    <FormControlLabel
+                                                        control={<Switch defaultChecked color="info" />}
+                                                        label="Auto-approve New Users"
+                                                    />
+                                                    <Typography variant="caption" color="text.secondary" display="block">
+                                                        Automatically approve new user registrations
+                                                    </Typography>
+                                                </Grid>
+                                            </Grid>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+
+                                {/* Database & Backup */}
+                                <Grid item xs={12} md={6}>
+                                    <Card sx={{ border: '2px solid', borderColor: 'success.main' }}>
+                                        <CardContent>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                                                <Folder color="success" />
+                                                <Typography variant="h6" color="success.main">
+                                                    Database Management
+                                                </Typography>
+                                            </Box>
+
+                                            <Grid container spacing={2}>
+                                                <Grid item xs={12}>
+                                                    <Button
+                                                        variant="outlined"
+                                                        color="success"
+                                                        startIcon={<Backup />}
+                                                        fullWidth
+                                                        size="small"
+                                                        sx={{ justifyContent: 'flex-start', mb: 1 }}
+                                                    >
+                                                        Create Backup
+                                                    </Button>
+                                                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+                                                        Create a full database backup
+                                                    </Typography>
+                                                </Grid>
+
+                                                <Grid item xs={12}>
+                                                    <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                                                        <InputLabel>Backup Schedule</InputLabel>
+                                                        <Select
+                                                            defaultValue="daily"
+                                                            label="Backup Schedule"
+                                                            color="success"
+                                                        >
+                                                            <MenuItem value="hourly">Hourly</MenuItem>
+                                                            <MenuItem value="daily">Daily</MenuItem>
+                                                            <MenuItem value="weekly">Weekly</MenuItem>
+                                                            <MenuItem value="monthly">Monthly</MenuItem>
+                                                        </Select>
+                                                    </FormControl>
+                                                </Grid>
+
+                                                <Grid item xs={12}>
+                                                    <FormControlLabel
+                                                        control={<Switch defaultChecked color="success" />}
+                                                        label="Auto-cleanup Old Data"
+                                                    />
+                                                    <Typography variant="caption" color="text.secondary" display="block">
+                                                        Automatically remove data older than 1 year
+                                                    </Typography>
+                                                </Grid>
+                                            </Grid>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+
+                                {/* Cloud Services */}
+                                <Grid item xs={12} md={6}>
+                                    <Card sx={{ border: '2px solid', borderColor: 'secondary.main' }}>
+                                        <CardContent>
+                                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
+                                                <CloudSync color="secondary" />
+                                                <Typography variant="h6" color="secondary.main">
+                                                    Cloud Services
+                                                </Typography>
+                                            </Box>
+
+                                            <Grid container spacing={2}>
+                                                <Grid item xs={12}>
+                                                    <Button
+                                                        variant="outlined"
+                                                        color="secondary"
+                                                        startIcon={<CloudSync />}
+                                                        fullWidth
+                                                        size="small"
+                                                        sx={{ justifyContent: 'flex-start', mb: 1 }}
+                                                    >
+                                                        Sync Configuration
+                                                    </Button>
+                                                    <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
+                                                        Manage cloud service integrations and API keys
+                                                    </Typography>
+                                                </Grid>
+
+                                                <Grid item xs={12}>
+                                                    <FormControl fullWidth size="small" sx={{ mb: 2 }}>
+                                                        <InputLabel>Cloud Provider</InputLabel>
+                                                        <Select
+                                                            defaultValue="aws"
+                                                            label="Cloud Provider"
+                                                            color="secondary"
+                                                        >
+                                                            <MenuItem value="aws">AWS</MenuItem>
+                                                            <MenuItem value="azure">Azure</MenuItem>
+                                                            <MenuItem value="gcp">Google Cloud</MenuItem>
+                                                            <MenuItem value="multi">Multi-Cloud</MenuItem>
+                                                        </Select>
+                                                    </FormControl>
+                                                </Grid>
+
+                                                <Grid item xs={12}>
+                                                    <FormControlLabel
+                                                        control={<Switch defaultChecked color="secondary" />}
+                                                        label="Auto-sync Reports"
+                                                    />
+                                                    <Typography variant="caption" color="text.secondary" display="block">
+                                                        Automatically sync reports to cloud storage
+                                                    </Typography>
+                                                </Grid>
+                                            </Grid>
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            </>
+                        )}
+
                         {/* Data & Privacy */}
                         <Grid item xs={12}>
                             <Card>
@@ -517,6 +863,7 @@ export default function SettingsPage() {
                                                     variant="outlined"
                                                     size="small"
                                                     sx={{ justifyContent: 'flex-start' }}
+                                                    onClick={handleDataExport}
                                                 >
                                                     Export My Data
                                                 </Button>

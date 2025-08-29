@@ -124,9 +124,9 @@ export default function AssessmentDetailPage() {
         </Alert>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => router.push('/assessments')}
+          onClick={() => router.push('/dashboard')}
         >
-          Back to Assessments
+          Back to Dashboard
         </Button>
       </Container>
     );
@@ -140,9 +140,9 @@ export default function AssessmentDetailPage() {
         </Alert>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => router.push('/assessments')}
+          onClick={() => router.push('/dashboard')}
         >
-          Back to Assessments
+          Back to Dashboard
         </Button>
       </Container>
     );
@@ -154,10 +154,10 @@ export default function AssessmentDetailPage() {
       <Box sx={{ mb: 4 }}>
         <Button
           startIcon={<ArrowBackIcon />}
-          onClick={() => router.push('/assessments')}
+          onClick={() => router.push('/dashboard')}
           sx={{ mb: 2 }}
         >
-          Back to Assessments
+          Back to Dashboard
         </Button>
         
         <Typography variant="h4" gutterBottom>

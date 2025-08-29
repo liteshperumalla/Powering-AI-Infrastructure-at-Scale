@@ -38,6 +38,7 @@ import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { logout } from '@/store/slices/authSlice';
 import UserProfile from './UserProfile';
 import NotificationSystem from './NotificationSystem';
+import ThemeToggle from './ThemeToggle';
 
 const navigationItems = [
     { text: 'Dashboard', icon: <Dashboard />, path: '/dashboard' },
@@ -46,9 +47,19 @@ const navigationItems = [
     { text: 'Cloud Services', icon: <CloudQueue />, path: '/cloud-services' },
     { text: 'Compliance', icon: <Security />, path: '/compliance' },
     { text: 'Reports', icon: <Analytics />, path: '/reports' },
-    { text: 'System Status', icon: <MonitorHeart />, path: '/system-status' },
+    { text: 'System Status', icon: <MonitorHeart />, path: '/system-status', adminOnly: true },
     { text: 'Settings', icon: <Settings />, path: '/settings' },
 ];
+
+// Helper function to filter navigation items based on user role
+const getFilteredNavigationItems = (userRole?: string) => {
+    return navigationItems.filter(item => {
+        if (item.adminOnly && userRole !== 'admin') {
+            return false;
+        }
+        return true;
+    });
+};
 
 interface NavigationProps {
     title?: string;
@@ -106,7 +117,7 @@ export default function Navigation({ title = 'Dashboard', children }: Navigation
                 </Typography>
             </Toolbar>
             <List>
-                {navigationItems.map((item) => (
+                {getFilteredNavigationItems(user?.role).map((item) => (
                     <ListItem
                         key={item.text}
                         component="button"
@@ -189,27 +200,46 @@ export default function Navigation({ title = 'Dashboard', children }: Navigation
                     </Typography>
 
                     {isAuthenticated && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                            {/* Theme Toggle */}
+                            <ThemeToggle />
+                            
                             {/* Notification System Bell - positioned in toolbar */}
-                            <Box sx={{ mr: 1 }}>
-                                <NotificationSystem />
-                            </Box>
+                            <NotificationSystem />
                             
                             {user && (
                                 <>
-                                    <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
-                                        <Typography variant="body2">{user.full_name}</Typography>
+                                    <Box sx={{ 
+                                        display: { xs: 'none', sm: 'flex' }, 
+                                        flexDirection: 'column', 
+                                        alignItems: 'flex-end',
+                                        mr: 1
+                                    }}>
+                                        <Typography variant="body2" sx={{ lineHeight: 1.2, color: 'inherit' }}>
+                                            {user.full_name}
+                                        </Typography>
                                         <Chip
-                                            label={user.role}
+                                            label={user.role?.toUpperCase()}
                                             size="small"
                                             color="secondary"
-                                            sx={{ height: 16, fontSize: '0.7rem' }}
+                                            sx={{ 
+                                                height: 18, 
+                                                fontSize: '0.65rem',
+                                                mt: 0.25
+                                            }}
                                         />
                                     </Box>
                                     <Avatar
-                                        sx={{ width: 32, height: 32, bgcolor: 'secondary.main' }}
+                                        sx={{ 
+                                            width: 36, 
+                                            height: 36, 
+                                            bgcolor: 'secondary.main',
+                                            cursor: 'pointer',
+                                            '&:hover': {
+                                                bgcolor: 'secondary.dark'
+                                            }
+                                        }}
                                         onClick={handleProfileMenuOpen}
-                                        style={{ cursor: 'pointer' }}
                                     >
                                         <Person fontSize="small" />
                                     </Avatar>

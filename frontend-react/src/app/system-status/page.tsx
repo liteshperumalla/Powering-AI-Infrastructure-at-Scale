@@ -13,7 +13,7 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 
 export default function SystemStatusPage() {
     return (
-        <ProtectedRoute>
+        <ProtectedRoute allowedRoles={['admin']}>
             <Navigation title="System Status">
                 <Container maxWidth="lg">
                     <Box sx={{ mb: 4 }}>

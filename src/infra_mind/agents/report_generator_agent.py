@@ -12,6 +12,7 @@ from typing import Dict, Any, List, Optional, Union
 from dataclasses import dataclass, field
 from pathlib import Path
 import uuid
+from bson import ObjectId
 
 from .base import BaseAgent, AgentConfig, AgentRole, AgentStatus, AgentResult
 from .research_agent import ResearchAgent
@@ -561,9 +562,8 @@ class ReportGeneratorAgent(BaseAgent):
         if hasattr(assessment, 'business_requirements') and assessment.business_requirements:
             company_name = assessment.business_requirements.get("company_name", company_name)
         
-        # Create report with enhanced metadata
+        # Create report with enhanced metadata (let MongoDB generate the ID)
         report = Report(
-            id=str(uuid.uuid4()),
             title=template["title_template"].format(company_name=company_name),
             assessment_id=assessment.id,
             report_type=report_type,
@@ -649,7 +649,7 @@ class ReportGeneratorAgent(BaseAgent):
             drill_down_data=drill_down_data,
             charts_config=charts_config,
             generated_by=self.name,
-            section_id=str(uuid.uuid4())
+            section_id=str(ObjectId())  # Use ObjectId instead of uuid
         )
     
     async def _generate_section_with_llm(self, title: str, assessment: Any, recommendations: List[Any], research_data: Dict[str, Any]) -> str:

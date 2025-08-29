@@ -14,6 +14,7 @@ import {
   useMediaQuery,
   Stack,
 } from '@mui/material';
+import ThemeToggle from '@/components/ThemeToggle';
 import {
   CloudQueue,
   Security,
@@ -42,10 +43,12 @@ export default function Home() {
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Infra Mind
           </Typography>
+          <ThemeToggle />
           <Button 
             sx={{ 
               color: theme.palette.mode === 'dark' ? 'white' : 'primary.main',
-              '&:hover': { bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(25,118,210,0.1)' }
+              '&:hover': { bgcolor: theme.palette.mode === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(25,118,210,0.1)' },
+              ml: 1
             }} 
             onClick={() => router.push('/auth/login')}
           >
@@ -158,16 +161,17 @@ export default function Home() {
       </Box>
 
       {/* Features Section */}
-      <Container maxWidth="lg" sx={{ py: 8 }}>
-        <Typography
-          variant="h3"
-          component="h2"
-          textAlign="center"
-          gutterBottom
-          sx={{ mb: 6 }}
-        >
-          Core Capabilities
-        </Typography>
+      <Box sx={{ bgcolor: 'background.default', minHeight: '100vh' }}>
+        <Container maxWidth="lg" sx={{ py: 8 }}>
+          <Typography
+            variant="h3"
+            component="h2"
+            textAlign="center"
+            gutterBottom
+            sx={{ mb: 6, color: 'text.primary' }}
+          >
+            Core Capabilities
+          </Typography>
         <Box
           sx={{
             display: 'grid',
@@ -224,10 +228,11 @@ export default function Home() {
             </CardContent>
           </Card>
         </Box>
-      </Container>
+        </Container>
+      </Box>
 
       {/* CTA Section */}
-      <Box sx={{ bgcolor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50', py: 8 }}>
+      <Box sx={{ bgcolor: theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100', py: 8 }}>
         <Container maxWidth="md" sx={{ textAlign: 'center' }}>
           <Typography 
             variant="h4" 
@@ -252,7 +257,11 @@ export default function Home() {
       </Box>
 
       {/* Footer */}
-      <Box sx={{ bgcolor: 'grey.900', color: 'white', py: 4 }}>
+      <Box sx={{ 
+        bgcolor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.800',
+        color: theme.palette.mode === 'dark' ? 'white' : 'white',
+        py: 4 
+      }}>
         <Container maxWidth="lg">
           <Box
             sx={{
@@ -267,11 +276,11 @@ export default function Home() {
               <Typography variant="h6" gutterBottom>
                 Infra Mind
               </Typography>
-              <Typography variant="body2" color="grey.400">
+              <Typography variant="body2" sx={{ color: theme.palette.mode === 'dark' ? 'grey.400' : 'grey.300' }}>
                 Empowering businesses to strategically plan and scale their AI infrastructure with confidence.
               </Typography>
             </Box>
-            <Typography variant="body2" color="grey.400">
+            <Typography variant="body2" sx={{ color: theme.palette.mode === 'dark' ? 'grey.400' : 'grey.300' }}>
               © 2025 Infra Mind. All rights reserved.
             </Typography>
           </Box>

@@ -160,12 +160,31 @@ export default function ProgressIndicator({
                                         <Typography variant="body1" fontWeight="medium">
                                             {step.label}
                                         </Typography>
-                                        <Chip
-                                            label={step.status}
-                                            size="small"
-                                            color={getStatusColor(step.status)}
-                                            variant="outlined"
-                                        />
+                                        {step.status === 'completed' && (
+                                            <Chip
+                                                label="✓"
+                                                size="small"
+                                                color="success"
+                                                variant="filled"
+                                                sx={{ minWidth: 'auto', px: 1 }}
+                                            />
+                                        )}
+                                        {step.status === 'active' && (
+                                            <Chip
+                                                label="In Progress"
+                                                size="small"
+                                                color="primary"
+                                                variant="outlined"
+                                            />
+                                        )}
+                                        {step.status === 'error' && (
+                                            <Chip
+                                                label="Error"
+                                                size="small"
+                                                color="error"
+                                                variant="outlined"
+                                            />
+                                        )}
                                     </Box>
                                 </StepLabel>
                                 {step.description && (

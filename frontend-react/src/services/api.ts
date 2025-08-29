@@ -310,9 +310,15 @@ class ApiClient {
         };
 
         try {
+            console.log('🌐 API Request:', { method: config.method || 'GET', url, hasAuth: !!headers.Authorization });
             const response = await fetch(url, config);
 
             if (!response.ok) {
+                console.error('❌ API Request failed:', { 
+                    status: response.status, 
+                    statusText: response.statusText, 
+                    url 
+                });
                 let errorData: ApiError;
 
                 try {
@@ -846,6 +852,10 @@ class ApiClient {
         return this.request<Report>(`/reports/${reportId}`);
     }
 
+    async getReportById(reportId: string): Promise<Report> {
+        return this.request<Report>(`/reports/${reportId}`);
+    }
+
     async downloadReport(reportId: string, format: 'pdf' | 'docx' | 'html' = 'pdf', assessmentId?: string): Promise<Blob> {
         let downloadUrl;
         if (assessmentId) {
@@ -878,17 +888,18 @@ class ApiClient {
     }
 
     async shareReport(reportId: string, shareOptions: {
-        isPublic?: boolean;
-        sharedWith?: string[];
-        expiresAt?: string;
-        requireAuth?: boolean;
-        allowDownload?: boolean;
-        allowComments?: boolean;
-        customMessage?: string;
-    }): Promise<{ shareUrl: string }> {
-        return this.request<{ shareUrl: string }>(`/reports/${reportId}/share`, {
+        user_email: string;
+        permission?: 'view' | 'edit' | 'admin';
+    }): Promise<{ message: string }> {
+        return this.request<{ message: string }>(`/v1/reports/${reportId}/share`, {
             method: 'POST',
             body: JSON.stringify(shareOptions),
+        });
+    }
+
+    async createPublicLink(reportId: string): Promise<{ public_token: string }> {
+        return this.request<{ public_token: string }>(`/v1/reports/${reportId}/public-link`, {
+            method: 'POST',
         });
     }
 

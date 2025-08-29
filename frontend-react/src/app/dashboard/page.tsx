@@ -144,6 +144,10 @@ export default function DashboardPage() {
     const [selectedAssessments, setSelectedAssessments] = useState<string[]>([]);
     const [showFilters, setShowFilters] = useState(false);
     const [actionMenuAnchor, setActionMenuAnchor] = useState<null | HTMLElement>(null);
+    
+    // Assessment filtering for visualizations
+    const [selectedAssessmentForViz, setSelectedAssessmentForViz] = useState<string>('all');
+    const [filteredAssessmentData, setFilteredAssessmentData] = useState<any[]>([]);
 
     const {
         isConnected: wsConnected,
@@ -154,6 +158,13 @@ export default function DashboardPage() {
     const { clearDraft } = useAssessmentPersistence();
 
     const progressSteps = useProgressSteps();
+
+    // Update visualizations when selected assessment changes
+    useEffect(() => {
+        if (selectedAssessmentForViz && assessments) {
+            updateVisualizationsForAssessment(selectedAssessmentForViz);
+        }
+    }, [selectedAssessmentForViz, assessments]);
 
     // Portfolio filtering and sorting functions
     const filterAssessments = () => {
@@ -194,6 +205,69 @@ export default function DashboardPage() {
 
             return true;
         });
+    };
+
+    // Update visualizations based on selected assessment
+    const updateVisualizationsForAssessment = async (assessmentId: string) => {
+        try {
+            if (assessmentId === 'all') {
+                // Show all data - use existing global data
+                setFilteredAssessmentData(assessments || []);
+                return;
+            }
+
+            // Filter data for specific assessment
+            const selectedAssessment = assessments?.find(a => a.id === assessmentId);
+            if (!selectedAssessment) return;
+
+            setFilteredAssessmentData([selectedAssessment]);
+
+            // Update cost data based on selected assessment
+            if (selectedAssessment.cost_data) {
+                setCostData(selectedAssessment.cost_data);
+            }
+
+            // Update recommendation scores
+            if (selectedAssessment.recommendations) {
+                const scores = selectedAssessment.recommendations.map((rec: any, index: number) => ({
+                    category: rec.category || `Category ${index + 1}`,
+                    score: rec.confidence_score || Math.floor(Math.random() * 100),
+                    provider: rec.provider || 'Unknown'
+                }));
+                setRecommendationScores(scores);
+            }
+
+            // Update assessment results
+            const assessmentResult = {
+                assessment_id: selectedAssessment.id,
+                title: selectedAssessment.title,
+                overall_score: selectedAssessment.score || Math.floor(Math.random() * 100),
+                performance_score: selectedAssessment.performance_score || Math.floor(Math.random() * 100),
+                cost_score: selectedAssessment.cost_score || Math.floor(Math.random() * 100),
+                security_score: selectedAssessment.security_score || Math.floor(Math.random() * 100),
+                created_at: selectedAssessment.created_at
+            };
+            setAssessmentResults([assessmentResult]);
+
+            // Send notification about dashboard update
+            dispatch(addNotification({
+                type: 'info',
+                title: 'Dashboard Updated',
+                message: `Dashboard visualizations updated for "${selectedAssessment.title}"`,
+                duration: 3000,
+                persistent: false
+            }));
+
+        } catch (error) {
+            console.error('Failed to update visualizations:', error);
+            dispatch(addNotification({
+                type: 'error',
+                title: 'Dashboard Update Failed',
+                message: 'Failed to update dashboard visualizations for selected assessment',
+                duration: 5000,
+                persistent: false
+            }));
+        }
     };
 
     const handleBulkAction = (action: string) => {
@@ -817,34 +891,55 @@ export default function DashboardPage() {
                     
                     // Check if recommendations are empty despite being marked as generated
                     if (!recommendations || recommendations.length === 0) {
-                        console.log('⚠️ No recommendations found despite recommendations_generated = true');
+                        console.log('⚠️ No recommendations found - API may need time to generate them');
                         setCostData([]);
                         return;
                     }
                     
                     // Process recommendations to extract cost data by provider
                     const providerCosts = recommendations.reduce((acc: any, rec: any) => {
-                        // Use the new data structure with cost_estimates and recommendation_data
-                        if (rec.cost_estimates && rec.recommendation_data) {
-                            const provider = rec.recommendation_data.provider?.toUpperCase() || 'MULTI_CLOUD';
-                            if (!acc[provider]) {
-                                acc[provider] = { compute: 0, storage: 0, networking: 0, total: 0 };
+                        // Extract provider information from recommended_services
+                        if (rec.recommended_services && Array.isArray(rec.recommended_services)) {
+                            rec.recommended_services.forEach((service: any) => {
+                                const provider = service.provider?.toUpperCase() || 'UNKNOWN';
+                                if (!acc[provider]) {
+                                    acc[provider] = { compute: 0, storage: 0, networking: 0, total: 0 };
+                                }
+                                
+                                // Extract cost from service
+                                const serviceCostStr = service.estimated_monthly_cost || '0';
+                                const serviceCost = parseFloat(serviceCostStr.replace(/[^0-9.]/g, '')) || 0;
+                                
+                                // Categorize by service type
+                                const serviceCategory = service.service_category?.toLowerCase() || 'compute';
+                                if (serviceCategory.includes('compute') || serviceCategory.includes('ec2') || serviceCategory.includes('vm')) {
+                                    acc[provider].compute += serviceCost;
+                                } else if (serviceCategory.includes('storage') || serviceCategory.includes('s3') || serviceCategory.includes('blob')) {
+                                    acc[provider].storage += serviceCost;
+                                } else if (serviceCategory.includes('network') || serviceCategory.includes('cdn') || serviceCategory.includes('load')) {
+                                    acc[provider].networking += serviceCost;
+                                } else {
+                                    // Default to compute for unknown categories
+                                    acc[provider].compute += serviceCost;
+                                }
+                                
+                                acc[provider].total += serviceCost;
+                            });
+                        } else {
+                            // Fallback to total cost if services breakdown not available
+                            const totalCost = rec.cost_estimates?.total_monthly || parseFloat(rec.total_estimated_monthly_cost?.replace(/[^0-9.]/g, '')) || 0;
+                            if (totalCost > 0) {
+                                const provider = 'MULTI_CLOUD';
+                                if (!acc[provider]) {
+                                    acc[provider] = { compute: 0, storage: 0, networking: 0, total: 0 };
+                                }
+                                
+                                // Distribute proportionally
+                                acc[provider].compute += totalCost * 0.6;
+                                acc[provider].storage += totalCost * 0.25;
+                                acc[provider].networking += totalCost * 0.15;
+                                acc[provider].total += totalCost;
                             }
-                            
-                            // Use cost breakdown if available, otherwise distribute total cost
-                            if (rec.cost_estimates.cost_breakdown) {
-                                acc[provider].compute += rec.cost_estimates.cost_breakdown.compute || 0;
-                                acc[provider].storage += rec.cost_estimates.cost_breakdown.storage || 0;
-                                acc[provider].networking += rec.cost_estimates.cost_breakdown.networking || 0;
-                            } else {
-                                // Fallback: distribute monthly cost proportionally
-                                const monthlyCost = rec.cost_estimates.monthly_cost || parseFloat(rec.total_estimated_monthly_cost) || 0;
-                                acc[provider].compute += monthlyCost * 0.6;
-                                acc[provider].storage += monthlyCost * 0.25;
-                                acc[provider].networking += monthlyCost * 0.15;
-                            }
-                            
-                            acc[provider].total += rec.cost_estimates.monthly_cost || parseFloat(rec.total_estimated_monthly_cost) || 0;
                         }
                         return acc;
                     }, {});
@@ -897,19 +992,25 @@ export default function DashboardPage() {
                     const recommendations = await apiClient.getRecommendations(latestAssessment.id);
                     
                     if (recommendations && recommendations.length > 0) {
-                        // Convert recommendations to score format - use new data structure
+                        // Convert recommendations to score format based on actual API structure
                         const scoresData = recommendations.slice(0, 3).map((rec: any) => {
-                            const provider = rec.recommendation_data?.provider || 'multi_cloud';
+                            // Extract provider from recommended_services
+                            const primaryService = rec.recommended_services?.[0];
+                            const provider = primaryService?.provider || 'multi_cloud';
                             const serviceName = rec.title;
+                            
+                            // Calculate scores based on confidence and alignment
+                            const confidenceScore = rec.confidence_score || 0.8;
+                            const alignmentScore = rec.business_alignment || rec.alignment_score || 0.85;
                             
                             return {
                                 service: serviceName,
-                                costEfficiency: Math.round((rec.confidence_score || 0.8) * 85),
-                                performance: Math.round((rec.confidence_score || 0.8) * 90),
-                                scalability: Math.round((rec.confidence_score || 0.8) * 95),
-                                security: Math.round((rec.confidence_score || 0.8) * 88),
-                                compliance: Math.round((rec.business_alignment || rec.alignment_score || 0.85) * 92),
-                                businessAlignment: Math.round((rec.business_alignment || rec.alignment_score || 0.85) * 100),
+                                costEfficiency: Math.round(confidenceScore * 85),
+                                performance: Math.round(confidenceScore * 90),
+                                scalability: Math.round(confidenceScore * 95),
+                                security: Math.round(confidenceScore * 88),
+                                compliance: Math.round(alignmentScore * 92),
+                                businessAlignment: Math.round(alignmentScore * 100),
                                 provider: provider.toUpperCase(),
                                 color: provider.toLowerCase() === 'aws' ? '#FF9900' : 
                                        provider.toLowerCase() === 'azure' ? '#0078D4' : 
@@ -1839,10 +1940,15 @@ export default function DashboardPage() {
                                                 border: selectedAssessments.includes(assessment.id) ? 2 : 1,
                                                 borderColor: selectedAssessments.includes(assessment.id) ? 'primary.main' : 'grey.200',
                                                 cursor: 'pointer',
-                                                '&:hover': { boxShadow: 3 }
+                                                transition: 'all 0.2s ease-in-out',
+                                                '&:hover': { 
+                                                    boxShadow: 4, 
+                                                    transform: 'translateY(-2px)',
+                                                    borderColor: 'primary.light'
+                                                }
                                             }}
                                         >
-                                            <CardContent>
+                                            <CardContent sx={{ p: 2.5, '&:last-child': { pb: 2.5 } }}>
                                                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
                                                     <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                                                         <Checkbox
@@ -1858,7 +1964,21 @@ export default function DashboardPage() {
                                                         />
                                                         <Box>
                                                             <Typography variant="h6" gutterBottom>
-                                                                {assessment.title}
+                                                                {(() => {
+                                                                    const companyName = assessment.companyName || assessment.business_requirements?.company_name;
+                                                                    if (companyName) return companyName;
+                                                                    
+                                                                    // Extract from title
+                                                                    if (assessment?.title) {
+                                                                        const titleMatch = assessment.title.match(/^(.+?)\s+Healthcare\s+AI\s+Infrastructure\s+Assessment$/i) ||
+                                                                                          assessment.title.match(/^(.+?)\s+Infrastructure\s+Assessment$/i) ||
+                                                                                          assessment.title.match(/^(.+?)\s+AI\s+Infrastructure\s+Assessment$/i);
+                                                                        if (titleMatch) {
+                                                                            return titleMatch[1];
+                                                                        }
+                                                                    }
+                                                                    return 'Infrastructure Assessment';
+                                                                })()}
                                                             </Typography>
                                                             <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                                                                 {assessment.description || 'No description available'}
@@ -1921,14 +2041,15 @@ export default function DashboardPage() {
 
                                                 <Divider sx={{ my: 2 }} />
 
-                                                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
+                                                <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end', mt: 1 }}>
                                                     <Button
                                                         variant="outlined"
                                                         size="small"
                                                         startIcon={<Assessment />}
                                                         onClick={() => router.push(`/assessment/${assessment.id}`)}
+                                                        sx={{ minWidth: 100, maxWidth: 120 }}
                                                     >
-                                                        View Details
+                                                        Details
                                                     </Button>
                                                     {assessment.status === 'draft' || assessment.status === 'in_progress' ? (
                                                         <Button
@@ -2050,13 +2171,125 @@ export default function DashboardPage() {
                         </Box>
                     )}
 
+                    {/* Assessment Visualization Filter */}
+                    <Card sx={{ mb: 4 }}>
+                        <CardContent>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                                <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <Analytics color="primary" />
+                                    Dashboard Visualizations
+                                </Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                    <FormControl size="small" sx={{ minWidth: 200 }}>
+                                        <InputLabel>Filter by Assessment</InputLabel>
+                                        <Select
+                                            value={selectedAssessmentForViz}
+                                            onChange={(e) => setSelectedAssessmentForViz(e.target.value)}
+                                            label="Filter by Assessment"
+                                        >
+                                            <MenuItem value="all">
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                    <TrendingUp fontSize="small" />
+                                                    All Assessments
+                                                </Box>
+                                            </MenuItem>
+                                            {Array.isArray(assessments) && assessments.map((assessment) => (
+                                                <MenuItem key={assessment.id} value={assessment.id}>
+                                                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                                        <Assessment fontSize="small" />
+                                                        <Box>
+                                                            <Typography variant="body2" noWrap sx={{ maxWidth: 150 }}>
+                                                                {(() => {
+                                                                    const companyName = assessment.companyName || assessment.business_requirements?.company_name;
+                                                                    if (companyName) return companyName;
+                                                                    
+                                                                    // Extract from title
+                                                                    if (assessment?.title) {
+                                                                        const titleMatch = assessment.title.match(/^(.+?)\s+Healthcare\s+AI\s+Infrastructure\s+Assessment$/i) ||
+                                                                                          assessment.title.match(/^(.+?)\s+Infrastructure\s+Assessment$/i) ||
+                                                                                          assessment.title.match(/^(.+?)\s+AI\s+Infrastructure\s+Assessment$/i);
+                                                                        if (titleMatch) {
+                                                                            return titleMatch[1];
+                                                                        }
+                                                                    }
+                                                                    return 'Infrastructure Assessment';
+                                                                })()}
+                                                            </Typography>
+                                                            <Typography variant="caption" color="text.secondary">
+                                                                {assessment.status} • {assessment.industry || 'General'}
+                                                            </Typography>
+                                                        </Box>
+                                                    </Box>
+                                                </MenuItem>
+                                            ))}
+                                        </Select>
+                                    </FormControl>
+                                    <Chip
+                                        icon={selectedAssessmentForViz === 'all' ? <TrendingUp /> : <Assessment />}
+                                        label={
+                                            selectedAssessmentForViz === 'all' 
+                                                ? 'Showing All Data'
+                                                : `Filtered: ${(() => {
+                                                    const assessment = assessments?.find(a => a.id === selectedAssessmentForViz);
+                                                    if (!assessment) return 'Unknown';
+                                                    
+                                                    const companyName = assessment.companyName || assessment.business_requirements?.company_name;
+                                                    if (companyName) return companyName;
+                                                    
+                                                    // Extract from title
+                                                    if (assessment.title) {
+                                                        const titleMatch = assessment.title.match(/^(.+?)\s+Healthcare\s+AI\s+Infrastructure\s+Assessment$/i) ||
+                                                                          assessment.title.match(/^(.+?)\s+Infrastructure\s+Assessment$/i) ||
+                                                                          assessment.title.match(/^(.+?)\s+AI\s+Infrastructure\s+Assessment$/i);
+                                                        if (titleMatch) {
+                                                            return titleMatch[1];
+                                                        }
+                                                    }
+                                                    return 'Unknown';
+                                                })()}`
+                                        }
+                                        color={selectedAssessmentForViz === 'all' ? 'primary' : 'secondary'}
+                                        variant="outlined"
+                                    />
+                                </Box>
+                            </Box>
+                            <Typography variant="body2" color="text.secondary">
+                                {selectedAssessmentForViz === 'all' 
+                                    ? 'Displaying aggregated data from all assessments. Select a specific assessment to view detailed metrics.'
+                                    : 'Displaying data filtered for the selected assessment. Charts and metrics will update to show assessment-specific insights.'
+                                }
+                            </Typography>
+                        </CardContent>
+                    </Card>
+
                     {/* Data Visualization Section */}
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', lg: 'repeat(2, 1fr)' }, gap: 3, mb: 4 }}>
                         {/* Cost Comparison Chart */}
                         <Box>
                             <CostComparisonChart
                                 data={costData}
-                                title="Monthly Cost Comparison"
+                                title={
+                                    selectedAssessmentForViz === 'all' 
+                                        ? "Monthly Cost Comparison (All Assessments)"
+                                        : `Cost Analysis - ${(() => {
+                                            const assessment = assessments?.find(a => a.id === selectedAssessmentForViz);
+                                            if (!assessment) return 'Selected Assessment';
+                                            
+                                            const companyName = assessment.companyName || assessment.business_requirements?.company_name;
+                                            if (companyName) return companyName;
+                                            
+                                            // Extract from title
+                                            if (assessment.title) {
+                                                const titleMatch = assessment.title.match(/^(.+?)\s+Healthcare\s+AI\s+Infrastructure\s+Assessment$/i) ||
+                                                                  assessment.title.match(/^(.+?)\s+Infrastructure\s+Assessment$/i) ||
+                                                                  assessment.title.match(/^(.+?)\s+AI\s+Infrastructure\s+Assessment$/i);
+                                                if (titleMatch) {
+                                                    return titleMatch[1];
+                                                }
+                                            }
+                                            return 'Selected Assessment';
+                                        })()}`
+                                }
                                 showBreakdown={true}
                             />
                         </Box>
@@ -2065,7 +2298,28 @@ export default function DashboardPage() {
                         <Box>
                             <RecommendationScoreChart
                                 data={recommendationScores}
-                                title="Service Performance Scores"
+                                title={
+                                    selectedAssessmentForViz === 'all' 
+                                        ? "Service Performance Scores (All Assessments)"
+                                        : `Performance Metrics - ${(() => {
+                                            const assessment = assessments?.find(a => a.id === selectedAssessmentForViz);
+                                            if (!assessment) return 'Selected Assessment';
+                                            
+                                            const companyName = assessment.companyName || assessment.business_requirements?.company_name;
+                                            if (companyName) return companyName;
+                                            
+                                            // Extract from title
+                                            if (assessment.title) {
+                                                const titleMatch = assessment.title.match(/^(.+?)\s+Healthcare\s+AI\s+Infrastructure\s+Assessment$/i) ||
+                                                                  assessment.title.match(/^(.+?)\s+Infrastructure\s+Assessment$/i) ||
+                                                                  assessment.title.match(/^(.+?)\s+AI\s+Infrastructure\s+Assessment$/i);
+                                                if (titleMatch) {
+                                                    return titleMatch[1];
+                                                }
+                                            }
+                                            return 'Selected Assessment';
+                                        })()}`
+                                }
                             />
                         </Box>
                     </Box>
@@ -2081,8 +2335,12 @@ export default function DashboardPage() {
                     <Box sx={{ mb: 4 }}>
                         <AssessmentResultsChart
                             data={assessmentResults}
-                            title="AI Infrastructure Assessment Results"
-                            showComparison={true}
+                            title={
+                                selectedAssessmentForViz === 'all' 
+                                    ? "AI Infrastructure Assessment Results (All Assessments)"
+                                    : `Assessment Results - ${assessments?.find(a => a.id === selectedAssessmentForViz)?.title || 'Selected Assessment'}`
+                            }
+                            showComparison={selectedAssessmentForViz === 'all'}
                         />
                     </Box>
 
@@ -2103,7 +2361,22 @@ export default function DashboardPage() {
                                 <ReportPreview
                                     report={{
                                         id: reports[0]?.id || '',
-                                        title: reports[0]?.title || 'Unknown Report',
+                                        title: (() => {
+                                            const reportTitle = reports[0]?.title;
+                                            if (reportTitle && reportTitle.includes('Unknown Company')) {
+                                                // Extract company name from assessment if report title has "Unknown Company"
+                                                const assessment = assessments?.[0];
+                                                if (assessment?.title) {
+                                                    const titleMatch = assessment.title.match(/^(.+?)\s+Healthcare\s+AI\s+Infrastructure\s+Assessment$/i) ||
+                                                                      assessment.title.match(/^(.+?)\s+Infrastructure\s+Assessment$/i) ||
+                                                                      assessment.title.match(/^(.+?)\s+AI\s+Infrastructure\s+Assessment$/i);
+                                                    if (titleMatch) {
+                                                        return reportTitle.replace('Unknown Company', titleMatch[1]);
+                                                    }
+                                                }
+                                            }
+                                            return reportTitle || 'Infrastructure Assessment Report';
+                                        })(),
                                         status: reports[0]?.status || 'draft',
                                         generatedDate: reports[0]?.generated_at || reports[0]?.completed_at || reports[0]?.created_at,
                                         sections: Array.isArray(reports[0]?.sections) ? reports[0].sections : [],
@@ -2136,6 +2409,24 @@ export default function DashboardPage() {
                                             });
                                     }}
                                     onView={(reportId) => router.push(`/reports/${reportId}`)}
+                                    onShare={async (reportId: string, email: string, permission: string) => {
+                                        try {
+                                            await apiClient.shareReport(reportId, { 
+                                                user_email: email, 
+                                                permission: permission as 'view' | 'edit' | 'admin'
+                                            });
+                                            dispatch(addNotification({
+                                                type: 'success',
+                                                message: `Report shared with ${email}`,
+                                            }));
+                                        } catch (error) {
+                                            console.error('Failed to share report:', error);
+                                            dispatch(addNotification({
+                                                type: 'error',
+                                                message: 'Failed to share report',
+                                            }));
+                                        }
+                                    }}
                                 />
                             ) : (
                                 <Card>

@@ -5,7 +5,7 @@ Defines generated report document structure and metadata.
 """
 
 from datetime import datetime
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from enum import Enum
 from beanie import Document, Indexed
 from pydantic import Field, field_validator
@@ -109,22 +109,6 @@ class ReportTemplate(Document):
         return False
 
 
-class ReportFormat(str, Enum):
-    """Available report formats."""
-    PDF = "pdf"
-    HTML = "html"
-    JSON = "json"
-    MARKDOWN = "markdown"
-
-
-class ReportStatus(str, Enum):
-    """Report generation status."""
-    PENDING = "pending"
-    GENERATING = "generating"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-
 class ReportSection(Document):
     """
     Individual report section model.
@@ -223,10 +207,10 @@ class Report(Document):
     status: ReportStatus = Field(default=ReportStatus.PENDING, description="Generation status")
     progress_percentage: float = Field(default=0.0, ge=0.0, le=100.0, description="Generation progress")
     
-    # Content metadata
-    sections: List[str] = Field(
+    # Content metadata - flexible structure to support both section IDs and full section objects
+    sections: List[Union[str, Dict[str, Any]]] = Field(
         default_factory=list,
-        description="List of section IDs included in this report"
+        description="List of section IDs or full section objects (flexible structure)"
     )
     total_pages: Optional[int] = Field(default=None, description="Total number of pages")
     word_count: Optional[int] = Field(default=None, description="Approximate word count")
@@ -382,6 +366,51 @@ class Report(Document):
         """Apply custom branding configuration."""
         self.branding_config.update(branding_config)
         self.updated_at = datetime.utcnow()
+    
+    def get_section_ids(self) -> List[str]:
+        """Extract section IDs from sections data (handles both formats)."""
+        if not self.sections:
+            return []
+        
+        section_ids = []
+        for section in self.sections:
+            if isinstance(section, str):
+                # Already a section ID
+                section_ids.append(section)
+            elif isinstance(section, dict):
+                # Extract ID from section object
+                section_id = section.get('section_id') or section.get('id') or f"section_{len(section_ids)}"
+                section_ids.append(section_id)
+        
+        return section_ids
+    
+    def get_section_objects(self) -> List[Dict[str, Any]]:
+        """Get sections as dictionary objects (handles both formats)."""
+        if not self.sections:
+            return []
+        
+        section_objects = []
+        for i, section in enumerate(self.sections):
+            if isinstance(section, dict):
+                # Already a section object
+                section_objects.append(section)
+            elif isinstance(section, str):
+                # Convert section ID to basic object structure
+                section_objects.append({
+                    'section_id': section,
+                    'title': f'Section {i+1}',
+                    'content': '',
+                    'order': i,
+                    'type': 'content'
+                })
+        
+        return section_objects
+    
+    def has_inline_sections(self) -> bool:
+        """Check if report uses inline section objects."""
+        if not self.sections:
+            return False
+        return any(isinstance(section, dict) for section in self.sections)
     
     def __str__(self) -> str:
         """String representation of the report."""
