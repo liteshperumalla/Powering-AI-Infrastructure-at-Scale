@@ -215,7 +215,7 @@ class ComplianceAgent(BaseAgent):
         """Identify which regulations apply to the organization."""
         logger.debug("Identifying applicable regulations")
         
-        assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+        assessment_data = self.current_assessment.model_dump() if self.current_assessment else {}
         business_req = assessment_data.get("business_requirements", {})
         
         applicable_regs = []
@@ -279,7 +279,7 @@ class ComplianceAgent(BaseAgent):
         """Assess current compliance posture against applicable regulations."""
         logger.debug("Assessing compliance posture")
         
-        assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+        assessment_data = self.current_assessment.model_dump() if self.current_assessment else {}
         technical_req = assessment_data.get("technical_requirements", {})
         
         # Use data processing tool to analyze current state
@@ -311,7 +311,7 @@ class ComplianceAgent(BaseAgent):
         """Analyze data residency and sovereignty requirements."""
         logger.debug("Analyzing data residency requirements")
         
-        assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+        assessment_data = self.current_assessment.model_dump() if self.current_assessment else {}
         business_req = assessment_data.get("business_requirements", {})
         
         residency_requirements = {}
@@ -360,7 +360,7 @@ class ComplianceAgent(BaseAgent):
         """Assess security controls and best practices."""
         logger.debug("Assessing security controls")
         
-        assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+        assessment_data = self.current_assessment.model_dump() if self.current_assessment else {}
         technical_req = assessment_data.get("technical_requirements", {})
         
         # Analyze current security posture
@@ -989,11 +989,29 @@ class ComplianceAgent(BaseAgent):
         return summary
     
     def _parse_llm_response(self, response: str) -> Dict[str, Any]:
-        """Parse LLM response, handling both JSON and text formats."""
+        """Parse LLM response, handling both JSON and text formats with robust error handling."""
+        import re
+        
         try:
+            # Clean the response
+            response = response.strip()
+            
+            # Try to extract JSON from markdown code blocks
+            json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+            if json_match:
+                response = json_match.group(1)
+            
             # Try to parse as JSON first
-            return json.loads(response)
-        except json.JSONDecodeError:
+            result = json.loads(response)
+            
+            # Validate result is a dictionary
+            if not isinstance(result, dict):
+                return self._extract_structured_data_from_text(str(response))
+                
+            return result
+            
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            logger.warning(f"Failed to parse LLM JSON response: {e}")
             # Fallback to extracting structured information from text
             return self._extract_structured_data_from_text(response)
     
@@ -1025,7 +1043,7 @@ class ComplianceAgent(BaseAgent):
             Dictionary containing applicable regulations with research backing
         """
         try:
-            assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+            assessment_data = self.current_assessment.model_dump() if self.current_assessment else {}
             business_req = assessment_data.get("business_requirements", {})
             
             # Prepare context for LLM analysis
@@ -1055,7 +1073,7 @@ class ComplianceAgent(BaseAgent):
             Return response in JSON format with: applicable_regulations, priority_mapping, specific_requirements, compliance_risks, implementation_timeline.
             """
             
-            llm_response = await self.llm_client.generate_text(
+            llm_response = await self._call_llm(
                 prompt=analysis_prompt,
                 system_prompt="You are a compliance expert with deep knowledge of global data protection and industry regulations.",
                 temperature=0.1,
@@ -1097,7 +1115,7 @@ class ComplianceAgent(BaseAgent):
             Dictionary containing detailed compliance assessment
         """
         try:
-            assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+            assessment_data = self.current_assessment.model_dump() if self.current_assessment else {}
             technical_req = assessment_data.get("technical_requirements", {})
             
             # Prepare technical context for analysis
@@ -1134,7 +1152,7 @@ class ComplianceAgent(BaseAgent):
             Return in JSON format with regulation_scores, critical_gaps, security_adequacy, data_handling_compliance, documentation_status, risk_levels, action_items.
             """
             
-            llm_response = await self.llm_client.generate_text(
+            llm_response = await self._call_llm(
                 prompt=assessment_prompt,
                 system_prompt="You are a compliance auditor with expertise in technical compliance assessment across multiple regulatory frameworks.",
                 temperature=0.1,
@@ -1181,7 +1199,7 @@ class ComplianceAgent(BaseAgent):
                 max_results=5
             )
             
-            assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+            assessment_data = self.current_assessment.model_dump() if self.current_assessment else {}
             technical_req = assessment_data.get("technical_requirements", {})
             
             security_context = f"""
@@ -1221,7 +1239,7 @@ class ComplianceAgent(BaseAgent):
             Return in JSON format with framework_scores, control_gaps, priority_improvements, implementation_complexity, cost_estimates, compliance_timeline.
             """
             
-            llm_response = await self.llm_client.generate_text(
+            llm_response = await self._call_llm(
                 prompt=security_prompt,
                 system_prompt="You are a cybersecurity expert specializing in enterprise security frameworks and compliance benchmarking.",
                 temperature=0.1,
@@ -1300,7 +1318,7 @@ class ComplianceAgent(BaseAgent):
             Return in JSON format with critical_gaps, high_priority_gaps, medium_priority_gaps, long_term_gaps, resource_requirements, business_impact, implementation_plan.
             """
             
-            llm_response = await self.llm_client.generate_text(
+            llm_response = await self._call_llm(
                 prompt=gap_analysis_prompt,
                 system_prompt="You are a compliance strategist expert at identifying and prioritizing regulatory gaps for enterprise organizations.",
                 temperature=0.1,
@@ -1393,7 +1411,7 @@ class ComplianceAgent(BaseAgent):
             Return in JSON format with immediate_actions, short_term_implementations, medium_term_projects, long_term_initiatives.
             """
             
-            llm_response = await self.llm_client.generate_text(
+            llm_response = await self._call_llm(
                 prompt=recommendations_prompt,
                 system_prompt="You are a compliance consultant specializing in practical implementation of enterprise regulatory compliance programs.",
                 temperature=0.2,
@@ -1508,7 +1526,7 @@ class ComplianceAgent(BaseAgent):
             Return in JSON format with implementation_phases, resource_timeline, budget_plan, risk_milestones, compliance_targets, dependencies, success_criteria, review_schedule.
             """
             
-            llm_response = await self.llm_client.generate_text(
+            llm_response = await self._call_llm(
                 prompt=roadmap_prompt,
                 system_prompt="You are a compliance program manager expert at creating strategic implementation roadmaps for enterprise compliance initiatives.",
                 temperature=0.1,

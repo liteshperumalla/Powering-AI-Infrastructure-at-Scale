@@ -62,6 +62,20 @@ dependencies = [
     "google-cloud-aiplatform>=1.38.0",  # GCP Vertex AI
     "google-auth>=2.23.0",  # GCP Authentication
     "google-api-core>=2.11.0",  # GCP API Core
+    
+    # IBM Cloud SDKs
+    "ibm-cloud-sdk-core>=3.18.0",  # IBM Cloud Core SDK
+    "ibm-platform-services>=0.50.0",  # IBM Platform Services
+    "ibm-vpc>=0.15.0",  # IBM VPC
+    "ibm-watson>=7.0.0",  # IBM Watson for AI services
+    
+    # Alibaba Cloud SDKs
+    "alibabacloud_ecs20140526>=3.0.0",  # Alibaba ECS
+    "alibabacloud_rds20140815>=3.0.0",  # Alibaba RDS
+    "alibabacloud_oss20190517>=1.0.0",  # Alibaba Object Storage
+    "alibabacloud_vpc20160428>=3.0.0",  # Alibaba VPC
+    "alibabacloud_tea_openapi>=0.3.0",  # Alibaba OpenAPI Core
+    
     "tenacity>=8.2.0",  # Retry logic
     
     # Data Processing

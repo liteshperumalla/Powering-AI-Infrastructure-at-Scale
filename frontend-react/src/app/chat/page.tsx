@@ -16,20 +16,15 @@ import {
     DialogTitle,
     DialogContent,
     DialogActions,
-    List,
-    ListItem,
-    ListItemText,
-    ListItemSecondaryAction,
-    Divider,
     Menu,
     MenuItem,
     Alert,
-    Tooltip,
     FormControl,
     InputLabel,
     Select,
     Rating,
     Drawer,
+    Tooltip,
 } from '@mui/material';
 import {
     Send as SendIcon,
@@ -48,7 +43,7 @@ import {
     Menu as MenuIcon,
 } from '@mui/icons-material';
 import { formatDistanceToNow } from 'date-fns';
-import Navigation from '@/components/Navigation';
+import ResponsiveLayout from '@/components/ResponsiveLayout';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAppSelector } from '@/store/hooks';
 import Link from 'next/link';
@@ -103,11 +98,11 @@ export default function ChatPage() {
     const [error, setError] = useState<string | null>(null);
     
     // UI state
-    const [sidebarOpen, setSidebarOpen] = useState(true);
     const [newChatDialog, setNewChatDialog] = useState(false);
     const [settingsDialog, setSettingsDialog] = useState(false);
     const [endChatDialog, setEndChatDialog] = useState(false);
     const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null);
+    const [sidebarOpen, setSidebarOpen] = useState(true);
     const [selectedContext, setSelectedContext] = useState('general_inquiry');
     const [satisfactionRating, setSatisfactionRating] = useState<number | null>(null);
     const [selectedAssessmentId, setSelectedAssessmentId] = useState<string>('');
@@ -471,7 +466,16 @@ export default function ChatPage() {
     };
     
     const formatMessageTime = (timestamp: string) => {
-        return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
+        const date = new Date(timestamp);
+        const now = new Date();
+        
+        // If timestamp is in the future or too far in the past, use "just now"
+        const diffMs = now.getTime() - date.getTime();
+        if (diffMs < 0 || diffMs > 24 * 60 * 60 * 1000) {
+            return 'just now';
+        }
+        
+        return formatDistanceToNow(date, { addSuffix: true });
     };
     
     const getContextIcon = (context: string) => {
@@ -538,144 +542,12 @@ export default function ChatPage() {
                         }}
                     >
                         {formatMessageTime(message.timestamp)}
-                        {message.metadata?.confidence && (
-                            <span> • Confidence: {(message.metadata.confidence * 100).toFixed(0)}%</span>
-                        )}
                     </Typography>
                 </Paper>
             </Box>
         );
     };
     
-    const sidebarContent = (
-        <Box sx={{ width: 300, height: '100%', display: 'flex', flexDirection: 'column' }}>
-            {/* Header */}
-            <Box sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <Typography variant="h6">
-                        {isAuthenticated ? 'Chat History' : 'AI Assistant'}
-                    </Typography>
-                    {isAuthenticated && (
-                        <IconButton
-                            size="small"
-                            onClick={() => setNewChatDialog(true)}
-                            color="primary"
-                        >
-                            <AddIcon />
-                        </IconButton>
-                    )}
-                </Box>
-            </Box>
-            
-            {/* Conversations List */}
-            <List sx={{ flexGrow: 1, overflow: 'auto' }}>
-                {isAuthenticated ? (
-                    <>
-                        {conversations.map((conversation) => (
-                            <ListItem
-                                key={conversation.id}
-                                button
-                                selected={currentConversation?.id === conversation.id}
-                                onClick={() => loadConversation(conversation.id)}
-                                sx={{
-                                    flexDirection: 'column',
-                                    alignItems: 'stretch',
-                                    py: 1.5
-                                }}
-                            >
-                                <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
-                                    <Box sx={{ flexGrow: 1, minWidth: 0 }}>
-                                        <Typography
-                                            variant="subtitle2"
-                                            noWrap
-                                            sx={{ fontWeight: conversation.escalated ? 'bold' : 'normal' }}
-                                        >
-                                            {conversation.title}
-                                        </Typography>
-                                        <Typography variant="caption" color="text.secondary">
-                                            {formatMessageTime(conversation.last_activity)} • {conversation.message_count} messages
-                                        </Typography>
-                                    </Box>
-                                    <IconButton
-                                        size="small"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setMenuAnchor(e.currentTarget);
-                                        }}
-                                    >
-                                        <MoreVertIcon fontSize="small" />
-                                    </IconButton>
-                                </Box>
-                                
-                                <Box sx={{ display: 'flex', alignItems: 'center', mt: 1, gap: 1 }}>
-                                    <Chip
-                                        label={getContextLabel(conversation.context)}
-                                        size="small"
-                                        variant="outlined"
-                                        sx={{ fontSize: '0.7rem' }}
-                                    />
-                                    {conversation.escalated && (
-                                        <Chip
-                                            label="Escalated"
-                                            size="small"
-                                            color="warning"
-                                            sx={{ fontSize: '0.7rem' }}
-                                        />
-                                    )}
-                                </Box>
-                            </ListItem>
-                        ))}
-                        
-                        {conversations.length === 0 && !isLoading && (
-                            <ListItem>
-                                <ListItemText
-                                    primary="No conversations yet"
-                                    secondary="Start a new chat to begin"
-                                />
-                            </ListItem>
-                        )}
-                    </>
-                ) : (
-                    <ListItem>
-                        <ListItemText
-                            primary={
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <BotIcon color="primary" />
-                                    <Typography variant="subtitle2">
-                                        Simple Chat Mode
-                                    </Typography>
-                                </Box>
-                            }
-                            secondary={
-                                <Typography variant="caption" color="text.secondary">
-                                    Chat directly with our AI assistant! 
-                                    No login required for quick questions and help.
-                                </Typography>
-                            }
-                        />
-                    </ListItem>
-                )}
-            </List>
-            
-            {/* Footer */}
-            <Box sx={{ p: 2, borderTop: '1px solid', borderColor: 'divider' }}>
-                {isAuthenticated ? (
-                    <Button
-                        fullWidth
-                        variant="outlined"
-                        startIcon={<SettingsIcon />}
-                        onClick={() => setSettingsDialog(true)}
-                    >
-                        Chat Settings
-                    </Button>
-                ) : (
-                    <Typography variant="caption" color="text.secondary" textAlign="center">
-                        💡 Login for conversation history and advanced features
-                    </Typography>
-                )}
-            </Box>
-        </Box>
-    );
     
     // Show loading state while authentication is being resolved
     if (authLoading) {
@@ -698,10 +570,39 @@ export default function ChatPage() {
         );
     }
 
+    // Sidebar content for conversation history
+    const sidebarContent = (
+        <Box sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>
+                Chat History
+            </Typography>
+            {conversations.map((conv) => (
+                <Button
+                    key={conv.id}
+                    fullWidth
+                    variant={currentConversation?.id === conv.id ? "contained" : "outlined"}
+                    onClick={() => loadConversation(conv.id)}
+                    sx={{ mb: 1, justifyContent: "flex-start" }}
+                >
+                    {conv.title}
+                </Button>
+            ))}
+        </Box>
+    );
+
     return (
         <ProtectedRoute requireAuth={false}>
-            <Navigation title="AI Assistant">
-                <Box sx={{ display: 'flex', height: 'calc(100vh - 128px)', position: 'relative' }}>
+            <ResponsiveLayout title="AI Assistant">
+                <Box sx={{ 
+                    display: 'flex', 
+                    height: 'calc(100vh - 80px)', 
+                    position: 'relative',
+                    mt: 1,
+                    borderRadius: 2,
+                    overflow: 'hidden',
+                    bgcolor: 'background.paper',
+                    boxShadow: 1
+                }}>
                     {/* Sidebar Drawer */}
                     <Drawer
                         variant="persistent"
@@ -784,16 +685,21 @@ export default function ChatPage() {
                                     </>
                                 ) : (
                                     <>
-                                        <AIIcon color="primary" sx={{ mr: 1 }} />
-                                        <Typography variant="h6">
-                                            AI Infrastructure Assistant
-                                        </Typography>
+                                        <Box>
+                                            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                                                AI Infrastructure Assistant
+                                            </Typography>
+                                            <Typography variant="caption" color="text.secondary">
+                                                Ask me anything about cloud infrastructure, DevOps, Kubernetes, AWS, Azure, GCP, and more!
+                                            </Typography>
+                                        </Box>
                                         {!isAuthenticated && (
                                             <Chip
                                                 label="Simple Chat Mode"
                                                 size="small"
-                                                variant="outlined"
+                                                variant="filled"
                                                 color="primary"
+                                                sx={{ ml: 2 }}
                                             />
                                         )}
                                     </>
@@ -842,32 +748,85 @@ export default function ChatPage() {
                                         alignItems: 'center',
                                         justifyContent: 'center',
                                         height: '100%',
-                                        textAlign: 'center'
+                                        textAlign: 'center',
+                                        p: 4,
                                     }}
                                 >
-                                    <AIIcon sx={{ fontSize: 80, color: 'primary.main', mb: 2 }} />
-                                    <Typography variant="h4" gutterBottom>
-                                        {isAuthenticated ? 'Welcome to AI Assistant' : '👋 AI Infrastructure Assistant'}
+                                    {/* Modern Avatar with Gradient */}
+                                    <Avatar
+                                        sx={{
+                                            width: 100,
+                                            height: 100,
+                                            mb: 3,
+                                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                            boxShadow: '0 8px 32px rgba(102, 126, 234, 0.3)',
+                                        }}
+                                    >
+                                        <AIIcon sx={{ fontSize: 48 }} />
+                                    </Avatar>
+
+                                    <Typography 
+                                        variant="h3" 
+                                        gutterBottom 
+                                        sx={{ 
+                                            fontWeight: 700,
+                                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                            backgroundClip: 'text',
+                                            WebkitBackgroundClip: 'text',
+                                            WebkitTextFillColor: 'transparent',
+                                            mb: 2,
+                                        }}
+                                    >
+                                        AI Infrastructure Assistant
                                     </Typography>
-                                    <Typography variant="body1" color="text.secondary" sx={{ mb: 4, maxWidth: 600 }}>
+                                    
+                                    <Typography variant="h6" color="text.secondary" sx={{ mb: 4, maxWidth: 600, fontWeight: 400 }}>
                                         {isAuthenticated 
                                             ? "I'm here to help you with infrastructure planning, assessments, reports, technical questions, and decision-making. Start a conversation to begin!"
-                                            : "Ask me anything about cloud infrastructure, DevOps, Kubernetes, AWS, Azure, GCP, Alibaba Cloud, IBM Cloud, and more! Type your question below to get started."
+                                            : "Ask me anything about cloud infrastructure, DevOps, Kubernetes, AWS, Azure, GCP, Alibaba Cloud, IBM Cloud, and more!"
                                         }
                                     </Typography>
+                                    
+                                    {/* Quick Action Chips */}
+                                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center', mb: 4 }}>
+                                        {['AWS Architecture', 'Kubernetes Deployment', 'Cost Optimization', 'Security Best Practices', 'CI/CD Pipeline'].map((topic) => (
+                                            <Chip
+                                                key={topic}
+                                                label={topic}
+                                                variant="outlined"
+                                                color="primary"
+                                                onClick={() => setNewMessage(`Tell me about ${topic}`)}
+                                                sx={{ 
+                                                    cursor: 'pointer',
+                                                    '&:hover': { bgcolor: 'primary.light' }
+                                                }}
+                                            />
+                                        ))}
+                                    </Box>
+
                                     {isAuthenticated && (
                                         <Button
                                             variant="contained"
                                             size="large"
                                             startIcon={<AddIcon />}
                                             onClick={() => setNewChatDialog(true)}
+                                            sx={{
+                                                borderRadius: 3,
+                                                px: 4,
+                                                py: 1.5,
+                                                fontSize: '1.1rem',
+                                                textTransform: 'none',
+                                                fontWeight: 600,
+                                                boxShadow: '0 4px 20px rgba(102, 126, 234, 0.3)',
+                                            }}
                                         >
                                             Start New Conversation
                                         </Button>
                                     )}
+                                    
                                     {!isAuthenticated && (
-                                        <Typography variant="caption" color="text.secondary" sx={{ mt: 2 }}>
-                                            💡 Simple chat mode - just type and press Enter!
+                                        <Typography variant="body2" color="text.secondary" sx={{ mt: 2, opacity: 0.8 }}>
+                                            💡 Simple chat mode - just type your question and press Enter!
                                         </Typography>
                                     )}
                                 </Box>
@@ -878,16 +837,15 @@ export default function ChatPage() {
                                 </>
                             )}
                         </Box>
-                        
-                        {/* Message Input */}
                         {(!currentConversation || currentConversation.status !== 'resolved') && (
                             <Paper
-                                elevation={3}
+                                elevation={0}
                                 sx={{
                                     p: 2,
-                                    borderRadius: 0,
+                                    borderRadius: '0 0 16px 16px',
                                     borderTop: '1px solid',
-                                    borderColor: 'divider'
+                                    borderColor: 'divider',
+                                    bgcolor: 'background.default'
                                 }}
                             >
                                 <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-end' }}>
@@ -899,6 +857,17 @@ export default function ChatPage() {
                                         placeholder={currentConversation ? "Type your message..." : "Ask me anything about cloud infrastructure..."}
                                         value={newMessage}
                                         onChange={(e) => setNewMessage(e.target.value)}
+                                        sx={{
+                                            '& .MuiOutlinedInput-root': {
+                                                borderRadius: 3,
+                                                bgcolor: 'background.paper',
+                                                '&:hover': {
+                                                    '& .MuiOutlinedInput-notchedOutline': {
+                                                        borderColor: 'primary.main',
+                                                    },
+                                                },
+                                            },
+                                        }}
                                         onKeyPress={handleKeyPress}
                                         disabled={isSending}
                                         variant="outlined"
@@ -909,8 +878,19 @@ export default function ChatPage() {
                                         onClick={sendMessage}
                                         disabled={!newMessage.trim() || isSending}
                                         size="large"
+                                        sx={{
+                                            bgcolor: 'primary.main',
+                                            color: 'primary.contrastText',
+                                            borderRadius: 2,
+                                            '&:hover': {
+                                                bgcolor: 'primary.dark',
+                                            },
+                                            '&:disabled': {
+                                                bgcolor: 'action.disabled',
+                                            },
+                                        }}
                                     >
-                                        {isSending ? <CircularProgress size={24} /> : <SendIcon />}
+                                        {isSending ? <CircularProgress size={24} color="inherit" /> : <SendIcon />}
                                     </IconButton>
                                 </Box>
                                 {!currentConversation && (
@@ -1138,7 +1118,7 @@ export default function ChatPage() {
                         Delete
                     </MenuItem>
                 </Menu>
-            </Navigation>
+            </ResponsiveLayout>
         </ProtectedRoute>
     );
 }

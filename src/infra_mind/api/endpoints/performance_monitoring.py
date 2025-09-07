@@ -29,7 +29,7 @@ from ...models.user import User
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/performance", tags=["performance_monitoring"])
+router = APIRouter(tags=["performance_monitoring"])
 
 
 # Pydantic models for API requests/responses
@@ -85,6 +85,12 @@ class PerformanceSummaryResponse(BaseModel):
 
 
 # REST API Endpoints
+
+@router.get("/")
+async def get_performance_overview(current_user: User = Depends(get_current_user)):
+    """Get performance monitoring overview - main performance endpoint."""
+    return await get_system_health()
+
 
 @router.get("/health", response_model=Dict[str, Any])
 async def get_system_health():

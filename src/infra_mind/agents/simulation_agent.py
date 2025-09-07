@@ -1919,42 +1919,42 @@ class SimulationAgent(BaseAgent):
             # Search for cloud performance benchmarks
             performance_search = await self.web_search_client.search(
                 "cloud infrastructure performance benchmarks 2024 2025 AWS Azure GCP capacity planning",
-                num_results=5
+                max_results=5
             )
             performance_benchmarks["cloud_performance"] = performance_search.get("results", [])
             
             # Search for scaling patterns and best practices
             scaling_search = await self.web_search_client.search(
                 "cloud infrastructure scaling patterns auto-scaling enterprise best practices 2024",
-                num_results=5
+                max_results=5
             )
             performance_benchmarks["scaling_patterns"] = scaling_search.get("results", [])
             
             # Search for cost optimization data
             cost_search = await self.web_search_client.search(
                 "cloud cost optimization strategies enterprise infrastructure spending 2024 2025",
-                num_results=5
+                max_results=5
             )
             performance_benchmarks["cost_optimization"] = cost_search.get("results", [])
             
             # Search for capacity planning methodologies
             capacity_search = await self.web_search_client.search(
                 "infrastructure capacity planning methodologies enterprise cloud resources 2024",
-                num_results=5
+                max_results=5
             )
             performance_benchmarks["capacity_planning"] = capacity_search.get("results", [])
             
             # Search for infrastructure performance metrics
             metrics_search = await self.web_search_client.search(
                 "infrastructure performance metrics KPIs enterprise monitoring benchmarks 2024",
-                num_results=5
+                max_results=5
             )
             performance_benchmarks["infrastructure_metrics"] = metrics_search.get("results", [])
             
             # Search for industry benchmarks
             industry_search = await self.web_search_client.search(
                 "enterprise infrastructure industry benchmarks performance standards 2024 2025",
-                num_results=3
+                max_results=3
             )
             performance_benchmarks["industry_benchmarks"] = industry_search.get("results", [])
             
@@ -1990,11 +1990,29 @@ class SimulationAgent(BaseAgent):
         return "\n".join(context_parts)
     
     def _parse_llm_response(self, response: str) -> Dict[str, Any]:
-        """Parse LLM response, handling both JSON and text formats."""
+        """Parse LLM response, handling both JSON and text formats with robust error handling."""
+        import re
+        
         try:
+            # Clean the response
+            response = response.strip()
+            
+            # Try to extract JSON from markdown code blocks
+            json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+            if json_match:
+                response = json_match.group(1)
+            
             # Try to parse as JSON first
-            return json.loads(response)
-        except json.JSONDecodeError:
+            result = json.loads(response)
+            
+            # Validate result is a dictionary
+            if not isinstance(result, dict):
+                return self._extract_structured_data_from_text(str(response))
+                
+            return result
+            
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            logger.warning(f"Failed to parse LLM JSON response: {e}")
             # Fallback to extracting structured information from text
             return self._extract_structured_data_from_text(response)
     

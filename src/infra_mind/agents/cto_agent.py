@@ -160,14 +160,18 @@ class CTOAgent(BaseAgent):
             # Get real market data for cost analysis
             market_data = await self._collect_market_financial_data(requirements)
             
+            # Format the prompt separately to avoid f-string nesting issues
+            requirements_text = self._format_requirements_for_llm(requirements)
+            market_data_text = self._format_requirements_for_llm(market_data)
+            
             financial_prompt = f"""
             As a CTO and financial strategist, analyze the financial impact of these infrastructure requirements:
             
             BUSINESS REQUIREMENTS:
-            {self._format_requirements_for_llm(requirements)}
+            {requirements_text}
             
             MARKET DATA:
-            {self._format_requirements_for_llm(market_data)}
+            {market_data_text}
             
             Provide comprehensive financial analysis including:
             1. ROI Calculation - Expected return on investment with methodology
@@ -179,12 +183,15 @@ class CTOAgent(BaseAgent):
             7. Business Value Metrics - Non-financial benefits quantification
             
             Use industry benchmarks and provide ranges based on implementation success scenarios.
-            Return in JSON format with detailed financial projections and assumptions.
+            
+            CRITICAL: You must respond with ONLY a valid JSON object. No text before or after the JSON.
+
+            Respond now with valid JSON only:
             """
             
             response = await self._call_llm(
                 prompt=financial_prompt,
-                system_prompt="You are a CFO-level financial analyst specializing in technology investment analysis and ROI calculations.",
+                system_prompt="You are a CFO-level financial analyst. You MUST respond with ONLY valid JSON. Do not include any text before, after, or around the JSON. Only return the JSON object.",
                 temperature=0.1
             )
             
@@ -586,20 +593,33 @@ Provide a strategic alignment analysis including:
    - Technology decisions that better support business goals
    - Process improvements for ongoing alignment
 
-Respond in JSON format with structured analysis for each section."""
+CRITICAL: You must respond with ONLY a valid JSON object. No text before or after the JSON. 
+
+Example format:
+{{"strategic_alignment": {{"alignment_score": 0.85, "business_goals": ["goal1"], "technology_alignment": ["alignment1"], "gaps_identified": ["gap1"], "recommendations": ["rec1"]}}}}
+
+Respond now with valid JSON only:"""
 
         try:
+            logger.info("🔍 STRATEGIC ALIGNMENT PROMPT: " + prompt[-200:])
+            print("🔍 STRATEGIC ALIGNMENT PROMPT: " + prompt[-200:])
             response = await self._call_llm(
                 prompt=prompt,
-                system_prompt="You are an experienced CTO skilled in aligning technology strategy with business strategy. Provide analytical, strategic assessments that help organizations optimize their infrastructure investments for business success.",
+                system_prompt="You are an experienced CTO. You MUST respond with ONLY valid JSON. Do not include any text before, after, or around the JSON. Only return the JSON object.",
                 temperature=0.2,
                 max_tokens=1500
             )
             
             # Parse LLM response
             import json
+            logger.info(f"🔍 RAW LLM RESPONSE (strategic alignment): {response[:500]}...")
+            print(f"🔍 RAW LLM RESPONSE (strategic alignment): {response[:500]}...")
             try:
                 alignment_result = json.loads(response)
+                
+                # Handle nested JSON structure (if LLM wraps response in strategic_alignment key)
+                if isinstance(alignment_result, dict) and "strategic_alignment" in alignment_result:
+                    alignment_result = alignment_result["strategic_alignment"]
                 
                 # Validate and enhance the result
                 if not isinstance(alignment_result, dict):
@@ -752,18 +772,23 @@ Provide a detailed financial analysis including:
    - Risk-adjusted investment recommendations
 
 Use realistic industry benchmarks and provide specific numbers where possible.
-Respond in JSON format with structured analysis for each section."""
+
+CRITICAL: You must respond with ONLY a valid JSON object. No text before or after the JSON.
+
+Respond now with valid JSON only:"""
 
         try:
             response = await self._call_llm(
                 prompt=prompt,
-                system_prompt="You are a financial-savvy CTO with extensive experience in infrastructure investments, ROI calculations, and budget optimization. Provide realistic, data-driven financial analysis that helps organizations make informed infrastructure investment decisions.",
+                system_prompt="You are a financial-savvy CTO with extensive experience in infrastructure investments, ROI calculations, and budget optimization. You MUST respond with ONLY valid JSON. Do not include any text before, after, or around the JSON. Only return the JSON object.",
                 temperature=0.1,  # Lower temperature for financial accuracy
                 max_tokens=2000
             )
             
             # Parse LLM response
             import json
+            logger.info(f"🔍 RAW LLM RESPONSE (financial analysis): {response[:500]}...")
+            print(f"🔍 RAW LLM RESPONSE (financial analysis): {response[:500]}...")
             try:
                 financial_result = json.loads(response)
                 
@@ -947,12 +972,17 @@ For each risk, provide:
 - Specific mitigation strategies
 - Timeline for mitigation
 
-Respond in JSON format with structured risk assessment."""
+CRITICAL: You must respond with ONLY a valid JSON object. No text before or after the JSON.
+
+Example format:
+{"identified_risks": [{"type": "technology", "risk": "description", "impact": "high", "probability": 0.6, "mitigation": "strategy"}], "risk_categories": {"technology": [], "operational": [], "financial": [], "compliance": []}}
+
+Respond now with valid JSON only:"""
 
         try:
             response = await self._call_llm(
                 prompt=prompt,
-                system_prompt="You are an experienced CTO with deep expertise in risk management, infrastructure projects, and business continuity. Provide comprehensive, actionable risk assessments that help organizations proactively manage infrastructure project risks.",
+                system_prompt="You are an experienced CTO with deep expertise in risk management, infrastructure projects, and business continuity. You MUST respond with ONLY valid JSON. Do not include any text before, after, or around the JSON. Only return the JSON object.",
                 temperature=0.2,
                 max_tokens=2500
             )
@@ -1215,7 +1245,7 @@ Respond in JSON format with an array of strategic recommendations."""
                 elif isinstance(recommendations_result, list):
                     recommendations = recommendations_result
                 else:
-                    recommendations = self._parse_recommendations_text(response)
+                    recommendations = self._parse_recommendations_text(response, {})
                 
                 # Ensure each recommendation has required fields
                 enhanced_recommendations = []
@@ -1239,13 +1269,13 @@ Respond in JSON format with an array of strategic recommendations."""
                 
             except json.JSONDecodeError:
                 logger.warning("Failed to parse LLM JSON response for strategic recommendations")
-                return self._parse_recommendations_text(response)
+                return self._parse_recommendations_text(response, {})
                 
         except Exception as e:
             logger.error(f"LLM strategic recommendations generation failed: {e}")
             return await self._fallback_strategic_recommendations(business_analysis, strategic_alignment, financial_analysis, risk_assessment)
     
-    def _parse_recommendations_text(self, response: str) -> List[Dict[str, Any]]:
+    def _parse_recommendations_text(self, response: str, requirements: Dict[str, Any] = None) -> List[Dict[str, Any]]:
         """Parse strategic recommendations from text response."""
         recommendations = []
         
@@ -1958,40 +1988,6 @@ Respond in JSON format with an array of strategic recommendations."""
             "assessment_method": "rule_based_fallback"
         }
     
-    def _parse_recommendations_text(self, response: str, requirements: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Parse recommendations from text response."""
-        return [
-            {
-                "title": "Strategic Infrastructure Modernization",
-                "executive_summary": "Modernize core infrastructure to support business growth and competitive advantage",
-                "business_rationale": "Current infrastructure limits scalability and efficiency",
-                "implementation_approach": "Phased migration with minimal business disruption",
-                "timeline": "6-12 months",
-                "priority_level": "High",
-                "expected_roi": "150-200%",
-                "category": "strategic_priorities"
-            },
-            {
-                "title": "Cloud-First Architecture Implementation",
-                "executive_summary": "Adopt cloud-native architecture for scalability and cost optimization",
-                "business_rationale": "Enable rapid scaling and reduce operational overhead",
-                "implementation_approach": "Containerization and microservices architecture",
-                "timeline": "8-14 months",
-                "priority_level": "High",
-                "expected_roi": "120-180%",
-                "category": "implementation_strategy"
-            },
-            {
-                "title": "Comprehensive Security and Compliance Framework",
-                "executive_summary": "Implement enterprise-grade security and compliance measures",
-                "business_rationale": "Protect business assets and meet regulatory requirements",
-                "implementation_approach": "Zero-trust security model with continuous monitoring",
-                "timeline": "4-8 months",
-                "priority_level": "Critical",
-                "expected_roi": "Risk mitigation value",
-                "category": "risk_mitigation"
-            }
-        ]
     
     def _fallback_cto_recommendations(self, requirements: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Fallback CTO recommendations when LLM fails."""

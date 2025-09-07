@@ -46,7 +46,7 @@ async def get_monitoring_components():
         else:
             raise em_error
     
-    workflow_dashboard = get_workflow_dashboard()
+    workflow_dashboard = get_workflow_dashboard(workflow_monitor)
     analytics_dashboard = get_analytics_dashboard(workflow_monitor, workflow_dashboard)
     
     return workflow_monitor, workflow_dashboard, analytics_dashboard
@@ -1103,7 +1103,30 @@ async def get_business_metrics(
         workflow_monitor = get_workflow_monitor()
         workflow_dashboard = get_workflow_dashboard()
         analytics_dashboard = get_analytics_dashboard(workflow_monitor, workflow_dashboard)
-        
+    except (ValueError, Exception) as em_error:
+        if ("EventManager required" in str(em_error) or 
+            "WorkflowMonitor required" in str(em_error)):
+            logger.warning("WorkflowMonitor not accessible in worker process, attempting direct initialization...")
+            try:
+                from ...orchestration.events import EventManager
+                from ...orchestration.monitoring import get_workflow_monitor
+                # Create EventManager and pass it directly to get_workflow_monitor
+                event_manager = EventManager()
+                workflow_monitor = get_workflow_monitor(event_manager)
+                workflow_dashboard = get_workflow_dashboard(workflow_monitor)
+                analytics_dashboard = get_analytics_dashboard(workflow_monitor, workflow_dashboard)
+                logger.info("✅ WorkflowMonitor initialized directly for business metrics endpoint")
+            except Exception as init_error:
+                logger.error(f"Failed to initialize WorkflowMonitor directly: {init_error}")
+                raise HTTPException(
+                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                    detail=f"Service initialization failed: {str(init_error)}"
+                )
+        else:
+            logger.error(f"Unexpected ValueError in business metrics: {em_error}")
+            raise em_error
+    
+    try:
         analytics = analytics_dashboard.get_comprehensive_analytics(timeframe)
         
         if not analytics:
@@ -1132,6 +1155,50 @@ async def get_business_metrics(
         
     except Exception as e:
         logger.error(f"Failed to get business metrics: {e}")
+        logger.error(f"Exception type: {type(e)}")
+        logger.error(f"Exception args: {e.args}")
+        
+        # Check if it's a WorkflowMonitor initialization error that we missed
+        if isinstance(e, ValueError) and "WorkflowMonitor required" in str(e):
+            logger.warning("Found WorkflowMonitor error in exception handler, attempting to initialize...")
+            try:
+                from ...orchestration.events import EventManager
+                from ...orchestration.monitoring import initialize_workflow_monitoring
+                event_manager = EventManager()
+                await initialize_workflow_monitoring(event_manager)
+                
+                # Retry the entire operation
+                workflow_monitor = get_workflow_monitor()
+                workflow_dashboard = get_workflow_dashboard()
+                analytics_dashboard = get_analytics_dashboard(workflow_monitor, workflow_dashboard)
+                analytics = analytics_dashboard.get_comprehensive_analytics(timeframe)
+                
+                if not analytics:
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail="Business metrics data not available"
+                    )
+                
+                logger.info("✅ Successfully recovered from WorkflowMonitor error")
+                return {
+                    "business_metrics": analytics.business_metrics,
+                    "user_analytics_summary": {
+                        "total_users": analytics.user_analytics.total_users,
+                        "active_users_24h": analytics.user_analytics.active_users_24h,
+                        "user_retention_rate": analytics.user_analytics.user_retention_rate,
+                        "user_engagement_score": analytics.user_analytics.user_engagement_score
+                    },
+                    "system_performance": {
+                        "avg_response_time": analytics.system_performance.avg_response_time_ms,
+                        "uptime_percentage": analytics.system_performance.uptime_percentage,
+                        "error_rate": analytics.system_performance.error_rate_percentage,
+                        "throughput": analytics.system_performance.requests_per_second
+                    },
+                    "timeframe": timeframe
+                }
+            except Exception as retry_error:
+                logger.error(f"Failed to recover from WorkflowMonitor error: {retry_error}")
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to get business metrics"

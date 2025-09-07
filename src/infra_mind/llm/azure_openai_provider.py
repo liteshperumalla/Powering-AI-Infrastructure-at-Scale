@@ -202,10 +202,8 @@ class AzureOpenAIProvider(LLMProviderInterface):
                 estimated_cost=total_cost
             )
             
-            # Update provider statistics
-            self.request_count += 1
-            self.total_tokens_used += usage.total_tokens
-            self.total_cost += total_cost
+            # Update provider statistics using inherited method
+            self._update_usage_stats(token_usage)
             
             # Create response
             llm_response = LLMResponse(

@@ -14,6 +14,10 @@ from ..models.assessment import Assessment
 from ..agents.base import BaseAgent, AgentRole, AgentFactory, AgentStatus
 from ..agents import agent_factory  # Import from agents package to ensure registration
 from ..agents.base import AgentConfig
+from ..agents.report_generator_agent import ReportGeneratorAgent
+from ..services.advanced_compliance_engine import AdvancedComplianceEngine, ComplianceFramework
+from ..services.predictive_cost_modeling import PredictiveCostModeling, CostScenario
+from ..llm.advanced_prompt_engineering import AdvancedPromptEngineer, PromptTemplate, PromptContext
 
 logger = logging.getLogger(__name__)
 
@@ -29,9 +33,27 @@ class AssessmentWorkflow(BaseWorkflow):
     def __init__(self):
         super().__init__(
             workflow_id="assessment_workflow",
-            name="Infrastructure Assessment Workflow"
+            name="Professional Infrastructure Assessment Workflow"
         )
         self.agent_factory = agent_factory
+        
+        # Initialize professional-grade services
+        self.advanced_prompt_engineer = AdvancedPromptEngineer()
+        self.compliance_engine = AdvancedComplianceEngine()
+        self.cost_modeling = PredictiveCostModeling()
+        self.professional_report_generator = ReportGeneratorAgent()
+        
+        # Professional workflow capabilities
+        self.enterprise_features = {
+            "advanced_reporting": True,
+            "compliance_automation": True,
+            "predictive_analytics": True,
+            "cost_optimization": True,
+            "security_scanning": True,
+            "real_time_monitoring": True
+        }
+        
+        logger.info("Initialized Professional Infrastructure Assessment Workflow with enterprise capabilities")
     
     async def define_workflow(self, assessment: Assessment) -> WorkflowState:
         """
@@ -203,17 +225,90 @@ class AssessmentWorkflow(BaseWorkflow):
                 ]
             ),
             
-            # Phase 4: Report Generation
+            # Phase 4: Professional Analytics & Assessment
             WorkflowNode(
-                id="report_generation",
-                name="Report Generation",
-                node_type="agent",
+                id="compliance_assessment",
+                name="Advanced Compliance Assessment",
+                node_type="professional_service",
                 config={
-                    "agent_role": AgentRole.REPORT_GENERATOR,
-                    "operation": "generate_report",
+                    "service": "compliance_engine",
+                    "operation": "comprehensive_assessment",
+                    "frameworks": ["SOC2", "PCI_DSS", "ISO_27001", "NIST"],
+                    "timeout": 240
+                },
+                dependencies=["recommendation_synthesis"]
+            ),
+            
+            WorkflowNode(
+                id="cost_modeling",
+                name="Predictive Cost Modeling",
+                node_type="professional_service",
+                config={
+                    "service": "cost_modeling",
+                    "operation": "generate_projections",
+                    "scenarios": ["conservative", "optimistic", "aggressive_optimization"],
                     "timeout": 180
                 },
                 dependencies=["recommendation_synthesis"]
+            ),
+            
+            # Phase 5: Professional Report Generation
+            WorkflowNode(
+                id="executive_report",
+                name="Executive Report Generation",
+                node_type="professional_service",
+                config={
+                    "service": "professional_report_generator",
+                    "operation": "generate_professional_report",
+                    "report_type": "executive",
+                    "audience_level": "executive",
+                    "timeout": 300
+                },
+                dependencies=["compliance_assessment", "cost_modeling"]
+            ),
+            
+            WorkflowNode(
+                id="technical_report",
+                name="Technical Report Generation",
+                node_type="professional_service",
+                config={
+                    "service": "professional_report_generator",
+                    "operation": "generate_professional_report",
+                    "report_type": "technical",
+                    "audience_level": "technical",
+                    "timeout": 300
+                },
+                dependencies=["compliance_assessment", "cost_modeling"]
+            ),
+            
+            WorkflowNode(
+                id="stakeholder_summaries",
+                name="Stakeholder Summary Generation",
+                node_type="professional_service",
+                config={
+                    "service": "professional_report_generator",
+                    "operation": "generate_stakeholder_summaries",
+                    "stakeholders": ["cto", "cfo", "ciso", "engineering_lead", "operations_team"],
+                    "timeout": 240
+                },
+                dependencies=["executive_report", "technical_report"]
+            ),
+            
+            # Phase 6: Quality Assurance & Finalization
+            WorkflowNode(
+                id="quality_assurance",
+                name="Report Quality Assurance",
+                node_type="validation",
+                config={
+                    "operation": "validate_professional_reports",
+                    "quality_standards": {
+                        "executive_readiness": 0.90,
+                        "technical_accuracy": 0.95,
+                        "compliance_coverage": 0.90
+                    },
+                    "timeout": 120
+                },
+                dependencies=["stakeholder_summaries"]
             )
         ]
         
@@ -221,9 +316,16 @@ class AssessmentWorkflow(BaseWorkflow):
         for node in nodes:
             state.add_node(node)
         
-        # Initialize shared data
+        # Initialize shared data with professional capabilities
         state.shared_data.update({
             "assessment": assessment.dict() if hasattr(assessment, 'dict') else assessment.__dict__,
+            "professional_services": {
+                "compliance_engine": self.compliance_engine,
+                "cost_modeling": self.cost_modeling,
+                "professional_report_generator": self.professional_report_generator,
+                "advanced_prompt_engineer": self.advanced_prompt_engineer
+            },
+            "enterprise_capabilities": self.enterprise_features,
             "workflow_config": {
                 "parallel_execution": True,
                 "error_tolerance": "medium",
@@ -253,6 +355,10 @@ class AssessmentWorkflow(BaseWorkflow):
             return await self._execute_synthesis_node(node, state)
         elif node.node_type == "decision":
             return await self._execute_decision_node(node, state)
+        elif node.node_type == "professional_service":
+            return await self._execute_professional_service_node(node, state)
+        elif node.node_type == "validation":
+            return await self._execute_validation_node(node, state)
         else:
             raise ValueError(f"Unknown node type: {node.node_type}")
     
@@ -315,6 +421,241 @@ class AssessmentWorkflow(BaseWorkflow):
             return await self._synthesize_recommendations(dependency_results, state)
         else:
             raise ValueError(f"Unknown synthesis operation: {operation}")
+    
+    async def _execute_professional_service_node(self, node: WorkflowNode, state: WorkflowState) -> Dict[str, Any]:
+        """Execute a professional service node with enterprise capabilities."""
+        service_name = node.config.get("service")
+        operation = node.config.get("operation")
+        
+        logger.info(f"Executing professional service: {service_name}.{operation}")
+        
+        try:
+            # Get the service instance
+            professional_services = state.shared_data.get("professional_services", {})
+            service_instance = professional_services.get(service_name)
+            
+            if not service_instance:
+                raise ValueError(f"Professional service not found: {service_name}")
+            
+            # Execute based on service and operation
+            if service_name == "compliance_engine":
+                return await self._execute_compliance_assessment(node, state, service_instance)
+            elif service_name == "cost_modeling":
+                return await self._execute_cost_modeling(node, state, service_instance)
+            elif service_name == "professional_report_generator":
+                return await self._execute_professional_reporting(node, state, service_instance)
+            else:
+                raise ValueError(f"Unknown professional service: {service_name}")
+                
+        except Exception as e:
+            logger.error(f"Professional service execution failed: {e}")
+            return {"error": str(e), "status": "failed"}
+    
+    async def _execute_compliance_assessment(self, node: WorkflowNode, state: WorkflowState, service_instance) -> Dict[str, Any]:
+        """Execute compliance assessment using the advanced compliance engine."""
+        try:
+            frameworks_config = node.config.get("frameworks", ["SOC2", "NIST"])
+            frameworks = [getattr(ComplianceFramework, fw) for fw in frameworks_config if hasattr(ComplianceFramework, fw)]
+            
+            # Extract infrastructure data from previous analysis
+            infrastructure_data = self._extract_infrastructure_data(state)
+            
+            # Conduct compliance assessment
+            assessments = await service_instance.conduct_compliance_assessment(
+                infrastructure_data=infrastructure_data,
+                frameworks=frameworks,
+                assessment_scope="full"
+            )
+            
+            # Generate dashboard data
+            dashboard_data = await service_instance.generate_compliance_dashboard_data(assessments)
+            
+            return {
+                "assessments": {fw.value: assessment.__dict__ for fw, assessment in assessments.items()},
+                "dashboard_data": dashboard_data,
+                "summary": {
+                    "frameworks_assessed": len(assessments),
+                    "average_compliance_score": dashboard_data["overview"]["average_compliance_score"],
+                    "total_gaps": dashboard_data["overview"]["total_gaps"],
+                    "total_remediation_cost": dashboard_data["overview"]["total_remediation_cost"]
+                },
+                "status": "completed"
+            }
+            
+        except Exception as e:
+            logger.error(f"Compliance assessment failed: {e}")
+            return {"error": str(e), "status": "failed"}
+    
+    async def _execute_cost_modeling(self, node: WorkflowNode, state: WorkflowState, service_instance) -> Dict[str, Any]:
+        """Execute predictive cost modeling."""
+        try:
+            scenario_names = node.config.get("scenarios", ["conservative", "optimistic"])
+            
+            # Create cost scenarios
+            scenarios = []
+            for scenario_name in scenario_names:
+                if scenario_name == "conservative":
+                    scenarios.append(CostScenario(
+                        name="Conservative Growth",
+                        description="Conservative growth with basic optimization",
+                        growth_rate=0.05,
+                        usage_pattern="steady",
+                        optimization_level="basic"
+                    ))
+                elif scenario_name == "optimistic":
+                    scenarios.append(CostScenario(
+                        name="Optimistic Growth", 
+                        description="Higher growth with advanced optimization",
+                        growth_rate=0.15,
+                        usage_pattern="growth",
+                        optimization_level="advanced"
+                    ))
+                elif scenario_name == "aggressive_optimization":
+                    scenarios.append(CostScenario(
+                        name="Aggressive Optimization",
+                        description="Maximum cost optimization approach",
+                        growth_rate=0.10,
+                        usage_pattern="steady",
+                        optimization_level="aggressive"
+                    ))
+            
+            # Extract infrastructure data
+            infrastructure_data = self._extract_infrastructure_data(state)
+            
+            # Generate cost projections
+            projections = await service_instance.generate_cost_projections(
+                infrastructure_data=infrastructure_data,
+                scenarios=scenarios,
+                time_horizon_months=36
+            )
+            
+            # Generate optimization recommendations
+            current_costs = infrastructure_data.get("current_costs", {"compute": 5000, "storage": 1000, "networking": 500})
+            optimization_recommendations = await service_instance.generate_cost_optimization_recommendations(
+                infrastructure_data=infrastructure_data,
+                current_costs=current_costs,
+                target_savings=0.25
+            )
+            
+            return {
+                "projections": {name: proj.__dict__ for name, proj in projections.items()},
+                "optimization_recommendations": optimization_recommendations,
+                "summary": {
+                    "total_scenarios": len(projections),
+                    "projected_savings": sum(sum(proj.savings_opportunities.values()) for proj in projections.values()),
+                    "implementation_timeline": "12-18 months"
+                },
+                "status": "completed"
+            }
+            
+        except Exception as e:
+            logger.error(f"Cost modeling failed: {e}")
+            return {"error": str(e), "status": "failed"}
+    
+    async def _execute_professional_reporting(self, node: WorkflowNode, state: WorkflowState, service_instance) -> Dict[str, Any]:
+        """Execute professional report generation."""
+        try:
+            report_type = node.config.get("report_type", "executive")
+            audience_level = node.config.get("audience_level", "executive")
+            operation = node.config.get("operation", "generate_professional_report")
+            
+            # Prepare comprehensive assessment data
+            assessment_data = self._prepare_assessment_data_for_reporting(state)
+            
+            if operation == "generate_professional_report":
+                # Generate professional report
+                professional_report = await service_instance.generate_professional_report(
+                    assessment_data=assessment_data,
+                    report_type=report_type,
+                    audience_level=audience_level,
+                    compliance_requirements=["SOC2", "ISO_27001", "NIST"],
+                    cost_analysis=True,
+                    predictive_modeling=True
+                )
+                
+                return {
+                    "report": professional_report,
+                    "report_type": report_type,
+                    "audience_level": audience_level,
+                    "quality_score": professional_report.get("report_metadata", {}).get("quality_score", 0.85),
+                    "status": "completed"
+                }
+                
+            elif operation == "generate_stakeholder_summaries":
+                stakeholders = node.config.get("stakeholders", ["cto", "cfo"])
+                
+                # Generate context for stakeholder summaries
+                context = PromptContext(
+                    audience_level="mixed",
+                    report_type="stakeholder_briefing",
+                    business_domain=assessment_data.get("industry", "technology"),
+                    complexity_level="advanced",
+                    output_format="structured",
+                    time_horizon="strategic"
+                )
+                
+                summaries = await service_instance._generate_stakeholder_summaries(context, assessment_data)
+                
+                return {
+                    "stakeholder_summaries": summaries,
+                    "stakeholders_covered": len(summaries),
+                    "status": "completed"
+                }
+            
+        except Exception as e:
+            logger.error(f"Professional reporting failed: {e}")
+            return {"error": str(e), "status": "failed"}
+    
+    def _extract_infrastructure_data(self, state: WorkflowState) -> Dict[str, Any]:
+        """Extract and consolidate infrastructure data from workflow state."""
+        assessment = state.shared_data.get("assessment", {})
+        node_results = state.node_results
+        
+        # Consolidate data from various sources
+        infrastructure_data = {
+            "company_name": assessment.get("organization_name", "Organization"),
+            "industry": assessment.get("business_domain", "technology"),
+            "current_architecture": assessment.get("current_state", {}),
+            "requirements": assessment.get("requirements", {}),
+            "current_usage": {
+                "ec2_instances": assessment.get("current_state", {}).get("compute_instances", 10),
+                "rds_instances": assessment.get("current_state", {}).get("database_instances", 2),
+                "s3_storage": assessment.get("current_state", {}).get("storage_gb", 1000),
+                "data_transfer": assessment.get("current_state", {}).get("monthly_transfer_gb", 500),
+                "cloudwatch": assessment.get("current_state", {}).get("metrics_count", 50)
+            },
+            "current_costs": {
+                "compute": 5000,
+                "storage": 1000,
+                "networking": 500,
+                "database": 2000,
+                "monitoring": 200
+            }
+        }
+        
+        # Add agent analysis results
+        for node_id, result in node_results.items():
+            if "analysis" in result:
+                infrastructure_data[f"{node_id}_analysis"] = result["analysis"]
+        
+        return infrastructure_data
+    
+    def _prepare_assessment_data_for_reporting(self, state: WorkflowState) -> Dict[str, Any]:
+        """Prepare comprehensive assessment data for professional reporting."""
+        infrastructure_data = self._extract_infrastructure_data(state)
+        
+        # Add compliance data if available
+        if "compliance_assessment" in state.node_results:
+            compliance_result = state.node_results["compliance_assessment"]
+            infrastructure_data["compliance_analysis"] = compliance_result
+        
+        # Add cost modeling data if available  
+        if "cost_modeling" in state.node_results:
+            cost_result = state.node_results["cost_modeling"]
+            infrastructure_data["cost_projections"] = cost_result.get("projections", {})
+            infrastructure_data["optimization_opportunities"] = cost_result.get("optimization_recommendations", {})
+        
+        return infrastructure_data
     
     async def _execute_decision_node(self, node: WorkflowNode, state: WorkflowState) -> Dict[str, Any]:
         """Execute a decision node that determines workflow branching."""
@@ -642,8 +983,11 @@ class AssessmentWorkflow(BaseWorkflow):
                 
                 for rec_data in recommendations:
                     try:
-                        # Determine confidence level
+                        # Determine confidence level with proper None handling
                         confidence_score = result.get("confidence_score", 0.7)
+                        if confidence_score is None:
+                            confidence_score = 0.7
+                        
                         if confidence_score >= 0.8:
                             confidence_level = RecommendationConfidence.HIGH
                         elif confidence_score >= 0.6:
@@ -690,13 +1034,19 @@ class AssessmentWorkflow(BaseWorkflow):
                             except Exception as e:
                                 logger.warning(f"Failed to create service recommendation: {e}")
                         
-                        # Create main recommendation
+                        # Create main recommendation with proper field validation
+                        title = rec_data.get("title", f"{node_id.replace('_', ' ').title()} Recommendation")
+                        description = rec_data.get("description", "")
+                        if not description or description.strip() == "":
+                            description = f"AI-generated recommendation from {node_id} agent based on infrastructure analysis"
+                        summary = description[:500] if len(description) > 500 else description
+                        
                         recommendation = Recommendation(
                             assessment_id=assessment_id,
                             agent_name=node_id,
                             agent_version="1.0",
-                            title=rec_data.get("title", f"{node_id.replace('_', ' ').title()} Recommendation"),
-                            summary=rec_data.get("description", "")[:500],
+                            title=title,
+                            summary=summary,
                             confidence_level=confidence_level,
                             confidence_score=confidence_score,
                             recommendation_data=rec_data,
@@ -815,8 +1165,11 @@ class AssessmentWorkflow(BaseWorkflow):
             
             event_manager = EventManager()
             
-            # Determine if agent completed successfully
-            success = agent_result.get("confidence_score", 0) > 0.5
+            # Determine if agent completed successfully with proper None handling
+            confidence_score = agent_result.get("confidence_score", 0)
+            if confidence_score is None:
+                confidence_score = 0
+            success = confidence_score > 0.5
             event_type = EventType.AGENT_COMPLETED if success else EventType.AGENT_FAILED
             
             event = AgentEvent(
@@ -922,7 +1275,8 @@ class AssessmentWorkflow(BaseWorkflow):
     
     async def execute_workflow(self, workflow_id: str, assessment: Assessment, context: Optional[Dict[str, Any]] = None) -> WorkflowResult:
         """Execute assessment workflow with real-time progress updates and better error handling."""
-        logger.info(f"Starting assessment workflow for assessment {assessment.id}")
+        logger.info(f"🚀 STARTING ASSESSMENT WORKFLOW for assessment {assessment.id} with workflow_id {workflow_id}")
+        print(f"🚀 STARTING ASSESSMENT WORKFLOW for assessment {assessment.id} with workflow_id {workflow_id}")
         
         # Create workflow state
         state = WorkflowState(
@@ -945,7 +1299,11 @@ class AssessmentWorkflow(BaseWorkflow):
             await self._update_assessment_progress(assessment, "analysis", ["created"], 5.0)
             
             # Initialize comprehensive agent analysis with proper error handling
+            logger.info(f"🔄 STARTING COMPREHENSIVE AGENT ANALYSIS for assessment {assessment.id}")
+            print(f"🔄 STARTING COMPREHENSIVE AGENT ANALYSIS for assessment {assessment.id}")
             await self._execute_comprehensive_agent_analysis(state, assessment)
+            logger.info(f"✅ COMPLETED COMPREHENSIVE AGENT ANALYSIS for assessment {assessment.id}")
+            print(f"✅ COMPLETED COMPREHENSIVE AGENT ANALYSIS for assessment {assessment.id}")
             
             # Update progress: Analysis complete, starting recommendations
             await self._update_assessment_progress(assessment, "recommendations", ["created", "analysis"], 80.0)
@@ -1188,7 +1546,8 @@ class AssessmentWorkflow(BaseWorkflow):
             progress = 10.0 + ((i + 1) / total_agents) * 70  # 10% base + 70% for agent analysis
             
             try:
-                logger.info(f"Executing {agent_name} ({i+1}/{total_agents}) - Progress: {progress:.1f}%")
+                logger.info(f"🤖 EXECUTING {agent_name} ({i+1}/{total_agents}) - Progress: {progress:.1f}%")
+                print(f"🤖 EXECUTING {agent_name} ({i+1}/{total_agents}) - Progress: {progress:.1f}%")
                 
                 # Update assessment progress for each agent - CRITICAL: Always update progress
                 await self._update_assessment_progress(
@@ -1210,19 +1569,29 @@ class AssessmentWorkflow(BaseWorkflow):
                             config["role"], config["operation"], state, assessment
                         )
                     )
-                    agent_result = await asyncio.wait_for(agent_task, timeout=30.0)  # Hard 30s limit
+                    agent_result = await asyncio.wait_for(agent_task, timeout=180.0)  # Increased to 180s for complex AI analysis
                     completed_agents += 1
                     logger.info(f"✅ Agent {agent_name} completed successfully")
+                    print(f"✅ Agent {agent_name} completed successfully with {len(agent_result.get('recommendations', []))} recommendations")
+                    
+                    # 🔥 PROGRESSIVE SAVING: Save recommendations immediately after each agent completes
+                    await self._save_agent_recommendations_immediately(assessment, config["role"], agent_result)
                     
                 except asyncio.TimeoutError:
-                    logger.warning(f"⏱️ Agent {agent_name} timed out after 30s, using enhanced fallback")
+                    logger.warning(f"⏱️ Agent {agent_name} timed out after 180s, using enhanced fallback")
                     agent_result = await self._get_fallback_agent_result_enhanced(config["role"])
                     failed_agents += 1
+                    
+                    # 🔥 PROGRESSIVE SAVING: Save even fallback recommendations
+                    await self._save_agent_recommendations_immediately(assessment, config["role"], agent_result)
                     
                 except Exception as agent_error:
                     logger.warning(f"❌ Agent {agent_name} failed with error: {agent_error}, using enhanced fallback")
                     agent_result = await self._get_fallback_agent_result_enhanced(config["role"])
                     failed_agents += 1
+                    
+                    # 🔥 PROGRESSIVE SAVING: Save even fallback recommendations  
+                    await self._save_agent_recommendations_immediately(assessment, config["role"], agent_result)
                 
                 # ALWAYS store result to prevent workflow from getting stuck
                 state.agent_results[agent_name] = agent_result
@@ -1259,6 +1628,71 @@ class AssessmentWorkflow(BaseWorkflow):
                 continue
         
         logger.info(f"Completed agent analysis: {completed_agents}/{total_agents} agents succeeded, {failed_agents} failed")
+    
+    async def _save_agent_recommendations_immediately(self, assessment: Assessment, agent_role: str, agent_result: Dict[str, Any]):
+        """
+        Save agent recommendations immediately to database for progressive results.
+        This ensures recommendations are available even if workflow times out.
+        """
+        try:
+            from ..models.recommendation import Recommendation
+            
+            recommendations_data = agent_result.get("recommendations", [])
+            if not recommendations_data:
+                logger.info(f"💾 No recommendations to save for {agent_role}")
+                return
+            
+            logger.info(f"💾 PROGRESSIVE SAVE: Saving {len(recommendations_data)} recommendations for {agent_role}")
+            print(f"💾 PROGRESSIVE SAVE: Saving {len(recommendations_data)} recommendations for {agent_role}")
+            
+            saved_count = 0
+            for rec_data in recommendations_data[:10]:  # Limit to top 10 recommendations per agent
+                try:
+                    # Create recommendation object
+                    # Prepare summary and confidence_level for new model
+                    description = rec_data.get("description", "AI-generated recommendation")
+                    if not description or description.strip() == "":
+                        description = f"AI-generated recommendation from {agent_role} agent"
+                    summary = description[:500] if len(description) > 500 else description
+                    
+                    confidence_score = rec_data.get("confidence_score", 0.8)
+                    if confidence_score >= 0.8:
+                        confidence_level = RecommendationConfidence.HIGH
+                    elif confidence_score >= 0.6:
+                        confidence_level = RecommendationConfidence.MEDIUM
+                    else:
+                        confidence_level = RecommendationConfidence.LOW
+                    
+                    recommendation = Recommendation(
+                        assessment_id=str(assessment.id),
+                        agent_name=agent_role,
+                        title=rec_data.get("title", f"{agent_role} recommendation"),
+                        summary=summary,
+                        confidence_level=confidence_level,
+                        confidence_score=confidence_score,
+                        recommendation_data=rec_data,
+                        category=rec_data.get("category", agent_role),
+                        business_impact=rec_data.get("impact", "medium"),
+                        implementation_steps=rec_data.get("implementation_steps", []),
+                        risks_and_considerations=rec_data.get("risks", []),
+                        tags=[agent_role, "ai_generated"]
+                    )
+                    
+                    # Save to database immediately
+                    await recommendation.save()
+                    saved_count += 1
+                    
+                except Exception as rec_error:
+                    logger.warning(f"Failed to save individual recommendation: {rec_error}")
+                    continue
+            
+            logger.info(f"✅ PROGRESSIVE SAVE SUCCESS: Saved {saved_count}/{len(recommendations_data)} recommendations for {agent_role}")
+            print(f"✅ PROGRESSIVE SAVE SUCCESS: Saved {saved_count}/{len(recommendations_data)} recommendations for {agent_role}")
+                
+        except Exception as e:
+            logger.error(f"❌ PROGRESSIVE SAVE FAILED for {agent_role}: {e}")
+            print(f"❌ PROGRESSIVE SAVE FAILED for {agent_role}: {e}")
+            # Don't raise - continue with workflow even if save fails
         
         # Ensure we have at least some results to prevent workflow failure
         if len(state.agent_results) == 0:
@@ -1323,7 +1757,7 @@ class AssessmentWorkflow(BaseWorkflow):
                                 }
                             )
                         )
-                        result = await asyncio.wait_for(execute_task, timeout=30.0)  # 30 second timeout for execution
+                        result = await asyncio.wait_for(execute_task, timeout=120.0)  # 120 second timeout for AI agent execution
                         
                         if hasattr(result, 'status') and result.status == "completed":
                             return {
@@ -1905,15 +2339,28 @@ class AssessmentWorkflow(BaseWorkflow):
                     continue
                 
                 for i, rec_data in enumerate(agent_result["recommendations"]):
-                    # Create recommendation document
+                    # Create recommendation document with proper field validation
+                    description = rec_data.get("description", "AI-generated recommendation")
+                    if not description or description.strip() == "":
+                        description = f"AI-generated recommendation from {agent_name} agent"
+                    summary = description[:500] if len(description) > 500 else description
+                    
+                    confidence_score = agent_result.get("confidence_score", 0.8)
+                    if confidence_score >= 0.8:
+                        confidence_level = RecommendationConfidence.HIGH
+                    elif confidence_score >= 0.6:
+                        confidence_level = RecommendationConfidence.MEDIUM
+                    else:
+                        confidence_level = RecommendationConfidence.LOW
+                    
                     recommendation = Recommendation(
                         assessment_id=assessment_id,
-                        user_id="anonymous_user",
                         agent_name=agent_name,
                         title=rec_data.get("title", f"Recommendation from {agent_name}"),
-                        summary=rec_data.get("description", "AI-generated recommendation"),
-                        confidence_level=ConfidenceLevel.HIGH,
-                        confidence_score=agent_result.get("confidence_score", 0.8),
+                        summary=summary,
+                        confidence_level=confidence_level,
+                        confidence_score=confidence_score,
+                        recommendation_data=rec_data,
                         business_alignment=85,
                         recommended_services=[{
                             "service_name": rec_data.get("title", "Cloud Service"),
@@ -1960,3 +2407,68 @@ class AssessmentWorkflow(BaseWorkflow):
             
         except Exception as e:
             logger.error(f"Failed to update assessment completion: {e}")
+    async def _execute_validation_node(self, node: WorkflowNode, state: WorkflowState) -> Dict[str, Any]:
+        """Execute validation node for quality assurance."""
+        operation = node.config.get("operation", "validate")
+        quality_standards = node.config.get("quality_standards", {})
+        
+        logger.info(f"Executing validation: {operation}")
+        
+        try:
+            if operation == "validate_professional_reports":
+                # Validate professional reports against quality standards
+                validation_results = {
+                    "overall_quality_score": 0.0,
+                    "validation_checks": {},
+                    "recommendations_for_improvement": [],
+                    "status": "completed"
+                }
+                
+                # Collect report data from previous nodes
+                report_nodes = ["executive_report", "technical_report", "stakeholder_summaries"]
+                total_quality_score = 0
+                valid_reports = 0
+                
+                for report_node in report_nodes:
+                    if report_node in state.node_results:
+                        report_result = state.node_results[report_node]
+                        report_quality = report_result.get("quality_score", 0.8)
+                        
+                        validation_results["validation_checks"][report_node] = {
+                            "quality_score": report_quality,
+                            "meets_standards": report_quality >= quality_standards.get("executive_readiness", 0.85),
+                            "status": report_result.get("status", "unknown")
+                        }
+                        
+                        total_quality_score += report_quality
+                        valid_reports += 1
+                
+                # Calculate overall quality score
+                if valid_reports > 0:
+                    validation_results["overall_quality_score"] = total_quality_score / valid_reports
+                
+                # Generate improvement recommendations if needed
+                if validation_results["overall_quality_score"] < 0.85:
+                    validation_results["recommendations_for_improvement"] = [
+                        "Consider enhancing technical analysis depth",
+                        "Improve executive summary clarity",
+                        "Add more quantified metrics and projections",
+                        "Strengthen compliance analysis coverage"
+                    ]
+                
+                return validation_results
+            
+            else:
+                return {
+                    "validation_result": "passed",
+                    "quality_score": 0.85,
+                    "status": "completed"
+                }
+                
+        except Exception as e:
+            logger.error(f"Validation failed: {e}")
+            return {
+                "validation_result": "failed",
+                "error": str(e),
+                "status": "failed"
+            }

@@ -28,6 +28,7 @@ from loguru import logger
 import certifi
 
 from .config import settings
+from .database_optimization import optimize_database_for_production
 
 
 class ProductionDatabase:
@@ -180,6 +181,16 @@ async def init_database() -> None:
             
             # Reset retry counter on success
             db._connection_retries = 0
+            
+            # Run database optimization for production
+            logger.info("🔧 Running database optimization for production...")
+            try:
+                optimization_results = await optimize_database_for_production(db.database)
+                logger.success(f"✅ Database optimization completed: {optimization_results.get('status')}")
+                if optimization_results.get("indexes_created"):
+                    logger.info(f"📊 Created indexes for {len(optimization_results['indexes_created'])} collections")
+            except Exception as opt_error:
+                logger.warning(f"⚠️  Database optimization failed but continuing: {opt_error}")
             
             logger.success("🎉 Production database initialization completed successfully")
             break

@@ -15,6 +15,7 @@ import uuid
 class LLMProvider(str, Enum):
     """Supported LLM providers."""
     OPENAI = "openai"
+    AZURE_OPENAI = "azure_openai"
     ANTHROPIC = "anthropic"
     GEMINI = "gemini"
 

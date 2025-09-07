@@ -125,7 +125,7 @@ const AssessmentResultsChart: React.FC<AssessmentResultsChartProps> = ({
                     </Typography>
                     {payload.map((entry: { name: string; value: number; color: string }, index: number) => (
                         <Typography
-                            key={index}
+                            key={`tooltip-${entry.name}-${index}`}
                             variant="body2"
                             sx={{ color: entry.color }}
                         >
@@ -281,9 +281,9 @@ const AssessmentResultsChart: React.FC<AssessmentResultsChartProps> = ({
                         Assessment Summary
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                        {data.map((item) => (
+                        {data.map((item, index) => (
                             <Box
-                                key={item.category}
+                                key={`assessment-summary-${item.category || 'unknown'}-${index}`}
                                 sx={{
                                     display: 'flex',
                                     alignItems: 'center',

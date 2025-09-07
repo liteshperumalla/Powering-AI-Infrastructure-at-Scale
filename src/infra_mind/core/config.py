@@ -164,7 +164,7 @@ class Settings(BaseSettings):
     # Alibaba Cloud Configuration
     alibaba_access_key_id: Optional[SecretStr] = None
     alibaba_access_key_secret: Optional[SecretStr] = None
-    alibaba_region: str = "cn-beijing"
+    alibaba_region: str = "us-west-1"
     alibaba_security_token: Optional[SecretStr] = None
     
     # Terraform Cloud Configuration

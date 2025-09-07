@@ -23,6 +23,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { login, clearError } from '@/store/slices/authSlice';
+import ResponsiveLayout from '@/components/ResponsiveLayout';
 
 export default function LoginPage() {
     const router = useRouter();
@@ -78,24 +79,10 @@ export default function LoginPage() {
         }
     };
 
-    const handleQuickLogin = async () => {
-        const testCredentials = {
-            email: 'liteshperumalla@gmail.com',
-            password: 'Litesh@#12345'
-        };
-        
-        setFormData(testCredentials);
-        
-        try {
-            const result = await dispatch(login(testCredentials)).unwrap();
-            router.push('/dashboard');
-        } catch (error) {
-            console.error('Quick login failed:', error);
-        }
-    };
 
     return (
-        <Container component="main" maxWidth="sm">
+        <ResponsiveLayout title="Sign In">
+            <Container component="main" maxWidth="sm">
             <Box
                 sx={{
                     marginTop: 8,
@@ -186,23 +173,6 @@ export default function LoginPage() {
                         >
                             {loading ? 'Signing In...' : 'Sign In'}
                         </Button>
-                        <Button
-                            type="button"
-                            fullWidth
-                            variant="outlined"
-                            color="secondary"
-                            sx={{ mb: 2 }}
-                            disabled={loading}
-                            onClick={handleQuickLogin}
-                        >
-                            🚀 Quick Login (Test User)
-                        </Button>
-                        
-                        <Divider sx={{ my: 2 }} />
-                        
-                        <Typography variant="caption" color="text.secondary" align="center" display="block">
-                            Quick Login uses: liteshperumalla@gmail.com
-                        </Typography>
                         
                         <Box textAlign="center">
                             <Link
@@ -217,6 +187,7 @@ export default function LoginPage() {
                     </Box>
                 </Paper>
             </Box>
-        </Container>
+            </Container>
+        </ResponsiveLayout>
     );
 }

@@ -8,6 +8,7 @@ Focuses on business process analysis, AI opportunity identification, and AI tran
 import logging
 import json
 import asyncio
+import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timezone
 
@@ -161,8 +162,8 @@ class AIConsultantAgent(BaseAgent):
             readiness_assessment = await self._assess_ai_readiness_with_benchmarks(market_intelligence)
             
             # Step 5: Generate AI use case recommendations with real success stories
-            use_case_recommendations = await self._generate_use_case_recommendations_with_real_data(
-                business_process_analysis, ai_opportunities, market_intelligence
+            use_case_recommendations = await self._generate_use_case_recommendations(
+                business_process_analysis, ai_opportunities
             )
             
             # Step 6: Create transformation strategy with market insights
@@ -1184,42 +1185,42 @@ class AIConsultantAgent(BaseAgent):
             # Search for AI trends and developments
             trends_search = await self.web_search_client.search(
                 "artificial intelligence trends 2024 2025 enterprise adoption generative AI business applications",
-                num_results=5
+                max_results=5
             )
             market_intelligence["ai_trends"] = trends_search.get("results", [])
             
             # Search for AI success stories and case studies
             success_search = await self.web_search_client.search(
                 "AI implementation success stories case studies enterprise 2024 ROI business transformation",
-                num_results=5
+                max_results=5
             )
             market_intelligence["success_stories"] = success_search.get("results", [])
             
             # Search for industry-specific AI adoption
             industry_search = await self.web_search_client.search(
                 "AI adoption by industry enterprise artificial intelligence implementation rates 2024 2025",
-                num_results=5
+                max_results=5
             )
             market_intelligence["industry_adoption"] = industry_search.get("results", [])
             
             # Search for technology developments
             tech_search = await self.web_search_client.search(
                 "AI technology developments machine learning platforms 2024 2025 enterprise solutions",
-                num_results=5
+                max_results=5
             )
             market_intelligence["technology_developments"] = tech_search.get("results", [])
             
             # Search for market analysis
             market_search = await self.web_search_client.search(
                 "AI market analysis enterprise spending artificial intelligence investment 2024 2025",
-                num_results=5
+                max_results=5
             )
             market_intelligence["market_analysis"] = market_search.get("results", [])
             
             # Search for ROI studies
             roi_search = await self.web_search_client.search(
                 "AI ROI studies return on investment artificial intelligence enterprise business value 2024",
-                num_results=3
+                max_results=3
             )
             market_intelligence["roi_studies"] = roi_search.get("results", [])
             
@@ -1244,29 +1245,141 @@ class AIConsultantAgent(BaseAgent):
         
         return "\n".join(context_parts)
     
-    def _parse_llm_response(self, response: str) -> Dict[str, Any]:
-        """Parse LLM response, handling both JSON and text formats."""
-        try:
-            # Try to parse as JSON first
-            return json.loads(response)
-        except json.JSONDecodeError:
-            # Fallback to extracting structured information from text
-            return self._extract_structured_data_from_text(response)
-    
-    def _extract_structured_data_from_text(self, text: str) -> Dict[str, Any]:
-        """Extract structured data from text when JSON parsing fails."""
-        # Simple extraction logic for common patterns
-        result = {
-            "analysis": text,
-            "extracted_points": []
-        }
+    def _parse_llm_response(self, response: str, fallback_structure: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Parse LLM response with robust JSON extraction and error handling.
         
-        # Extract numbered points
-        lines = text.split('\n')
-        for line in lines:
-            line = line.strip()
-            if line and (line.startswith(('1.', '2.', '3.', '4.', '5.', '-', '•'))):
-                result["extracted_points"].append(line)
+        Args:
+            response: The raw LLM response
+            fallback_structure: Optional fallback structure if parsing fails
+            
+        Returns:
+            Dictionary with parsed response data
+        """
+        if not response or not response.strip():
+            logger.warning("Empty or null LLM response received")
+            return fallback_structure or {"error": "Empty response", "analysis": "No data available"}
+        
+        # Clean the response
+        cleaned_response = response.strip()
+        
+        try:
+            # First attempt: direct JSON parsing
+            parsed_response = json.loads(cleaned_response)
+            
+            # Validate that we have a proper dictionary structure
+            if not isinstance(parsed_response, dict):
+                logger.warning(f"LLM response is not a dictionary: {type(parsed_response)}")
+                if fallback_structure:
+                    return fallback_structure
+                return {"error": "Invalid response format", "raw_response": str(parsed_response)}
+            
+            return parsed_response
+            
+        except json.JSONDecodeError:
+            logger.warning("Direct JSON parsing failed, attempting regex extraction")
+            
+            # Second attempt: Extract JSON from markdown or text wrapper
+            json_patterns = [
+                r'```json\s*(\{.*?\})\s*```',  # JSON in code blocks
+                r'```\s*(\{.*?\})\s*```',      # JSON in generic code blocks
+                r'(\{.*\})',                   # Any JSON-like structure
+            ]
+            
+            for pattern in json_patterns:
+                json_match = re.search(pattern, cleaned_response, re.DOTALL)
+                if json_match:
+                    try:
+                        json_content = json_match.group(1).strip()
+                        parsed_response = json.loads(json_content)
+                        
+                        if isinstance(parsed_response, dict):
+                            logger.info("Successfully extracted JSON from wrapped response")
+                            return parsed_response
+                            
+                    except json.JSONDecodeError:
+                        continue
+            
+            # Third attempt: Handle nested JSON structures
+            try:
+                # Look for response wrapper patterns
+                if 'response' in cleaned_response.lower():
+                    lines = cleaned_response.split('\n')
+                    for line in lines:
+                        line = line.strip()
+                        if line.startswith('{') and line.endswith('}'):
+                            parsed_response = json.loads(line)
+                            if isinstance(parsed_response, dict):
+                                return parsed_response
+                                
+            except json.JSONDecodeError:
+                pass
+            
+            # Final attempt: Extract structured data from text
+            logger.warning("All JSON parsing attempts failed, falling back to text extraction")
+            return self._extract_structured_data_from_text(cleaned_response, fallback_structure)
+            
+        except Exception as e:
+            logger.error(f"Unexpected error during JSON parsing: {str(e)}")
+            return fallback_structure or {"error": f"Parsing error: {str(e)}", "raw_response": cleaned_response}
+    
+    def _extract_structured_data_from_text(self, text: str, fallback_structure: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Extract structured data from text when JSON parsing fails.
+        
+        Args:
+            text: Raw text to extract data from
+            fallback_structure: Optional fallback structure if extraction fails
+            
+        Returns:
+            Dictionary with extracted structured data
+        """
+        # Start with fallback structure if provided
+        result = fallback_structure.copy() if fallback_structure else {}
+        
+        # Always include the raw text for reference
+        result["raw_analysis"] = text
+        result["extracted_points"] = []
+        result["parsing_fallback"] = True
+        
+        try:
+            # Extract numbered points and bullet points
+            lines = text.split('\n')
+            for line in lines:
+                line = line.strip()
+                if line and (line.startswith(('1.', '2.', '3.', '4.', '5.', '6.', '7.', '8.', '-', '•', '*'))):
+                    result["extracted_points"].append(line)
+            
+            # Try to identify key sections
+            sections = {}
+            current_section = None
+            section_content = []
+            
+            for line in lines:
+                line = line.strip()
+                if line.endswith(':') and len(line.split()) <= 4:
+                    # Likely a section header
+                    if current_section and section_content:
+                        sections[current_section] = '\n'.join(section_content)
+                    current_section = line.rstrip(':').lower().replace(' ', '_')
+                    section_content = []
+                elif current_section and line:
+                    section_content.append(line)
+            
+            # Add final section
+            if current_section and section_content:
+                sections[current_section] = '\n'.join(section_content)
+            
+            if sections:
+                result["extracted_sections"] = sections
+            
+            # Set analysis field if not in fallback structure
+            if "analysis" not in result:
+                result["analysis"] = text[:500] + "..." if len(text) > 500 else text
+                
+        except Exception as e:
+            logger.error(f"Error in text extraction: {str(e)}")
+            result["extraction_error"] = str(e)
         
         return result
     
@@ -1290,40 +1403,130 @@ class AIConsultantAgent(BaseAgent):
             # Prepare market context for analysis
             market_context = self._prepare_market_context(market_intelligence)
             
-            analysis_prompt = f"""
-            Analyze business processes and identify AI transformation opportunities based on current market trends:
+            analysis_prompt = f"""CRITICAL: You must respond with ONLY a valid JSON object. No text before or after the JSON.
+
+Analyze business processes and identify AI transformation opportunities based on current market trends:
+
+BUSINESS CONTEXT:
+- Industry: {business_req.get('industry', 'Not specified')}
+- Company Size: {business_req.get('company_size', 'Not specified')}
+- Current Processes: {business_req.get('current_processes', [])}
+- Pain Points: {business_req.get('pain_points', [])}
+- Goals: {business_req.get('goals', [])}
+
+CURRENT AI MARKET INTELLIGENCE:
+{market_context}
+
+Based on this information, provide comprehensive analysis across all dimensions.
+
+CRITICAL: You must respond with ONLY a valid JSON object following this exact schema:
+{{
+  "process_efficiency": {{
+    "current_maturity_score": 0-100,
+    "identified_bottlenecks": ["bottleneck1", "bottleneck2"],
+    "efficiency_gaps": ["gap1", "gap2"],
+    "improvement_potential": "high/medium/low"
+  }},
+  "ai_ready_processes": [
+    {{
+      "process_name": "Process Name",
+      "readiness_score": 0-100,
+      "ai_applications": ["application1", "application2"],
+      "implementation_priority": "high/medium/low"
+    }}
+  ],
+  "automation_opportunities": [
+    {{
+      "opportunity_name": "Opportunity Name",
+      "impact_level": "high/medium/low",
+      "complexity": "low/medium/high",
+      "estimated_savings": "Savings estimate",
+      "timeline": "Implementation timeline"
+    }}
+  ],
+  "data_readiness": {{
+    "quality_score": 0-100,
+    "availability": "excellent/good/fair/poor",
+    "gaps": ["gap1", "gap2"],
+    "preparation_needed": ["requirement1", "requirement2"]
+  }},
+  "standardization_needs": [
+    {{
+      "area": "Area name",
+      "priority": "high/medium/low",
+      "effort_required": "low/medium/high",
+      "expected_timeline": "Timeline estimate"
+    }}
+  ],
+  "change_management": {{
+    "resistance_level": "high/medium/low",
+    "key_stakeholders": ["stakeholder1", "stakeholder2"],
+    "training_needs": ["need1", "need2"],
+    "communication_strategy": "Strategy description"
+  }},
+  "roi_analysis": {{
+    "quick_wins": [
+      {{
+        "initiative": "Initiative name",
+        "investment": "Investment estimate",
+        "payback_period": "Timeline",
+        "expected_roi": "ROI percentage"
+      }}
+    ],
+    "strategic_investments": [
+      {{
+        "initiative": "Initiative name", 
+        "investment": "Investment estimate",
+        "payback_period": "Timeline",
+        "expected_roi": "ROI percentage"
+      }}
+    ]
+  }},
+  "implementation_timeline": {{
+    "phase_1_quick_wins": {{
+      "duration": "Timeline",
+      "key_activities": ["activity1", "activity2"],
+      "success_metrics": ["metric1", "metric2"]
+    }},
+    "phase_2_core_implementations": {{
+      "duration": "Timeline",
+      "key_activities": ["activity1", "activity2"],
+      "success_metrics": ["metric1", "metric2"]
+    }},
+    "phase_3_advanced_ai": {{
+      "duration": "Timeline", 
+      "key_activities": ["activity1", "activity2"],
+      "success_metrics": ["metric1", "metric2"]
+    }}
+  }}
+}}
+
+CRITICAL: Respond with ONLY the JSON object. No additional text."""
             
-            BUSINESS CONTEXT:
-            - Industry: {business_req.get('industry', 'Not specified')}
-            - Company Size: {business_req.get('company_size', 'Not specified')}
-            - Current Processes: {business_req.get('current_processes', [])}
-            - Pain Points: {business_req.get('pain_points', [])}
-            - Goals: {business_req.get('goals', [])}
-            
-            CURRENT AI MARKET INTELLIGENCE:
-            {market_context}
-            
-            Based on this information, analyze:
-            1. Current process efficiency and bottlenecks
-            2. AI-ready processes for immediate transformation
-            3. High-impact automation opportunities
-            4. Data availability and quality for AI initiatives
-            5. Process standardization requirements
-            6. Change management considerations
-            7. ROI potential for each process area
-            8. Implementation complexity and timeline
-            
-            Return in JSON format with: process_efficiency, ai_ready_processes, automation_opportunities, data_readiness, standardization_needs, change_management, roi_analysis, implementation_timeline.
-            """
-            
-            llm_response = await self.llm_client.generate_text(
+            llm_response = await self._call_llm(
                 prompt=analysis_prompt,
-                system_prompt="You are a business process analyst and AI transformation consultant with expertise in identifying AI opportunities across various industries.",
+                system_prompt="You are a business process analyst and AI transformation consultant with expertise in identifying AI opportunities across various industries. You MUST respond with ONLY valid JSON. Do not include any text before, after, or around the JSON. Only return the JSON object.",
                 temperature=0.2,
                 max_tokens=2500
             )
             
-            llm_analysis = self._parse_llm_response(llm_response)
+            # Create fallback structure for business process analysis
+            fallback_structure = {
+                "process_efficiency": {"current_maturity_score": 50, "identified_bottlenecks": [], "efficiency_gaps": [], "improvement_potential": "medium"},
+                "ai_ready_processes": [],
+                "automation_opportunities": [],
+                "data_readiness": {"quality_score": 50, "availability": "fair", "gaps": [], "preparation_needed": []},
+                "standardization_needs": [],
+                "change_management": {"resistance_level": "medium", "key_stakeholders": [], "training_needs": [], "communication_strategy": "Standard change management approach"},
+                "roi_analysis": {"quick_wins": [], "strategic_investments": []},
+                "implementation_timeline": {
+                    "phase_1_quick_wins": {"duration": "3-6 months", "key_activities": [], "success_metrics": []},
+                    "phase_2_core_implementations": {"duration": "6-12 months", "key_activities": [], "success_metrics": []},
+                    "phase_3_advanced_ai": {"duration": "12-18 months", "key_activities": [], "success_metrics": []}
+                }
+            }
+            
+            llm_analysis = self._parse_llm_response(llm_response, fallback_structure)
             
             # Enhance base analysis with market insights
             enhanced_analysis = {
@@ -1363,48 +1566,126 @@ class AIConsultantAgent(BaseAgent):
             # Prepare market context
             market_context = self._prepare_market_context(market_intelligence)
             
-            opportunities_prompt = f"""
-            Identify AI opportunities based on business context and current market trends:
+            opportunities_prompt = f"""CRITICAL: You must respond with ONLY a valid JSON object. No text before or after the JSON.
+
+Identify AI opportunities based on business context and current market trends:
+
+BUSINESS PROFILE:
+- Industry: {business_req.get('industry', 'Not specified')}
+- Company Size: {business_req.get('company_size', 'Not specified')}
+- Budget Range: {business_req.get('budget_range', 'Not specified')}
+- Technical Maturity: {business_req.get('technical_maturity', 'Not specified')}
+- Goals: {business_req.get('goals', [])}
+- Current Challenges: {business_req.get('pain_points', [])}
+
+CURRENT AI MARKET TRENDS:
+{market_context}
+
+Identify specific AI opportunities across all categories with detailed analysis.
+
+CRITICAL: You must respond with ONLY a valid JSON object following this exact schema:
+{{
+  "quick_wins": [
+    {{
+      "opportunity_name": "Opportunity Name",
+      "business_value": "Value description",
+      "implementation_complexity": "low/medium/high",
+      "resource_requirements": "Resource description",
+      "estimated_timeline": "Timeline",
+      "estimated_cost": "Cost range",
+      "success_metrics": ["metric1", "metric2"],
+      "market_validation": "Validation example"
+    }}
+  ],
+  "strategic_initiatives": [
+    {{
+      "initiative_name": "Initiative Name",
+      "business_value": "Value description",
+      "implementation_complexity": "low/medium/high",
+      "resource_requirements": "Resource description",
+      "estimated_timeline": "Timeline",
+      "estimated_cost": "Cost range",
+      "success_metrics": ["metric1", "metric2"],
+      "competitive_advantage": "Advantage description"
+    }}
+  ],
+  "industry_specific": [
+    {{
+      "application_name": "Application Name",
+      "industry_relevance": "Relevance description",
+      "business_impact": "high/medium/low",
+      "implementation_approach": "Approach description",
+      "success_examples": ["example1", "example2"]
+    }}
+  ],
+  "competitive_advantage": [
+    {{
+      "advantage_area": "Area description",
+      "differentiation_factor": "Factor description",
+      "market_positioning": "Positioning description",
+      "implementation_priority": "high/medium/low"
+    }}
+  ],
+  "cost_reduction": [
+    {{
+      "cost_area": "Cost area",
+      "reduction_potential": "Percentage or amount",
+      "implementation_effort": "Effort description",
+      "payback_period": "Timeline",
+      "automation_scope": "Scope description"
+    }}
+  ],
+  "revenue_generation": [
+    {{
+      "revenue_opportunity": "Opportunity description",
+      "revenue_potential": "Amount or percentage",
+      "market_size": "Market description",
+      "implementation_requirements": "Requirements description",
+      "go_to_market_strategy": "Strategy description"
+    }}
+  ],
+  "customer_experience": [
+    {{
+      "enhancement_area": "Area description",
+      "customer_impact": "Impact description",
+      "implementation_approach": "Approach description",
+      "success_metrics": ["metric1", "metric2"],
+      "differentiation_value": "Value description"
+    }}
+  ],
+  "operational_efficiency": [
+    {{
+      "efficiency_area": "Area description",
+      "improvement_potential": "Percentage or description",
+      "automation_level": "Level description",
+      "resource_impact": "Impact description",
+      "scalability_factor": "Factor description"
+    }}
+  ]
+}}
+
+CRITICAL: Respond with ONLY the JSON object. No additional text."""
             
-            BUSINESS PROFILE:
-            - Industry: {business_req.get('industry', 'Not specified')}
-            - Company Size: {business_req.get('company_size', 'Not specified')}
-            - Budget Range: {business_req.get('budget_range', 'Not specified')}
-            - Technical Maturity: {business_req.get('technical_maturity', 'Not specified')}
-            - Goals: {business_req.get('goals', [])}
-            - Current Challenges: {business_req.get('pain_points', [])}
-            
-            CURRENT AI MARKET TRENDS:
-            {market_context}
-            
-            Identify specific AI opportunities:
-            1. High-impact, low-complexity quick wins
-            2. Strategic long-term AI initiatives
-            3. Industry-specific AI applications
-            4. Competitive advantage opportunities
-            5. Cost reduction potential
-            6. Revenue generation possibilities
-            7. Customer experience improvements
-            8. Operational efficiency gains
-            
-            For each opportunity, include:
-            - Business value proposition
-            - Implementation complexity
-            - Resource requirements
-            - Success metrics
-            - Market validation examples
-            
-            Return in JSON format with: quick_wins, strategic_initiatives, industry_specific, competitive_advantage, cost_reduction, revenue_generation, customer_experience, operational_efficiency.
-            """
-            
-            llm_response = await self.llm_client.generate_text(
+            llm_response = await self._call_llm(
                 prompt=opportunities_prompt,
-                system_prompt="You are an AI strategy consultant with expertise in identifying high-value AI opportunities across various industries and business models.",
+                system_prompt="You are an AI strategy consultant with expertise in identifying high-value AI opportunities across various industries and business models. You MUST respond with ONLY valid JSON. Do not include any text before, after, or around the JSON. Only return the JSON object.",
                 temperature=0.2,
                 max_tokens=2500
             )
             
-            opportunities_analysis = self._parse_llm_response(llm_response)
+            # Create fallback structure for AI opportunities
+            fallback_structure = {
+                "quick_wins": [],
+                "strategic_initiatives": [],
+                "industry_specific": [],
+                "competitive_advantage": [],
+                "cost_reduction": [],
+                "revenue_generation": [],
+                "customer_experience": [],
+                "operational_efficiency": []
+            }
+            
+            opportunities_analysis = self._parse_llm_response(llm_response, fallback_structure)
             
             return {
                 "quick_wins": opportunities_analysis.get("quick_wins", []),
@@ -1448,42 +1729,116 @@ class AIConsultantAgent(BaseAgent):
             # Prepare benchmark context
             benchmark_context = self._prepare_benchmark_context(market_intelligence)
             
-            readiness_prompt = f"""
-            Assess AI readiness against industry benchmarks and best practices:
+            readiness_prompt = f"""CRITICAL: You must respond with ONLY a valid JSON object. No text before or after the JSON.
+
+Assess AI readiness against industry benchmarks and best practices:
+
+CURRENT STATE:
+- Industry: {business_req.get('industry', 'Not specified')}
+- Company Size: {business_req.get('company_size', 'Not specified')}
+- Technical Infrastructure: {technical_req.get('existing_infrastructure', 'Not specified')}
+- Data Maturity: {business_req.get('data_maturity', 'Not specified')}
+- Team Skills: {business_req.get('technical_expertise', 'Not specified')}
+- Budget Allocation: {business_req.get('budget_range', 'Not specified')}
+
+INDUSTRY BENCHMARKS:
+{benchmark_context}
+
+Assess readiness across all dimensions with specific scores and detailed analysis.
+
+CRITICAL: You must respond with ONLY a valid JSON object following this exact schema:
+{{
+  "data_readiness": {{
+    "score": 0-100,
+    "level": "excellent/good/fair/poor",
+    "strengths": ["strength1", "strength2"],
+    "gaps": ["gap1", "gap2"],
+    "improvement_actions": ["action1", "action2"]
+  }},
+  "technical_readiness": {{
+    "score": 0-100,
+    "level": "excellent/good/fair/poor",
+    "strengths": ["strength1", "strength2"],
+    "gaps": ["gap1", "gap2"],
+    "improvement_actions": ["action1", "action2"]
+  }},
+  "team_readiness": {{
+    "score": 0-100,
+    "level": "excellent/good/fair/poor",
+    "strengths": ["strength1", "strength2"],
+    "gaps": ["gap1", "gap2"],
+    "improvement_actions": ["action1", "action2"]
+  }},
+  "culture_readiness": {{
+    "score": 0-100,
+    "level": "excellent/good/fair/poor",
+    "strengths": ["strength1", "strength2"],
+    "gaps": ["gap1", "gap2"],
+    "improvement_actions": ["action1", "action2"]
+  }},
+  "governance_readiness": {{
+    "score": 0-100,
+    "level": "excellent/good/fair/poor",
+    "strengths": ["strength1", "strength2"],
+    "gaps": ["gap1", "gap2"],
+    "improvement_actions": ["action1", "action2"]
+  }},
+  "budget_readiness": {{
+    "score": 0-100,
+    "level": "excellent/good/fair/poor",
+    "strengths": ["strength1", "strength2"],
+    "gaps": ["gap1", "gap2"],
+    "improvement_actions": ["action1", "action2"]
+  }},
+  "leadership_readiness": {{
+    "score": 0-100,
+    "level": "excellent/good/fair/poor",
+    "strengths": ["strength1", "strength2"],
+    "gaps": ["gap1", "gap2"],
+    "improvement_actions": ["action1", "action2"]
+  }},
+  "overall_score": 0-100,
+  "gap_analysis": {{
+    "critical_gaps": ["gap1", "gap2"],
+    "moderate_gaps": ["gap1", "gap2"],
+    "minor_gaps": ["gap1", "gap2"],
+    "priorities": ["priority1", "priority2"]
+  }},
+  "improvement_plan": [
+    {{
+      "area": "Area name",
+      "priority": "high/medium/low",
+      "timeline": "Timeline estimate",
+      "effort": "low/medium/high",
+      "expected_impact": "Impact description"
+    }}
+  ]
+}}
+
+CRITICAL: Respond with ONLY the JSON object. No additional text."""
             
-            CURRENT STATE:
-            - Industry: {business_req.get('industry', 'Not specified')}
-            - Company Size: {business_req.get('company_size', 'Not specified')}
-            - Technical Infrastructure: {technical_req.get('existing_infrastructure', 'Not specified')}
-            - Data Maturity: {business_req.get('data_maturity', 'Not specified')}
-            - Team Skills: {business_req.get('technical_expertise', 'Not specified')}
-            - Budget Allocation: {business_req.get('budget_range', 'Not specified')}
-            
-            INDUSTRY BENCHMARKS:
-            {benchmark_context}
-            
-            Assess readiness across dimensions:
-            1. Data Infrastructure and Quality (0-100 score)
-            2. Technical Infrastructure and Platform (0-100 score)
-            3. Team Skills and Capabilities (0-100 score)
-            4. Organizational Culture and Change Management (0-100 score)
-            5. Governance and Ethics Framework (0-100 score)
-            6. Budget and Resource Allocation (0-100 score)
-            7. Leadership Support and Vision (0-100 score)
-            
-            Provide specific gap analysis and improvement recommendations for each dimension.
-            
-            Return in JSON format with: data_readiness, technical_readiness, team_readiness, culture_readiness, governance_readiness, budget_readiness, leadership_readiness, overall_score, gap_analysis, improvement_plan.
-            """
-            
-            llm_response = await self.llm_client.generate_text(
+            llm_response = await self._call_llm(
                 prompt=readiness_prompt,
-                system_prompt="You are an AI transformation consultant expert at assessing organizational readiness for AI initiatives using industry benchmarks.",
+                system_prompt="You are an AI transformation consultant expert at assessing organizational readiness for AI initiatives using industry benchmarks. You MUST respond with ONLY valid JSON. Do not include any text before, after, or around the JSON. Only return the JSON object.",
                 temperature=0.1,
                 max_tokens=2500
             )
             
-            readiness_analysis = self._parse_llm_response(llm_response)
+            # Create fallback structure for AI readiness assessment
+            fallback_structure = {
+                "data_readiness": {"score": 50, "level": "fair", "strengths": [], "gaps": [], "improvement_actions": []},
+                "technical_readiness": {"score": 50, "level": "fair", "strengths": [], "gaps": [], "improvement_actions": []},
+                "team_readiness": {"score": 50, "level": "fair", "strengths": [], "gaps": [], "improvement_actions": []},
+                "culture_readiness": {"score": 50, "level": "fair", "strengths": [], "gaps": [], "improvement_actions": []},
+                "governance_readiness": {"score": 50, "level": "fair", "strengths": [], "gaps": [], "improvement_actions": []},
+                "budget_readiness": {"score": 50, "level": "fair", "strengths": [], "gaps": [], "improvement_actions": []},
+                "leadership_readiness": {"score": 50, "level": "fair", "strengths": [], "gaps": [], "improvement_actions": []},
+                "overall_score": 50,
+                "gap_analysis": {"critical_gaps": [], "moderate_gaps": [], "minor_gaps": [], "priorities": []},
+                "improvement_plan": []
+            }
+            
+            readiness_analysis = self._parse_llm_response(llm_response, fallback_structure)
             
             return {
                 "data_readiness": readiness_analysis.get("data_readiness", {}),

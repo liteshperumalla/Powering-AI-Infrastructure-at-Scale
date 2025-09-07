@@ -40,7 +40,7 @@ import {
     GetApp as Backup,
     Build,
 } from '@mui/icons-material';
-import Navigation from '@/components/Navigation';
+import ResponsiveLayout from '@/components/ResponsiveLayout';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { updateProfile } from '@/store/slices/authSlice';
@@ -288,8 +288,8 @@ export default function SettingsPage() {
 
     return (
         <ProtectedRoute>
-            <Navigation title="Settings">
-                <Container maxWidth="lg">
+            <ResponsiveLayout title="Settings">
+                <Container maxWidth="lg" sx={{ mt: 3 }}>
                     <Box sx={{ mb: 4 }}>
                         <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                             <SettingsIcon sx={{ fontSize: 40 }} />
@@ -943,7 +943,7 @@ export default function SettingsPage() {
                         </Button>
                     </Box>
                 </Container>
-            </Navigation>
+            </ResponsiveLayout>
         </ProtectedRoute>
     );
 }

@@ -14,8 +14,12 @@ import aiohttp
 import base64
 import json
 from dataclasses import dataclass
+from datetime import timedelta
 
-from .base import CloudProvider, CloudService, CloudServiceResponse, CloudServiceError, ServiceCategory
+from .base import (
+    BaseCloudClient, CloudProvider, CloudService, CloudServiceResponse, 
+    CloudServiceError, ServiceCategory
+)
 from ..core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -30,7 +34,7 @@ class IBMCloudCredentials:
     resource_group_id: Optional[str] = None
 
 
-class IBMCloudClient:
+class IBMCloudClient(BaseCloudClient):
     """
     IBM Cloud API client for service discovery and cost analysis.
     
@@ -43,9 +47,20 @@ class IBMCloudClient:
     - Container Registry
     """
     
-    def __init__(self, credentials: Optional[IBMCloudCredentials] = None):
+    def __init__(self, api_key: Optional[str] = None, account_id: Optional[str] = None, region: str = "us-south"):
         """Initialize IBM Cloud client with credentials."""
-        self.credentials = credentials or self._get_credentials_from_config()
+        super().__init__(CloudProvider.IBM, region)
+        
+        # Use provided credentials or get from environment
+        if api_key and account_id:
+            self.credentials = IBMCloudCredentials(
+                api_key=api_key,
+                account_id=account_id,
+                region=region
+            )
+        else:
+            self.credentials = self._get_credentials_from_config()
+            
         self.base_url = "https://resource-controller.cloud.ibm.com"
         self.iam_url = "https://iam.cloud.ibm.com"
         self.session: Optional[aiohttp.ClientSession] = None
@@ -54,17 +69,24 @@ class IBMCloudClient:
         
     def _get_credentials_from_config(self) -> IBMCloudCredentials:
         """Get credentials from application configuration."""
-        if not settings.ibm_api_key or not settings.ibm_account_id:
+        import os
+        
+        api_key = os.getenv('INFRA_MIND_IBM_API_KEY')
+        account_id = os.getenv('INFRA_MIND_IBM_ACCOUNT_ID')
+        region = os.getenv('INFRA_MIND_IBM_REGION', 'us-south')
+        resource_group_id = os.getenv('INFRA_MIND_IBM_RESOURCE_GROUP_ID')
+        
+        if not api_key or not account_id:
             raise CloudServiceError(
                 "IBM Cloud credentials not configured. Please set INFRA_MIND_IBM_API_KEY and INFRA_MIND_IBM_ACCOUNT_ID",
                 CloudProvider.IBM
             )
         
         return IBMCloudCredentials(
-            api_key=settings.ibm_api_key.get_secret_value(),
-            account_id=settings.ibm_account_id,
-            region=settings.ibm_region,
-            resource_group_id=settings.ibm_resource_group_id
+            api_key=api_key,
+            account_id=account_id,
+            region=region,
+            resource_group_id=resource_group_id
         )
     
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -246,6 +268,198 @@ class IBMCloudClient:
         except Exception as e:
             logger.error(f"Failed to get IBM Watson services: {e}")
             return []
+    
+    async def get_compute_services(self, region: str = None) -> CloudServiceResponse:
+        """Get compute services from IBM Cloud."""
+        region = region or self.region
+        
+        try:
+            virtual_servers = await self.get_virtual_servers()
+            
+            services = [
+                CloudService(
+                    provider=CloudProvider.IBM,
+                    service_name="Virtual Server for VPC",
+                    service_id="vpc-virtual-server",
+                    category=ServiceCategory.COMPUTE,
+                    region=region,
+                    description="Scalable virtual servers on IBM Cloud VPC",
+                    pricing_model="pay_as_you_go",
+                    hourly_price=0.0464,
+                    pricing_unit="hour",
+                    features=["Auto-scaling", "Load balancing", "Security groups", "Snapshots"],
+                    specifications={
+                        "instances_running": len(virtual_servers),
+                        "min_vcpu": 1,
+                        "max_vcpu": 80,
+                        "min_memory_gb": 1,
+                        "max_memory_gb": 640
+                    }
+                )
+            ]
+            
+            return CloudServiceResponse(
+                provider=CloudProvider.IBM,
+                service_category=ServiceCategory.COMPUTE,
+                region=region,
+                services=services,
+                metadata={"total_virtual_servers": len(virtual_servers)},
+                timestamp=datetime.now(timezone.utc)
+            )
+        except Exception as e:
+            logger.error(f"Failed to get IBM Cloud compute services: {e}")
+            return CloudServiceResponse(
+                provider=CloudProvider.IBM,
+                service_category=ServiceCategory.COMPUTE,
+                region=region,
+                services=[],
+                metadata={"error": str(e)},
+                timestamp=datetime.now(timezone.utc)
+            )
+    
+    async def get_storage_services(self, region: str = None) -> CloudServiceResponse:
+        """Get storage services from IBM Cloud."""
+        region = region or self.region
+        
+        try:
+            storage_instances = await self.get_object_storage()
+            
+            services = [
+                CloudService(
+                    provider=CloudProvider.IBM,
+                    service_name="Cloud Object Storage",
+                    service_id="cloud-object-storage",
+                    category=ServiceCategory.STORAGE,
+                    region=region,
+                    description="Scalable and secure object storage",
+                    pricing_model="pay_as_you_go",
+                    hourly_price=0.023,
+                    pricing_unit="GB/month",
+                    features=["Cross-region replication", "Lifecycle policies", "Encryption"],
+                    specifications={"instances_running": len(storage_instances)}
+                )
+            ]
+            
+            return CloudServiceResponse(
+                provider=CloudProvider.IBM,
+                service_category=ServiceCategory.STORAGE,
+                region=region,
+                services=services,
+                metadata={"total_storage_instances": len(storage_instances)},
+                timestamp=datetime.now(timezone.utc)
+            )
+        except Exception as e:
+            logger.error(f"Failed to get IBM Cloud storage services: {e}")
+            return CloudServiceResponse(
+                provider=CloudProvider.IBM,
+                service_category=ServiceCategory.STORAGE,
+                region=region,
+                services=[],
+                metadata={"error": str(e)},
+                timestamp=datetime.now(timezone.utc)
+            )
+    
+    async def get_database_services(self, region: str = None) -> CloudServiceResponse:
+        """Get database services from IBM Cloud."""
+        region = region or self.region
+        
+        try:
+            databases = await self.get_databases()
+            
+            services = [
+                CloudService(
+                    provider=CloudProvider.IBM,
+                    service_name="Databases for MongoDB",
+                    service_id="databases-for-mongodb",
+                    category=ServiceCategory.DATABASE,
+                    region=region,
+                    description="Managed MongoDB database service",
+                    pricing_model="subscription",
+                    hourly_price=0.058,
+                    pricing_unit="hour",
+                    features=["Auto-scaling", "Backup", "Monitoring", "High availability"],
+                    specifications={"instances_running": len(databases)}
+                )
+            ]
+            
+            return CloudServiceResponse(
+                provider=CloudProvider.IBM,
+                service_category=ServiceCategory.DATABASE,
+                region=region,
+                services=services,
+                metadata={"total_databases": len(databases)},
+                timestamp=datetime.now(timezone.utc)
+            )
+        except Exception as e:
+            logger.error(f"Failed to get IBM Cloud database services: {e}")
+            return CloudServiceResponse(
+                provider=CloudProvider.IBM,
+                service_category=ServiceCategory.DATABASE,
+                region=region,
+                services=[],
+                metadata={"error": str(e)},
+                timestamp=datetime.now(timezone.utc)
+            )
+    
+    async def get_ai_services(self, region: str = None) -> CloudServiceResponse:
+        """Get AI/ML services from IBM Cloud."""
+        region = region or self.region
+        
+        try:
+            watson_services = await self.get_watson_services()
+            
+            services = [
+                CloudService(
+                    provider=CloudProvider.IBM,
+                    service_name="Watson Assistant",
+                    service_id="watson-assistant",
+                    category=ServiceCategory.MACHINE_LEARNING,
+                    region=region,
+                    description="AI-powered virtual assistant",
+                    pricing_model="pay_per_use",
+                    hourly_price=0.0025,
+                    pricing_unit="API call",
+                    features=["Natural language processing", "Voice integration", "Analytics"],
+                    specifications={"watson_services": len(watson_services)}
+                ),
+                CloudService(
+                    provider=CloudProvider.IBM,
+                    service_name="Watson Discovery",
+                    service_id="watson-discovery",
+                    category=ServiceCategory.MACHINE_LEARNING,
+                    region=region,
+                    description="AI-powered search and text analytics",
+                    pricing_model="pay_per_use",
+                    hourly_price=0.001,
+                    pricing_unit="document",
+                    features=["Document understanding", "Query building", "Smart search"],
+                    specifications={"watson_services": len(watson_services)}
+                )
+            ]
+            
+            return CloudServiceResponse(
+                provider=CloudProvider.IBM,
+                service_category=ServiceCategory.MACHINE_LEARNING,
+                region=region,
+                services=services,
+                metadata={"total_watson_services": len(watson_services)},
+                timestamp=datetime.now(timezone.utc)
+            )
+        except Exception as e:
+            logger.error(f"Failed to get IBM Cloud AI services: {e}")
+            return CloudServiceResponse(
+                provider=CloudProvider.IBM,
+                service_category=ServiceCategory.MACHINE_LEARNING,
+                region=region,
+                services=[],
+                metadata={"error": str(e)},
+                timestamp=datetime.now(timezone.utc)
+            )
+    
+    async def get_service_pricing(self, service_id: str, region: str = None) -> Dict[str, Any]:
+        """Get pricing information for a service."""
+        pricing_client = IBMPricingClient(self.credentials)
+        return await pricing_client.get_pricing(service_id, region)
     
     async def get_services(self) -> CloudServiceResponse:
         """Get available IBM Cloud services with real data."""

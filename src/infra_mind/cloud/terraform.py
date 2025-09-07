@@ -202,9 +202,9 @@ class TerraformCloudClient:
         self.rate_limit_remaining = None
         self.rate_limit_reset = None
         
-        # Validate token format if provided
-        if self.terraform_token and not self.terraform_token.startswith(('at-', 'user-')):
-            logger.warning("Terraform token should start with 'at-' (team token) or 'user-' (user token)")
+        # Only show token format message if we'll be using Terraform Cloud operations
+        if self.terraform_token and self.organization and not self.terraform_token.startswith(('at-', 'user-')):
+            logger.debug("Terraform token format: expected 'at-' (team token) or 'user-' (user token) for Terraform Cloud operations.")
         
         # Validate organization name
         if self.organization and not self.organization.replace('-', '').replace('_', '').isalnum():

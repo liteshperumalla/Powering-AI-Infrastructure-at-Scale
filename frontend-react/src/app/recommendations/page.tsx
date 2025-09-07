@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   Box,
@@ -21,6 +21,8 @@ import {
   IconButton,
   Tooltip
 } from '@mui/material';
+import ResponsiveLayout from '@/components/ResponsiveLayout';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import RecommendIcon from '@mui/icons-material/Recommend';
 import CloudIcon from '@mui/icons-material/Cloud';
@@ -61,7 +63,7 @@ interface AssessmentData {
   status: string;
 }
 
-export default function RecommendationsPage() {
+function RecommendationsPageContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [recommendations, setRecommendations] = useState<Recommendation[]>([]);
@@ -135,7 +137,7 @@ export default function RecommendationsPage() {
 
   if (loading) {
     return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
+      <Container maxWidth="lg" sx={{ mt: 3, py: 4 }}>
         <Stack spacing={3}>
           <Skeleton variant="rectangular" height={60} />
           <Grid container spacing={3}>
@@ -152,22 +154,74 @@ export default function RecommendationsPage() {
 
   if (error) {
     return (
-      <Container maxWidth="lg" sx={{ py: 4 }}>
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
-        </Alert>
-        <Button
-          startIcon={<ArrowBackIcon />}
-          onClick={handleBackToAssessment}
-        >
-          Back to Assessment
-        </Button>
+      <Container maxWidth="lg" sx={{ mt: 3, py: 4 }}>
+        <Card sx={{ textAlign: 'center', py: 6 }}>
+          <CardContent>
+            <RecommendIcon 
+              sx={{ fontSize: 80, color: 'error.main', mb: 3, opacity: 0.7 }} 
+            />
+            <Typography variant="h4" gutterBottom color="error.main">
+              Unable to Load Recommendations
+            </Typography>
+            <Typography variant="body1" color="text.secondary" sx={{ mb: 3, maxWidth: 600, mx: 'auto' }}>
+              {error === 'Assessment ID is required' 
+                ? 'No assessment has been selected. Please start by creating or selecting an assessment from the dashboard.'
+                : error === 'Failed to load recommendations'
+                ? 'We encountered an issue while loading your recommendations. This might be due to a temporary connectivity issue or the assessment data may still be processing.'
+                : `Error: ${error}`
+              }
+            </Typography>
+            
+            <Stack 
+              direction={{ xs: 'column', sm: 'row' }} 
+              spacing={2} 
+              justifyContent="center"
+              sx={{ mt: 4 }}
+            >
+              <Button
+                variant="contained"
+                startIcon={<ArrowBackIcon />}
+                onClick={() => router.push('/dashboard')}
+                color="primary"
+              >
+                Go to Dashboard
+              </Button>
+              {assessmentId && (
+                <Button
+                  variant="outlined"
+                  onClick={() => {
+                    setError(null);
+                    setLoading(true);
+                    // Retry loading
+                    window.location.reload();
+                  }}
+                >
+                  Try Again
+                </Button>
+              )}
+            </Stack>
+
+            {error !== 'Assessment ID is required' && (
+              <Alert severity="info" sx={{ mt: 4, textAlign: 'left' }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  Troubleshooting Tips:
+                </Typography>
+                <ul style={{ marginTop: 8, paddingLeft: 20 }}>
+                  <li>Check your internet connection</li>
+                  <li>Ensure the assessment has completed processing</li>
+                  <li>Try refreshing the page or navigating back to the dashboard</li>
+                  <li>Contact support if the issue persists</li>
+                </ul>
+              </Alert>
+            )}
+          </CardContent>
+        </Card>
       </Container>
     );
   }
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
+    <Container maxWidth="lg" sx={{ mt: 3, py: 4 }}>
       {/* Header */}
       <Box sx={{ mb: 4 }}>
         <Button
@@ -378,5 +432,17 @@ export default function RecommendationsPage() {
         </Grid>
       )}
     </Container>
+  );
+}
+
+export default function RecommendationsPage() {
+  return (
+    <ProtectedRoute>
+      <ResponsiveLayout title="Recommendations">
+        <Suspense fallback={<Container><Typography>Loading...</Typography></Container>}>
+          <RecommendationsPageContent />
+        </Suspense>
+      </ResponsiveLayout>
+    </ProtectedRoute>
   );
 }

@@ -832,12 +832,82 @@ spec:
         return {"monthly_estimate": 500, "yearly_estimate": 6000, "currency": "USD"}
     
     async def _analyze_security_posture(self, generated_code: Dict[str, Any]) -> Dict[str, Any]:
-        """Analyze security posture of generated infrastructure."""
-        return {"security_score": 85, "vulnerabilities_found": 2, "recommendations": 5}
+        """Analyze security posture of generated infrastructure based on actual configuration."""
+        security_score = 60  # Base score
+        vulnerabilities_found = 0
+        recommendations = 0
+        
+        # Analyze the actual generated code for security features
+        if 'resource' in generated_code:
+            resources = generated_code['resource']
+            
+            # Check for encryption
+            if any('encryption' in str(resource).lower() for resource in resources.values()):
+                security_score += 15
+            else:
+                vulnerabilities_found += 1
+                recommendations += 1
+            
+            # Check for VPC/network isolation
+            if any('vpc' in resource_type.lower() or 'subnet' in resource_type.lower() 
+                  for resource_type in resources.keys()):
+                security_score += 10
+            else:
+                vulnerabilities_found += 1
+                recommendations += 1
+                
+            # Check for security groups/firewall rules
+            if any('security_group' in resource_type.lower() or 'firewall' in resource_type.lower()
+                  for resource_type in resources.keys()):
+                security_score += 10
+            else:
+                vulnerabilities_found += 1
+                recommendations += 1
+                
+            # Check for IAM policies
+            if any('iam' in resource_type.lower() or 'policy' in resource_type.lower()
+                  for resource_type in resources.keys()):
+                security_score += 5
+                
+        return {
+            "security_score": min(100, security_score), 
+            "vulnerabilities_found": vulnerabilities_found, 
+            "recommendations": recommendations,
+            "analysis_basis": "actual_infrastructure_configuration"
+        }
     
     async def _generate_compliance_report(self, generated_code: Dict[str, Any]) -> Dict[str, Any]:
-        """Generate compliance report."""
-        return {"frameworks": ["SOC2", "HIPAA"], "compliance_score": 90}
+        """Generate compliance report based on actual infrastructure features."""
+        frameworks = []
+        compliance_score = 60  # Base score
+        
+        if 'resource' in generated_code:
+            resources = generated_code['resource']
+            
+            # SOC2 compliance checks
+            has_encryption = any('encryption' in str(resource).lower() for resource in resources.values())
+            has_logging = any('log' in str(resource).lower() for resource in resources.values())
+            has_monitoring = any('monitoring' in str(resource).lower() or 'cloudwatch' in str(resource).lower() 
+                            for resource in resources.values())
+            
+            if has_encryption and has_logging:
+                frameworks.append("SOC2")
+                compliance_score += 20
+                
+            # HIPAA compliance checks  
+            has_vpc = any('vpc' in resource_type.lower() for resource_type in resources.keys())
+            if has_encryption and has_vpc and has_logging:
+                frameworks.append("HIPAA")
+                compliance_score += 15
+                
+        if not frameworks:
+            frameworks = ["Basic Security"]
+            
+        return {
+            "frameworks": frameworks, 
+            "compliance_score": min(100, compliance_score),
+            "analysis_basis": "infrastructure_feature_detection"
+        }
     
     # Additional placeholder methods would continue here for the various generation functions
     def _add_compute_module_call(self, architecture: Dict[str, Any]) -> str:

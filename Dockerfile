@@ -81,6 +81,7 @@ WORKDIR /app
 # Copy application code
 COPY src/ ./src/
 COPY README.md ./
+COPY gcp-service-account.json ./
 
 # Create directories for development
 RUN mkdir -p logs tmp cache
@@ -138,6 +139,7 @@ WORKDIR /app
 # Copy application code with proper ownership
 COPY --chown=infra_mind:infra_mind src/ ./src/
 COPY --chown=infra_mind:infra_mind README.md ./
+COPY --chown=infra_mind:infra_mind gcp-service-account.json ./
 
 # Create necessary directories with proper permissions
 RUN mkdir -p logs tmp cache /home/infra_mind/.cache && \

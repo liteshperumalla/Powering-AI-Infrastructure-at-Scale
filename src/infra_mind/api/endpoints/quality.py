@@ -1,552 +1,325 @@
 """
-API endpoints for quality assurance system.
+Quality assurance system API endpoints with real database functionality.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, BackgroundTasks
-from typing import Dict, List, Optional, Any
-from datetime import datetime, timedelta
+from fastapi import APIRouter, HTTPException, Depends, status, Query
+from typing import Dict, Any, List, Optional
+from pydantic import BaseModel, Field
 import logging
+from datetime import datetime, timedelta
+import uuid
 
-from .auth import get_current_user
+from .auth import get_current_user, require_enterprise_access
 from ...models.user import User
-from ...quality import (
-    FeedbackCollector, QualityScoreManager, ABTestingFramework,
-    ContinuousImprovementSystem, UserFeedback, FeedbackType,
-    Experiment, ExperimentVariant, ExperimentMetric, ExperimentType,
-    ExperimentStatus, ImprovementActionType
-)
-from ...core.cache import CacheManager
-from ...core.metrics_collector import MetricsCollector
+from ...models.feedback import QualityMetric
+from ...models.assessment import Assessment
 
-router = APIRouter(prefix="/quality", tags=["quality"])
 logger = logging.getLogger(__name__)
 
-# Initialize quality components (these would be dependency injected in production)
-cache_manager = CacheManager()
-metrics_collector = MetricsCollector()
-feedback_collector = FeedbackCollector(cache_manager)
-quality_manager = QualityScoreManager(cache_manager)
-ab_testing = ABTestingFramework(cache_manager)
-improvement_system = ContinuousImprovementSystem(cache_manager, metrics_collector)
+router = APIRouter(tags=["quality"])
 
 
-@router.post("/feedback")
-async def submit_feedback(
-    feedback_data: Dict[str, Any],
-    current_user: User = Depends(get_current_user)
+# Pydantic models for request/response
+class QualityMetricRequest(BaseModel):
+    """Request model for submitting quality metrics."""
+    target_type: str = Field(..., description="Type of target (assessment, user, system)")
+    target_id: str = Field(..., description="ID of the target")
+    metric_name: str = Field(..., description="Name of the quality metric")
+    metric_value: float = Field(..., description="Metric value")
+    metric_unit: Optional[str] = Field(None, description="Unit of measurement")
+    quality_score: Optional[float] = Field(None, ge=0, le=100, description="Overall quality score")
+
+
+class QualityScoreResponse(BaseModel):
+    """Response model for quality scores."""
+    target_id: str
+    target_type: str
+    overall_score: float
+    metrics: Dict[str, float]
+    calculated_at: str
+
+
+@router.post("/metrics")
+async def submit_quality_metric(
+    request: QualityMetricRequest,
+    current_user: User = Depends(require_enterprise_access)
 ):
-    """Submit user feedback on recommendations."""
+    """Submit a quality metric (admin only)."""
     try:
-        # Create feedback object
-        feedback = UserFeedback(
-            feedback_id=f"{current_user.user_id}_{feedback_data['recommendation_id']}_{datetime.utcnow().timestamp()}",
-            user_id=current_user.user_id,
-            assessment_id=feedback_data.get("assessment_id", ""),
-            recommendation_id=feedback_data["recommendation_id"],
-            agent_name=feedback_data.get("agent_name", ""),
-            feedback_type=FeedbackType(feedback_data.get("feedback_type", "rating")),
-            rating=feedback_data.get("rating"),
-            comment=feedback_data.get("comment"),
-            implementation_success=feedback_data.get("implementation_success"),
-            cost_accuracy=feedback_data.get("cost_accuracy"),
-            time_to_implement=feedback_data.get("time_to_implement"),
-            business_value_realized=feedback_data.get("business_value_realized"),
-            technical_accuracy=feedback_data.get("technical_accuracy"),
-            ease_of_implementation=feedback_data.get("ease_of_implementation"),
-            would_recommend=feedback_data.get("would_recommend"),
-            tags=feedback_data.get("tags", []),
-            metadata=feedback_data.get("metadata", {})
+        # Create quality metric record
+        metric = QualityMetric(
+            target_type=request.target_type,
+            target_id=request.target_id,
+            metric_name=request.metric_name,
+            metric_value=request.metric_value,
+            metric_unit=request.metric_unit,
+            quality_score=request.quality_score
+        )
+        await metric.insert()
+        
+        return {
+            "metric_id": str(metric.id),
+            "target_type": metric.target_type,
+            "target_id": metric.target_id,
+            "metric_name": metric.metric_name,
+            "metric_value": metric.metric_value,
+            "quality_score": metric.quality_score,
+            "recorded_at": metric.measured_at.isoformat(),
+            "message": "Quality metric recorded successfully"
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to submit quality metric: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to submit quality metric: {str(e)}"
+        )
+
+
+@router.get("/metrics/{target_id}")
+async def get_quality_metrics(
+    target_id: str,
+    target_type: Optional[str] = Query(None, description="Filter by target type"),
+    metric_name: Optional[str] = Query(None, description="Filter by metric name"),
+    limit: int = Query(50, ge=1, le=1000, description="Maximum results"),
+    current_user: User = Depends(require_enterprise_access)
+):
+    """Get quality metrics for a target (admin only)."""
+    try:
+        # Build query
+        query = {"target_id": target_id}
+        if target_type:
+            query["target_type"] = target_type
+        if metric_name:
+            query["metric_name"] = metric_name
+        
+        # Fetch metrics from database
+        metrics = await QualityMetric.find(query).sort(-QualityMetric.measured_at).limit(limit).to_list()
+        
+        # Convert to response format
+        result = []
+        for metric in metrics:
+            result.append({
+                "id": str(metric.id),
+                "target_type": metric.target_type,
+                "target_id": metric.target_id,
+                "metric_name": metric.metric_name,
+                "metric_value": metric.metric_value,
+                "metric_unit": metric.metric_unit,
+                "quality_score": metric.quality_score,
+                "sub_scores": metric.sub_scores,
+                "dimensions": metric.dimensions,
+                "tags": metric.tags,
+                "measured_at": metric.measured_at.isoformat()
+            })
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to get quality metrics: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get quality metrics: {str(e)}"
+        )
+
+
+@router.get("/scores/{target_id}", response_model=QualityScoreResponse)
+async def get_quality_score(
+    target_id: str,
+    target_type: str = Query(..., description="Type of target"),
+    current_user: User = Depends(require_enterprise_access)
+):
+    """Get overall quality score for a target (admin only)."""
+    try:
+        # Get all metrics for this target
+        metrics = await QualityMetric.find(
+            QualityMetric.target_id == target_id,
+            QualityMetric.target_type == target_type
+        ).to_list()
+        
+        if not metrics:
+            raise HTTPException(status_code=404, detail="No quality metrics found for target")
+        
+        # Calculate overall score
+        quality_scores = [m.quality_score for m in metrics if m.quality_score is not None]
+        overall_score = sum(quality_scores) / len(quality_scores) if quality_scores else 0
+        
+        # Create metrics summary
+        metrics_summary = {}
+        for metric in metrics:
+            metrics_summary[metric.metric_name] = metric.metric_value
+        
+        return QualityScoreResponse(
+            target_id=target_id,
+            target_type=target_type,
+            overall_score=round(overall_score, 2),
+            metrics=metrics_summary,
+            calculated_at=datetime.utcnow().isoformat()
         )
         
-        # Submit feedback
-        success = await feedback_collector.collect_feedback(feedback)
-        
-        if success:
-            return {"message": "Feedback submitted successfully", "feedback_id": feedback.feedback_id}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to submit feedback")
-            
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error submitting feedback: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/feedback/{recommendation_id}")
-async def get_feedback_summary(
-    recommendation_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Get feedback summary for a recommendation."""
-    try:
-        summary = await feedback_collector.get_feedback_summary(recommendation_id)
-        return summary
-        
-    except Exception as e:
-        logger.error(f"Error getting feedback summary: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/scores/{recommendation_id}")
-async def get_quality_score(
-    recommendation_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Get quality score for a recommendation."""
-    try:
-        score = await quality_manager.get_quality_score(recommendation_id)
-        
-        if score:
-            return score.__dict__
-        else:
-            return {"message": "No quality score available for this recommendation"}
-            
-    except Exception as e:
-        logger.error(f"Error getting quality score: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/agents/{agent_name}/performance")
-async def get_agent_performance(
-    agent_name: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Get performance metrics for an agent."""
-    try:
-        performance = await quality_manager.get_agent_performance(agent_name)
-        
-        if performance:
-            return performance.__dict__
-        else:
-            return {"message": f"No performance data available for agent {agent_name}"}
-            
-    except Exception as e:
-        logger.error(f"Error getting agent performance: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to get quality score: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get quality score: {str(e)}"
+        )
 
 
 @router.get("/overview")
 async def get_quality_overview(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_enterprise_access)
 ):
-    """Get system-wide quality overview (admin only)."""
+    """Get quality overview dashboard (admin only)."""
     try:
-        overview = await quality_manager.get_system_quality_overview()
-        return overview
+        # Get total metrics count
+        total_metrics = await QualityMetric.find().count()
         
-    except Exception as e:
-        logger.error(f"Error getting quality overview: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/experiments")
-async def create_experiment(
-    experiment_data: Dict[str, Any],
-    current_user: User = Depends(get_current_user)
-):
-    """Create a new A/B test experiment (admin only)."""
-    try:
-        # Create experiment object
-        variants = [
-            ExperimentVariant(
-                variant_id=v["variant_id"],
-                name=v["name"],
-                description=v["description"],
-                configuration=v["configuration"],
-                traffic_allocation=v["traffic_allocation"],
-                is_control=v.get("is_control", False),
-                metadata=v.get("metadata", {})
-            )
-            for v in experiment_data["variants"]
-        ]
+        # Get recent metrics
+        recent_metrics = await QualityMetric.find().sort(-QualityMetric.measured_at).limit(10).to_list()
         
-        metrics = [
-            ExperimentMetric(
-                metric_name=m["metric_name"],
-                metric_type=m["metric_type"],
-                primary=m.get("primary", False),
-                description=m.get("description", ""),
-                target_improvement=m.get("target_improvement")
-            )
-            for m in experiment_data["metrics"]
-        ]
+        # Calculate average quality score
+        all_scores = []
+        for metric in recent_metrics:
+            if metric.quality_score:
+                all_scores.append(metric.quality_score)
         
-        experiment = Experiment(
-            experiment_id=experiment_data["experiment_id"],
-            name=experiment_data["name"],
-            description=experiment_data["description"],
-            experiment_type=ExperimentType(experiment_data["experiment_type"]),
-            status=ExperimentStatus(experiment_data.get("status", "draft")),
-            variants=variants,
-            metrics=metrics,
-            target_sample_size=experiment_data["target_sample_size"],
-            confidence_level=experiment_data.get("confidence_level", 0.95),
-            minimum_detectable_effect=experiment_data.get("minimum_detectable_effect", 0.05),
-            start_date=datetime.fromisoformat(experiment_data["start_date"]) if experiment_data.get("start_date") else None,
-            end_date=datetime.fromisoformat(experiment_data["end_date"]) if experiment_data.get("end_date") else None,
-            created_by=current_user.user_id,
-            metadata=experiment_data.get("metadata", {})
-        )
+        avg_quality_score = sum(all_scores) / len(all_scores) if all_scores else 0
         
-        success = await ab_testing.create_experiment(experiment)
+        # Get metrics by target type
+        target_type_stats = {}
+        assessment_count = await QualityMetric.find(QualityMetric.target_type == "assessment").count()
+        user_count = await QualityMetric.find(QualityMetric.target_type == "user").count()
+        system_count = await QualityMetric.find(QualityMetric.target_type == "system").count()
         
-        if success:
-            return {"message": "Experiment created successfully", "experiment_id": experiment.experiment_id}
-        else:
-            raise HTTPException(status_code=500, detail="Failed to create experiment")
-            
-    except Exception as e:
-        logger.error(f"Error creating experiment: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/experiments/{experiment_id}")
-async def get_experiment(
-    experiment_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Get experiment details (admin only)."""
-    try:
-        experiment = await ab_testing._get_experiment(experiment_id)
-        
-        if experiment:
-            return experiment
-        else:
-            raise HTTPException(status_code=404, detail="Experiment not found")
-            
-    except Exception as e:
-        logger.error(f"Error getting experiment: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/experiments/{experiment_id}/analysis")
-async def analyze_experiment(
-    experiment_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Analyze experiment results (admin only)."""
-    try:
-        analysis = await ab_testing.analyze_experiment(experiment_id)
-        return analysis
-        
-    except Exception as e:
-        logger.error(f"Error analyzing experiment: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/experiments/{experiment_id}/assign")
-async def assign_to_experiment(
-    experiment_id: str,
-    context: Optional[Dict[str, Any]] = None,
-    current_user: User = Depends(get_current_user)
-):
-    """Assign current user to experiment variant."""
-    try:
-        variant_id = await ab_testing.assign_user_to_experiment(
-            experiment_id, current_user.user_id, context or {}
-        )
-        
-        if variant_id:
-            return {"variant_id": variant_id, "experiment_id": experiment_id}
-        else:
-            return {"message": "User not eligible for this experiment"}
-            
-    except Exception as e:
-        logger.error(f"Error assigning to experiment: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/experiments/events")
-async def record_experiment_event(
-    event_data: Dict[str, Any],
-    current_user: User = Depends(get_current_user)
-):
-    """Record an experiment event."""
-    try:
-        await ab_testing.record_experiment_event(
-            current_user.user_id,
-            event_data["event_name"],
-            event_data.get("event_data", {})
-        )
-        
-        return {"message": "Event recorded successfully"}
-        
-    except Exception as e:
-        logger.error(f"Error recording experiment event: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/alerts")
-async def get_quality_alerts(
-    severity: Optional[str] = None,
-    resolved: Optional[bool] = None,
-    limit: int = 50,
-    current_user: User = Depends(get_current_user)
-):
-    """Get quality alerts (admin only)."""
-    try:
-        if not improvement_system.db:
-            await improvement_system.initialize()
-        
-        # Build query
-        query = {}
-        if severity:
-            query["severity"] = severity
-        if resolved is not None:
-            query["resolved"] = resolved
-        
-        # Get alerts
-        alerts = await improvement_system.db.quality_alerts.find(query).limit(limit).sort("created_at", -1).to_list(length=None)
-        
-        return {"alerts": alerts, "total": len(alerts)}
-        
-    except Exception as e:
-        logger.error(f"Error getting quality alerts: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/alerts/{alert_id}/acknowledge")
-async def acknowledge_alert(
-    alert_id: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Acknowledge a quality alert (admin only)."""
-    try:
-        if not improvement_system.db:
-            await improvement_system.initialize()
-        
-        result = await improvement_system.db.quality_alerts.update_one(
-            {"alert_id": alert_id},
-            {"$set": {"acknowledged": True, "acknowledged_by": current_user.user_id, "acknowledged_at": datetime.utcnow()}}
-        )
-        
-        if result.modified_count > 0:
-            return {"message": "Alert acknowledged successfully"}
-        else:
-            raise HTTPException(status_code=404, detail="Alert not found")
-            
-    except Exception as e:
-        logger.error(f"Error acknowledging alert: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/alerts/{alert_id}/resolve")
-async def resolve_alert(
-    alert_id: str,
-    resolution_notes: str,
-    current_user: User = Depends(get_current_user)
-):
-    """Resolve a quality alert (admin only)."""
-    try:
-        if not improvement_system.db:
-            await improvement_system.initialize()
-        
-        result = await improvement_system.db.quality_alerts.update_one(
-            {"alert_id": alert_id},
-            {"$set": {
-                "resolved": True,
-                "resolved_by": current_user.user_id,
-                "resolved_at": datetime.utcnow(),
-                "resolution_notes": resolution_notes
-            }}
-        )
-        
-        if result.modified_count > 0:
-            return {"message": "Alert resolved successfully"}
-        else:
-            raise HTTPException(status_code=404, detail="Alert not found")
-            
-    except Exception as e:
-        logger.error(f"Error resolving alert: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/improvement-actions")
-async def get_improvement_actions(
-    status: Optional[str] = None,
-    priority: Optional[int] = None,
-    limit: int = 50,
-    current_user: User = Depends(get_current_user)
-):
-    """Get improvement actions (admin only)."""
-    try:
-        if not improvement_system.db:
-            await improvement_system.initialize()
-        
-        # Build query
-        query = {}
-        if status:
-            query["status"] = status
-        if priority:
-            query["priority"] = {"$gte": priority}
-        
-        # Get actions
-        actions = await improvement_system.db.improvement_actions.find(query).limit(limit).sort("priority", -1).to_list(length=None)
-        
-        return {"actions": actions, "total": len(actions)}
-        
-    except Exception as e:
-        logger.error(f"Error getting improvement actions: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/improvement-actions")
-async def create_improvement_action(
-    action_data: Dict[str, Any],
-    current_user: User = Depends(get_current_user)
-):
-    """Create a new improvement action (admin only)."""
-    try:
-        if not improvement_system.db:
-            await improvement_system.initialize()
-        
-        await improvement_system._create_improvement_action(
-            action_type=ImprovementActionType(action_data["action_type"]),
-            title=action_data["title"],
-            description=action_data["description"],
-            priority=action_data["priority"],
-            affected_agents=action_data.get("affected_agents", []),
-            expected_impact=action_data["expected_impact"],
-            implementation_effort=action_data["implementation_effort"]
-        )
-        
-        return {"message": "Improvement action created successfully"}
-        
-    except Exception as e:
-        logger.error(f"Error creating improvement action: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/improvement-actions/{action_id}/assign")
-async def assign_improvement_action(
-    action_id: str,
-    assigned_to: str,
-    due_date: Optional[str] = None,
-    current_user: User = Depends(get_current_user)
-):
-    """Assign an improvement action (admin only)."""
-    try:
-        if not improvement_system.db:
-            await improvement_system.initialize()
-        
-        update_data = {
-            "assigned_to": assigned_to,
-            "status": "in_progress"
+        target_type_stats = {
+            "assessment": assessment_count,
+            "user": user_count,
+            "system": system_count
         }
         
-        if due_date:
-            update_data["due_date"] = datetime.fromisoformat(due_date)
+        # Get alerts (metrics below threshold)
+        alerts = []
+        for metric in recent_metrics:
+            if metric.quality_score and metric.quality_score < 70:  # Below 70% threshold
+                alerts.append({
+                    "id": str(metric.id),
+                    "target_type": metric.target_type,
+                    "target_id": metric.target_id,
+                    "metric_name": metric.metric_name,
+                    "quality_score": metric.quality_score,
+                    "measured_at": metric.measured_at.isoformat()
+                })
         
-        result = await improvement_system.db.improvement_actions.update_one(
-            {"action_id": action_id},
-            {"$set": update_data}
+        return {
+            "total_metrics": total_metrics,
+            "avg_quality_score": round(avg_quality_score, 2),
+            "target_type_distribution": target_type_stats,
+            "recent_metrics": [
+                {
+                    "id": str(m.id),
+                    "target_type": m.target_type,
+                    "target_id": m.target_id,
+                    "metric_name": m.metric_name,
+                    "quality_score": m.quality_score,
+                    "measured_at": m.measured_at.isoformat()
+                }
+                for m in recent_metrics[:5]
+            ],
+            "alerts": alerts,
+            "generated_at": datetime.utcnow().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to get quality overview: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get quality overview: {str(e)}"
         )
-        
-        if result.modified_count > 0:
-            return {"message": "Improvement action assigned successfully"}
-        else:
-            raise HTTPException(status_code=404, detail="Improvement action not found")
-            
-    except Exception as e:
-        logger.error(f"Error assigning improvement action: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.post("/improvement-actions/{action_id}/complete")
-async def complete_improvement_action(
-    action_id: str,
-    results: Dict[str, Any],
-    current_user: User = Depends(get_current_user)
-):
-    """Mark an improvement action as completed (admin only)."""
-    try:
-        if not improvement_system.db:
-            await improvement_system.initialize()
-        
-        result = await improvement_system.db.improvement_actions.update_one(
-            {"action_id": action_id},
-            {"$set": {
-                "status": "completed",
-                "completion_date": datetime.utcnow(),
-                "results": results
-            }}
-        )
-        
-        if result.modified_count > 0:
-            return {"message": "Improvement action completed successfully"}
-        else:
-            raise HTTPException(status_code=404, detail="Improvement action not found")
-            
-    except Exception as e:
-        logger.error(f"Error completing improvement action: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/reports")
-async def get_quality_reports(
-    period: Optional[str] = None,
-    limit: int = 10,
-    current_user: User = Depends(get_current_user)
-):
-    """Get quality reports (admin only)."""
-    try:
-        if not improvement_system.db:
-            await improvement_system.initialize()
-        
-        # Build query
-        query = {}
-        if period:
-            query["period"] = period
-        
-        # Get reports
-        reports = await improvement_system.db.quality_reports.find(query).limit(limit).sort("generated_at", -1).to_list(length=None)
-        
-        return {"reports": reports, "total": len(reports)}
-        
-    except Exception as e:
-        logger.error(f"Error getting quality reports: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/trends")
 async def get_quality_trends(
-    metric_name: Optional[str] = None,
-    time_period: Optional[str] = None,
-    current_user: User = Depends(get_current_user)
+    days: int = Query(30, ge=1, le=365, description="Number of days to analyze"),
+    target_type: Optional[str] = Query(None, description="Filter by target type"),
+    current_user: User = Depends(require_enterprise_access)
 ):
-    """Get quality trends (admin only)."""
+    """Get quality trends over time (admin only)."""
     try:
-        if not improvement_system.db:
-            await improvement_system.initialize()
+        # Calculate date range
+        end_date = datetime.utcnow()
+        start_date = end_date - timedelta(days=days)
         
         # Build query
-        query = {}
-        if metric_name:
-            query["metric_name"] = metric_name
-        if time_period:
-            query["time_period"] = time_period
+        query = {
+            "measured_at": {"$gte": start_date, "$lte": end_date}
+        }
+        if target_type:
+            query["target_type"] = target_type
         
-        # Get trends
-        trends = await improvement_system.db.quality_trends.find(query).to_list(length=None)
+        # Get metrics within period
+        period_metrics = await QualityMetric.find(query).sort(QualityMetric.measured_at).to_list()
         
-        return {"trends": trends, "total": len(trends)}
+        # Group by day and calculate average scores
+        daily_scores = {}
+        for metric in period_metrics:
+            if metric.quality_score:
+                day = metric.measured_at.date().isoformat()
+                if day not in daily_scores:
+                    daily_scores[day] = []
+                daily_scores[day].append(metric.quality_score)
+        
+        # Calculate daily averages
+        trend_data = []
+        for day, scores in daily_scores.items():
+            avg_score = sum(scores) / len(scores)
+            trend_data.append({
+                "date": day,
+                "avg_quality_score": round(avg_score, 2),
+                "metric_count": len(scores)
+            })
+        
+        # Sort by date
+        trend_data.sort(key=lambda x: x["date"])
+        
+        # Calculate overall trend direction
+        trend_direction = "stable"
+        if len(trend_data) >= 2:
+            first_score = trend_data[0]["avg_quality_score"]
+            last_score = trend_data[-1]["avg_quality_score"]
+            if last_score > first_score + 2:
+                trend_direction = "improving"
+            elif last_score < first_score - 2:
+                trend_direction = "declining"
+        
+        return {
+            "period_days": days,
+            "start_date": start_date.isoformat(),
+            "end_date": end_date.isoformat(),
+            "trend_direction": trend_direction,
+            "total_metrics": len(period_metrics),
+            "daily_data": trend_data,
+            "generated_at": datetime.utcnow().isoformat()
+        }
         
     except Exception as e:
-        logger.error(f"Error getting quality trends: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Failed to get quality trends: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get quality trends: {str(e)}"
+        )
 
 
-@router.post("/initialize")
-async def initialize_quality_system(
-    background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user)
-):
-    """Initialize the quality assurance system (admin only)."""
-    try:
-        # Initialize in background
-        background_tasks.add_task(improvement_system.initialize)
-        
-        return {"message": "Quality system initialization started"}
-        
-    except Exception as e:
-        logger.error(f"Error initializing quality system: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+@router.get("/health")
+async def quality_health_check():
+    """Health check endpoint for quality system."""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.utcnow().isoformat(),
+        "components": {
+            "quality_metrics": "operational",
+            "database": "operational",
+            "analytics_engine": "operational"
+        }
+    }

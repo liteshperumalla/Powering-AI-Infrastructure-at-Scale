@@ -35,11 +35,17 @@ import {
     GetApp as ExportIcon,
     DeleteSweep as BulkDeleteIcon,
     CheckBox,
-    CheckBoxOutlineBlank
+    CheckBoxOutlineBlank,
+    Timeline as WorkflowIcon,
+    Close as CloseIcon
 } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
 import { apiClient } from '../../services/api';
 import { Assessment } from '../../store/slices/assessmentSlice';
+import WorkflowProgress from '../../components/WorkflowProgress';
+import { useAppSelector } from '../../store/hooks';
+import ResponsiveLayout from '@/components/ResponsiveLayout';
+import ProtectedRoute from '@/components/ProtectedRoute';
 
 interface AssessmentsPageState {
     assessments: Assessment[];
@@ -47,23 +53,36 @@ interface AssessmentsPageState {
     error: string | null;
     selectedAssessments: string[];
     bulkOperationLoading: boolean;
+    workflowViewAssessmentId: string | null;
 }
 
 const AssessmentsPage: React.FC = () => {
     const router = useRouter();
+    const { isAuthenticated, loading: authLoading } = useAppSelector(state => state.auth);
     const [state, setState] = useState<AssessmentsPageState>({
         assessments: [],
         loading: true,
         error: null,
         selectedAssessments: [],
-        bulkOperationLoading: false
+        bulkOperationLoading: false,
+        workflowViewAssessmentId: null
     });
 
     useEffect(() => {
-        loadAssessments();
-    }, []);
+        if (isAuthenticated && !authLoading) {
+            loadAssessments();
+        } else if (!authLoading && !isAuthenticated) {
+            // User is not authenticated, redirect to login
+            router.push('/auth/login');
+        }
+    }, [isAuthenticated, authLoading, router]);
 
     const loadAssessments = async () => {
+        if (!isAuthenticated) {
+            setState(prev => ({ ...prev, loading: false }));
+            return;
+        }
+        
         try {
             setState(prev => ({ ...prev, loading: true, error: null }));
             const response = await apiClient.getAssessments();
@@ -198,6 +217,14 @@ const AssessmentsPage: React.FC = () => {
         }
     };
 
+    const handleShowWorkflowProgress = (assessmentId: string) => {
+        setState(prev => ({ ...prev, workflowViewAssessmentId: assessmentId }));
+    };
+
+    const handleHideWorkflowProgress = () => {
+        setState(prev => ({ ...prev, workflowViewAssessmentId: null }));
+    };
+
     const getStatusColor = (status: string) => {
         switch (status?.toLowerCase()) {
             case 'completed': return 'success';
@@ -218,7 +245,7 @@ const AssessmentsPage: React.FC = () => {
 
     if (state.loading) {
         return (
-            <Container maxWidth="lg" sx={{ py: 4 }}>
+            <Container maxWidth="lg" sx={{ mt: 3, py: 4 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: 400 }}>
                     <CircularProgress />
                 </Box>
@@ -253,6 +280,28 @@ const AssessmentsPage: React.FC = () => {
                 <Alert severity="error" sx={{ mb: 3 }} onClose={() => setState(prev => ({ ...prev, error: null }))}>
                     {state.error}
                 </Alert>
+            )}
+
+            {/* Workflow Progress Modal */}
+            {state.workflowViewAssessmentId && (
+                <Card sx={{ mb: 3 }}>
+                    <CardContent>
+                        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                            <Typography variant="h6">
+                                Workflow Progress
+                            </Typography>
+                            <IconButton onClick={handleHideWorkflowProgress}>
+                                <CloseIcon />
+                            </IconButton>
+                        </Box>
+                        <WorkflowProgress
+                            assessmentId={state.workflowViewAssessmentId}
+                            onProgressUpdate={() => loadAssessments()}
+                            autoRefresh={true}
+                            refreshInterval={5000}
+                        />
+                    </CardContent>
+                </Card>
             )}
 
             {/* Phase 2: Bulk Actions Toolbar */}
@@ -470,6 +519,17 @@ const AssessmentsPage: React.FC = () => {
                                                             <ViewIcon />
                                                         </IconButton>
                                                     </Tooltip>
+                                                    {assessment.status === 'in_progress' && (
+                                                        <Tooltip title="View Workflow Progress">
+                                                            <IconButton
+                                                                size="small"
+                                                                onClick={() => handleShowWorkflowProgress(assessment.id)}
+                                                                color="primary"
+                                                            >
+                                                                <WorkflowIcon />
+                                                            </IconButton>
+                                                        </Tooltip>
+                                                    )}
                                                     <Tooltip title="Edit">
                                                         <IconButton
                                                             size="small"
@@ -501,4 +561,14 @@ const AssessmentsPage: React.FC = () => {
     );
 };
 
-export default AssessmentsPage;
+function AssessmentsPageWithLayout() {
+    return (
+        <ProtectedRoute>
+            <ResponsiveLayout title="Assessments">
+                <AssessmentsPage />
+            </ResponsiveLayout>
+        </ProtectedRoute>
+    );
+}
+
+export default AssessmentsPageWithLayout;

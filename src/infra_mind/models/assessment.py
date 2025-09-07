@@ -50,8 +50,8 @@ class Assessment(Document):
         default=Priority.MEDIUM,
         description="Assessment priority level"
     )
-    completion_percentage: float = Field(
-        default=0.0,
+    completion_percentage: Optional[float] = Field(
+        default=None,
         ge=0.0,
         le=100.0,
         description="Assessment completion percentage (0-100)"
@@ -139,6 +139,10 @@ class Assessment(Document):
         self.workflow_progress["current_step"] = current_step
         self.updated_at = datetime.utcnow()
         
+        # Also update the nested progress structure
+        self.progress["progress_percentage"] = percentage
+        self.progress["current_step"] = current_step
+        
         # Auto-update status based on progress
         if percentage >= 100.0:
             self.status = AssessmentStatus.COMPLETED
@@ -147,3 +151,8 @@ class Assessment(Document):
             self.status = AssessmentStatus.IN_PROGRESS
             if not self.started_at:
                 self.started_at = datetime.utcnow()
+    
+    def sync_completion_percentage(self) -> None:
+        """Sync completion_percentage with nested progress data."""
+        if self.progress and "progress_percentage" in self.progress:
+            self.completion_percentage = self.progress["progress_percentage"]

@@ -16,7 +16,10 @@ import base64
 import urllib.parse
 from dataclasses import dataclass
 
-from .base import CloudProvider, CloudService, CloudServiceResponse, CloudServiceError, ServiceCategory
+from .base import (
+    BaseCloudClient, CloudProvider, CloudService, CloudServiceResponse, 
+    CloudServiceError, ServiceCategory
+)
 from ..core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -27,11 +30,11 @@ class AlibabaCloudCredentials:
     """Alibaba Cloud authentication credentials."""
     access_key_id: str
     access_key_secret: str
-    region: str = "cn-beijing"
+    region: str = "us-west-1"
     security_token: Optional[str] = None
 
 
-class AlibabaCloudClient:
+class AlibabaCloudClient(BaseCloudClient):
     """
     Alibaba Cloud API client for service discovery and cost analysis.
     
@@ -44,24 +47,43 @@ class AlibabaCloudClient:
     - AI services
     """
     
-    def __init__(self, credentials: Optional[AlibabaCloudCredentials] = None):
+    def __init__(self, access_key_id: Optional[str] = None, access_key_secret: Optional[str] = None, region: str = "us-west-1"):
         """Initialize Alibaba Cloud client with credentials."""
-        self.credentials = credentials or self._get_credentials_from_config()
+        super().__init__(CloudProvider.ALIBABA, region)
+        
+        # Use provided credentials or get from environment
+        if access_key_id and access_key_secret:
+            self.credentials = AlibabaCloudCredentials(
+                access_key_id=access_key_id,
+                access_key_secret=access_key_secret,
+                region=region
+            )
+        else:
+            self.credentials = self._get_credentials_from_config()
+            
         self.base_url = f"https://ecs.{self.credentials.region}.aliyuncs.com"
         self.session: Optional[aiohttp.ClientSession] = None
         
     def _get_credentials_from_config(self) -> AlibabaCloudCredentials:
         """Get credentials from application configuration."""
-        if not settings.alibaba_access_key_id or not settings.alibaba_access_key_secret:
+        import os
+        
+        access_key_id = os.getenv('INFRA_MIND_ALIBABA_ACCESS_KEY_ID')
+        access_key_secret = os.getenv('INFRA_MIND_ALIBABA_ACCESS_KEY_SECRET')
+        region = os.getenv('INFRA_MIND_ALIBABA_REGION', 'us-west-1')
+        security_token = os.getenv('INFRA_MIND_ALIBABA_SECURITY_TOKEN')
+        
+        if not access_key_id or not access_key_secret:
             raise CloudServiceError(
-                "Alibaba Cloud credentials not configured. Please set INFRA_MIND_ALIBABA_ACCESS_KEY_ID and INFRA_MIND_ALIBABA_ACCESS_KEY_SECRET"
+                "Alibaba Cloud credentials not configured. Please set INFRA_MIND_ALIBABA_ACCESS_KEY_ID and INFRA_MIND_ALIBABA_ACCESS_KEY_SECRET",
+                CloudProvider.ALIBABA
             )
         
         return AlibabaCloudCredentials(
-            access_key_id=settings.alibaba_access_key_id.get_secret_value(),
-            access_key_secret=settings.alibaba_access_key_secret.get_secret_value(),
-            region=settings.alibaba_region,
-            security_token=settings.alibaba_security_token.get_secret_value() if settings.alibaba_security_token else None
+            access_key_id=access_key_id,
+            access_key_secret=access_key_secret,
+            region=region,
+            security_token=security_token
         )
     
     async def _get_session(self) -> aiohttp.ClientSession:
@@ -127,7 +149,7 @@ class AlibabaCloudClient:
                     return await response.json()
         except aiohttp.ClientError as e:
             logger.error(f"Alibaba Cloud API request failed: {e}")
-            raise CloudServiceError(f"Alibaba Cloud API error: {str(e)}")
+            raise CloudServiceError(f"Alibaba Cloud API error: {str(e)}", CloudProvider.ALIBABA)
     
     async def get_ecs_instances(self) -> List[Dict[str, Any]]:
         """Get ECS instances in the region."""
@@ -184,6 +206,177 @@ class AlibabaCloudClient:
             logger.error(f"Failed to get OSS buckets: {e}")
             return []
     
+    async def get_compute_services(self, region: str = None) -> CloudServiceResponse:
+        """Get compute services from Alibaba Cloud."""
+        region = region or self.region
+        
+        try:
+            ecs_instances = await self.get_ecs_instances()
+            
+            services = [
+                CloudService(
+                    provider=CloudProvider.ALIBABA,
+                    service_name="Elastic Compute Service",
+                    service_id="ecs",
+                    category=ServiceCategory.COMPUTE,
+                    region=region,
+                    description="Scalable cloud computing service",
+                    pricing_model="pay_as_you_go",
+                    hourly_price=0.008,
+                    pricing_unit="hour",
+                    features=["Auto Scaling", "Load Balancing", "Security Groups", "Snapshots"],
+                    specifications={"instances_running": len(ecs_instances)}
+                )
+            ]
+            
+            return CloudServiceResponse(
+                provider=CloudProvider.ALIBABA,
+                service_category=ServiceCategory.COMPUTE,
+                region=region,
+                services=services,
+                metadata={"total_ecs_instances": len(ecs_instances)},
+                timestamp=datetime.now(timezone.utc)
+            )
+        except Exception as e:
+            logger.error(f"Failed to get Alibaba Cloud compute services: {e}")
+            return CloudServiceResponse(
+                provider=CloudProvider.ALIBABA,
+                service_category=ServiceCategory.COMPUTE,
+                region=region,
+                services=[],
+                metadata={"error": str(e)},
+                timestamp=datetime.now(timezone.utc)
+            )
+    
+    async def get_storage_services(self, region: str = None) -> CloudServiceResponse:
+        """Get storage services from Alibaba Cloud."""
+        region = region or self.region
+        
+        try:
+            oss_buckets = await self.get_oss_buckets()
+            
+            services = [
+                CloudService(
+                    provider=CloudProvider.ALIBABA,
+                    service_name="Object Storage Service",
+                    service_id="oss",
+                    category=ServiceCategory.STORAGE,
+                    region=region,
+                    description="Scalable object storage service",
+                    pricing_model="pay_as_you_go",
+                    hourly_price=0.0099,
+                    pricing_unit="GB/month",
+                    features=["CDN Integration", "Lifecycle Management", "Cross-Region Replication"],
+                    specifications={"buckets_count": len(oss_buckets)}
+                )
+            ]
+            
+            return CloudServiceResponse(
+                provider=CloudProvider.ALIBABA,
+                service_category=ServiceCategory.STORAGE,
+                region=region,
+                services=services,
+                metadata={"total_oss_buckets": len(oss_buckets)},
+                timestamp=datetime.now(timezone.utc)
+            )
+        except Exception as e:
+            logger.error(f"Failed to get Alibaba Cloud storage services: {e}")
+            return CloudServiceResponse(
+                provider=CloudProvider.ALIBABA,
+                service_category=ServiceCategory.STORAGE,
+                region=region,
+                services=[],
+                metadata={"error": str(e)},
+                timestamp=datetime.now(timezone.utc)
+            )
+    
+    async def get_database_services(self, region: str = None) -> CloudServiceResponse:
+        """Get database services from Alibaba Cloud."""
+        region = region or self.region
+        
+        try:
+            rds_instances = await self.get_rds_instances()
+            
+            services = [
+                CloudService(
+                    provider=CloudProvider.ALIBABA,
+                    service_name="ApsaraDB RDS",
+                    service_id="rds",
+                    category=ServiceCategory.DATABASE,
+                    region=region,
+                    description="Managed relational database service",
+                    pricing_model="subscription",
+                    hourly_price=0.02,
+                    pricing_unit="hour",
+                    features=["Multi-AZ", "Backup", "Performance Monitoring", "Read Replicas"],
+                    specifications={"instances_running": len(rds_instances)}
+                )
+            ]
+            
+            return CloudServiceResponse(
+                provider=CloudProvider.ALIBABA,
+                service_category=ServiceCategory.DATABASE,
+                region=region,
+                services=services,
+                metadata={"total_rds_instances": len(rds_instances)},
+                timestamp=datetime.now(timezone.utc)
+            )
+        except Exception as e:
+            logger.error(f"Failed to get Alibaba Cloud database services: {e}")
+            return CloudServiceResponse(
+                provider=CloudProvider.ALIBABA,
+                service_category=ServiceCategory.DATABASE,
+                region=region,
+                services=[],
+                metadata={"error": str(e)},
+                timestamp=datetime.now(timezone.utc)
+            )
+    
+    async def get_ai_services(self, region: str = None) -> CloudServiceResponse:
+        """Get AI/ML services from Alibaba Cloud."""
+        region = region or self.region
+        
+        try:
+            services = [
+                CloudService(
+                    provider=CloudProvider.ALIBABA,
+                    service_name="Machine Learning Platform for AI",
+                    service_id="pai",
+                    category=ServiceCategory.MACHINE_LEARNING,
+                    region=region,
+                    description="Comprehensive machine learning platform",
+                    pricing_model="pay_per_use",
+                    hourly_price=0.15,
+                    pricing_unit="compute unit hour",
+                    features=["AutoML", "Model Training", "Model Deployment", "Feature Store"],
+                    specifications={}
+                )
+            ]
+            
+            return CloudServiceResponse(
+                provider=CloudProvider.ALIBABA,
+                service_category=ServiceCategory.MACHINE_LEARNING,
+                region=region,
+                services=services,
+                metadata={},
+                timestamp=datetime.now(timezone.utc)
+            )
+        except Exception as e:
+            logger.error(f"Failed to get Alibaba Cloud AI services: {e}")
+            return CloudServiceResponse(
+                provider=CloudProvider.ALIBABA,
+                service_category=ServiceCategory.MACHINE_LEARNING,
+                region=region,
+                services=[],
+                metadata={"error": str(e)},
+                timestamp=datetime.now(timezone.utc)
+            )
+    
+    async def get_service_pricing(self, service_id: str, region: str = None) -> Dict[str, Any]:
+        """Get pricing information for a service."""
+        pricing_client = AlibabaPricingClient(self.credentials)
+        return await pricing_client.get_pricing(service_id, region)
+    
     async def get_services(self) -> CloudServiceResponse:
         """Get available Alibaba Cloud services with real data."""
         try:
@@ -201,82 +394,86 @@ class AlibabaCloudClient:
                     service_name="Elastic Compute Service",
                     service_id="ecs",
                     category=ServiceCategory.COMPUTE,
+                    region=self.credentials.region,
                     description="Scalable cloud computing service",
-                    pricing={"model": "Pay-as-you-go", "starting_price": 0.008, "unit": "per hour"},
+                    pricing_model="pay_as_you_go",
+                    hourly_price=0.008,
+                    pricing_unit="hour",
                     features=["Auto Scaling", "Load Balancing", "Security Groups", "Snapshots"],
-                    regions=[self.credentials.region],
-                    compliance=["ISO 27001", "SOC 2", "CSA STAR"],
-                    performance_metrics={"instances_running": len(ecs_instances)}
+                    specifications={"instances_running": len(ecs_instances)}
                 ),
                 CloudService(
                     provider=CloudProvider.ALIBABA,
                     service_name="ApsaraDB RDS",
                     service_id="rds",
                     category=ServiceCategory.DATABASE,
+                    region=self.credentials.region,
                     description="Managed relational database service",
-                    pricing={"model": "Subscription", "starting_price": 0.02, "unit": "per hour"},
+                    pricing_model="subscription",
+                    hourly_price=0.02,
+                    pricing_unit="hour",
                     features=["Multi-AZ", "Backup", "Performance Monitoring", "Read Replicas"],
-                    regions=[self.credentials.region],
-                    compliance=["ISO 27001", "SOC 2"],
-                    performance_metrics={"instances_running": len(rds_instances)}
+                    specifications={"instances_running": len(rds_instances)}
                 ),
                 CloudService(
                     provider=CloudProvider.ALIBABA,
                     service_name="Object Storage Service",
                     service_id="oss",
                     category=ServiceCategory.STORAGE,
+                    region=self.credentials.region,
                     description="Scalable object storage service",
-                    pricing={"model": "Pay-as-you-go", "starting_price": 0.0099, "unit": "per GB/month"},
+                    pricing_model="pay_as_you_go",
+                    hourly_price=0.0099,
+                    pricing_unit="GB/month",
                     features=["CDN Integration", "Lifecycle Management", "Cross-Region Replication"],
-                    regions=[self.credentials.region],
-                    compliance=["ISO 27001", "SOC 2"],
-                    performance_metrics={"buckets_count": len(oss_buckets)}
+                    specifications={"buckets_count": len(oss_buckets)}
                 ),
                 CloudService(
                     provider=CloudProvider.ALIBABA,
                     service_name="Function Compute",
                     service_id="fc",
                     category=ServiceCategory.SERVERLESS,
+                    region=self.credentials.region,
                     description="Event-driven serverless computing",
-                    pricing={"model": "Pay-per-request", "starting_price": 0.0000002, "unit": "per request"},
+                    pricing_model="pay_per_request",
+                    hourly_price=0.0000002,
+                    pricing_unit="request",
                     features=["Event Triggers", "Auto Scaling", "Built-in Monitoring"],
-                    regions=[self.credentials.region],
-                    compliance=["ISO 27001"],
-                    performance_metrics={}
+                    specifications={}
                 ),
                 CloudService(
                     provider=CloudProvider.ALIBABA,
                     service_name="Container Service for Kubernetes",
                     service_id="ack",
                     category=ServiceCategory.CONTAINERS,
+                    region=self.credentials.region,
                     description="Managed Kubernetes service",
-                    pricing={"model": "Pay-for-nodes", "starting_price": 0.05, "unit": "per node/hour"},
+                    pricing_model="pay_for_nodes",
+                    hourly_price=0.05,
+                    pricing_unit="node/hour",
                     features=["Managed Control Plane", "Auto Scaling", "Service Mesh"],
-                    regions=[self.credentials.region],
-                    compliance=["ISO 27001", "SOC 2"],
-                    performance_metrics={}
+                    specifications={}
                 )
             ])
             
             return CloudServiceResponse(
-                success=True,
-                services=services,
-                total_count=len(services),
                 provider=CloudProvider.ALIBABA,
+                service_category=ServiceCategory.COMPUTE,
                 region=self.credentials.region,
+                services=services,
+                metadata={"total_services": len(services)},
                 timestamp=datetime.now(timezone.utc)
             )
             
         except Exception as e:
             logger.error(f"Failed to get Alibaba Cloud services: {e}")
             return CloudServiceResponse(
-                success=False,
-                services=[],
-                total_count=0,
                 provider=CloudProvider.ALIBABA,
+                service_category=ServiceCategory.COMPUTE,
                 region=self.credentials.region,
-                timestamp=datetime.now(timezone.utc),
-                error=str(e)
+                services=[],
+                metadata={"error": str(e)},
+                timestamp=datetime.now(timezone.utc)
             )
     
     async def get_cost_data(self, days: int = 30) -> Dict[str, Any]:

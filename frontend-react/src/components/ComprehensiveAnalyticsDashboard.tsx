@@ -475,7 +475,7 @@ export default function ComprehensiveAnalyticsDashboard() {
                                 { provider: 'GCP', total: analytics.cost_breakdown.gcp, color: getProviderColor('GCP') },
                                 { provider: 'Alibaba', total: analytics.cost_breakdown.alibaba || 0, color: getProviderColor('Alibaba') },
                                 { provider: 'IBM', total: analytics.cost_breakdown.ibm || 0, color: getProviderColor('IBM') },
-                            ].filter(item => item.total > 0)
+                            ].filter(item => item.total > 0)}
                             title=""
                             showBreakdown={false}
                         />

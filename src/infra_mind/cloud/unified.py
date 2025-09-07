@@ -35,7 +35,7 @@ class UnifiedCloudClient:
     """
     
     def __init__(self, aws_region: str = "us-east-1", azure_region: str = "eastus", gcp_region: str = "us-central1",
-                 alibaba_region: str = "cn-beijing", ibm_region: str = "us-south",
+                 alibaba_region: str = "us-west-1", ibm_region: str = "us-south",
                  aws_access_key_id: Optional[str] = None, aws_secret_access_key: Optional[str] = None,
                  azure_subscription_id: Optional[str] = None, azure_client_id: Optional[str] = None,
                  azure_client_secret: Optional[str] = None,
@@ -108,7 +108,11 @@ class UnifiedCloudClient:
         
         try:
             if alibaba_access_key_id and alibaba_access_key_secret:
-                self.clients[CloudProvider.ALIBABA] = AlibabaCloudClient()
+                self.clients[CloudProvider.ALIBABA] = AlibabaCloudClient(
+                    access_key_id=alibaba_access_key_id,
+                    access_key_secret=alibaba_access_key_secret,
+                    region=alibaba_region
+                )
                 logger.info("Alibaba Cloud client initialized successfully")
             else:
                 logger.info("Alibaba Cloud credentials not provided, skipping initialization")
@@ -117,7 +121,11 @@ class UnifiedCloudClient:
         
         try:
             if ibm_api_key and ibm_account_id:
-                self.clients[CloudProvider.IBM] = IBMCloudClient()
+                self.clients[CloudProvider.IBM] = IBMCloudClient(
+                    api_key=ibm_api_key,
+                    account_id=ibm_account_id,
+                    region=ibm_region
+                )
                 logger.info("IBM Cloud client initialized successfully")
             else:
                 logger.info("IBM Cloud credentials not provided, skipping initialization")
@@ -138,6 +146,28 @@ class UnifiedCloudClient:
     def get_available_providers(self) -> List[CloudProvider]:
         """Get list of available cloud providers."""
         return list(self.clients.keys())
+    
+    def get_supported_providers(self) -> List[CloudProvider]:
+        """Get list of supported cloud providers (alias for get_available_providers)."""
+        return self.get_available_providers()
+    
+    async def get_available_services(self, provider: Optional[CloudProvider] = None) -> List[Dict[str, Any]]:
+        """Get list of available services from providers."""
+        services = []
+        providers_to_check = [provider] if provider else self.get_available_providers()
+        
+        for p in providers_to_check:
+            if p in self.clients:
+                try:
+                    # Get compute services as a representative sample
+                    compute_services = await self.get_compute_services(p)
+                    if p in compute_services and compute_services[p].services:
+                        services.extend(compute_services[p].services)
+                except Exception as e:
+                    logger.warning(f"Could not fetch services from {p}: {e}")
+                    continue
+        
+        return services
     
     async def get_compute_services(self, provider: Optional[CloudProvider] = None,
                                  region: Optional[str] = None) -> Dict[CloudProvider, CloudServiceResponse]:
@@ -648,6 +678,37 @@ class UnifiedCloudClient:
         except Exception as e:
             logger.error(f"Error in manual cache warming: {e}")
             return {"error": str(e)}
+    
+    async def close(self):
+        """Close all client sessions to prevent memory leaks."""
+        try:
+            # Close all cloud provider clients
+            for provider, client in self.clients.items():
+                if hasattr(client, 'close'):
+                    try:
+                        await client.close()
+                        logger.debug(f"Closed {provider.value} client session")
+                    except Exception as e:
+                        logger.warning(f"Error closing {provider.value} client: {e}")
+            
+            # Close terraform client if it has a close method
+            if self.terraform_client and hasattr(self.terraform_client, 'close'):
+                try:
+                    await self.terraform_client.close()
+                    logger.debug("Closed Terraform client session")
+                except Exception as e:
+                    logger.warning(f"Error closing Terraform client: {e}")
+                    
+        except Exception as e:
+            logger.error(f"Error closing UnifiedCloudClient: {e}")
+    
+    async def __aenter__(self):
+        """Async context manager entry."""
+        return self
+    
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit - ensures proper cleanup."""
+        await self.close()
 
 
 # Set the alias for backward compatibility

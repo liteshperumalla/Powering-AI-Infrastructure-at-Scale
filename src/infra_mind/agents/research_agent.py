@@ -248,7 +248,9 @@ class ResearchAgent(BaseAgent):
         # Prepare search results summary for LLM
         search_summary = self._prepare_search_results_for_llm(web_search_results)
         
-        prompt = f"""As a Research Agent, analyze the following real web search results for the topic "{topic}" and provide comprehensive insights:
+        prompt = f"""CRITICAL: You must respond with ONLY a valid JSON object. No text before or after the JSON.
+
+As a Research Agent, analyze the following real web search results for the topic "{topic}" and provide comprehensive insights:
 
 TOPIC: {topic}
 
@@ -299,23 +301,82 @@ Based on this real, current web data, provide detailed analysis including:
 
 Ensure all insights are directly supported by the web search data provided. Cite specific sources where relevant.
 
-Respond in JSON format with structured analysis results."""
+CRITICAL: You must respond with ONLY a valid JSON object following this exact schema:
+{{
+  "market_findings": {
+    "trends": ["trend1", "trend2", "trend3"],
+    "key_players": ["player1", "player2"],
+    "innovations": ["innovation1", "innovation2"],
+    "market_size": "size_info"
+  },
+  "technical_insights": {
+    "capabilities": ["capability1", "capability2"],
+    "limitations": ["limitation1", "limitation2"],
+    "benchmarks": {{"metric1": "value1", "metric2": "value2"}},
+    "best_practices": ["practice1", "practice2"]
+  },
+  "adoption_patterns": {
+    "examples": ["example1", "example2"],
+    "success_stories": ["story1", "story2"],
+    "challenges": ["challenge1", "challenge2"],
+    "trends": ["trend1", "trend2"]
+  },
+  "pricing_analysis": {
+    "models": ["model1", "model2"],
+    "trends": ["trend1", "trend2"],
+    "comparisons": {{"provider1": "price1", "provider2": "price2"}},
+    "considerations": ["consideration1", "consideration2"]
+  },
+  "recommendations": {
+    "strategic": ["rec1", "rec2", "rec3"],
+    "risks": ["risk1", "risk2"],
+    "roadmap": ["step1", "step2", "step3"],
+    "outlook": ["prediction1", "prediction2"]
+  },
+  "data_quality": {
+    "reliability_score": 0.8,
+    "research_gaps": ["gap1", "gap2"],
+    "confidence_levels": {{"market": "high", "technical": "medium"}}
+  }
+}}
+
+CRITICAL: Respond with ONLY the JSON object. No additional text."""
 
         try:
             response = await self._call_llm(
                 prompt=prompt,
-                system_prompt="You are an expert Research Agent specializing in analyzing real-time web data to provide comprehensive market intelligence and technical insights. Base your analysis strictly on the provided web search results while applying your expertise to extract meaningful patterns and actionable insights.",
+                system_prompt="You are an expert Research Agent specializing in analyzing real-time web data to provide comprehensive market intelligence and technical insights. Base your analysis strictly on the provided web search results while applying your expertise to extract meaningful patterns and actionable insights. CRITICAL: You MUST respond with ONLY a valid JSON object. No text before or after the JSON. No explanations, no markdown formatting, no code blocks - just pure JSON.",
                 temperature=0.2,
                 max_tokens=2500
             )
             
-            # Parse LLM response
+            # Parse LLM response with enhanced error handling
             import json
+            import re
             try:
-                analysis_results = json.loads(response)
+                # Clean response - remove any potential markdown formatting or extra text
+                cleaned_response = response.strip()
                 
+                # Try to extract JSON from response if it's wrapped in text
+                if not cleaned_response.startswith('{'):
+                    json_match = re.search(r'(\{.*\})', cleaned_response, re.DOTALL)
+                    if json_match:
+                        cleaned_response = json_match.group(1)
+                
+                analysis_results = json.loads(cleaned_response)
+                
+                # Validate that we have a proper dictionary structure
                 if not isinstance(analysis_results, dict):
+                    logger.warning("LLM response is not a dictionary, falling back to text parsing")
                     analysis_results = self._parse_web_analysis_text(response, topic)
+                
+                # Ensure nested structures exist with defaults
+                if "market_findings" not in analysis_results:
+                    analysis_results["market_findings"] = {"trends": [], "key_players": [], "innovations": [], "market_size": ""}
+                if "technical_insights" not in analysis_results:
+                    analysis_results["technical_insights"] = {"capabilities": [], "limitations": [], "benchmarks": {}, "best_practices": []}
+                if "recommendations" not in analysis_results:
+                    analysis_results["recommendations"] = {"strategic": [], "risks": [], "roadmap": [], "outlook": []}
                 
                 # Add metadata
                 analysis_results.update({
@@ -328,7 +389,7 @@ Respond in JSON format with structured analysis results."""
                 
                 return analysis_results
                 
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
                 logger.warning("Failed to parse LLM JSON response for web analysis")
                 return self._parse_web_analysis_text(response, topic)
                 
@@ -348,7 +409,9 @@ Respond in JSON format with structured analysis results."""
         """
         logger.info(f"Using LLM-only research fallback for topic: {topic}")
         
-        prompt = f"""As a Research Agent specializing in cloud infrastructure and technology, conduct comprehensive research on the following topic:
+        prompt = f"""CRITICAL: You must respond with ONLY a valid JSON object. No text before or after the JSON.
+
+As a Research Agent specializing in cloud infrastructure and technology, conduct comprehensive research on the following topic:
 
 TOPIC: {topic}
 
@@ -380,23 +443,81 @@ Since web search is unavailable, provide research results based on your knowledg
 
 Provide specific, actionable insights based on your knowledge of the industry.
 
-Respond in JSON format with structured research results."""
+CRITICAL: You must respond with ONLY a valid JSON object following this exact schema:
+{{
+  "research_results": {{
+    "key_findings": ["finding1", "finding2", "finding3"],
+    "recommendations": ["rec1", "rec2", "rec3"], 
+    "market_trends": ["trend1", "trend2", "trend3"],
+    "technology_insights": ["insight1", "insight2", "insight3"],
+    "industry_benchmarks": {{"metric1": "value1", "metric2": "value2"}},
+    "market_analysis": {{
+      "size": "market_size_info",
+      "growth": "growth_info",
+      "key_players": ["player1", "player2"],
+      "pricing_trends": ["trend1", "trend2"]
+    }},
+    "technical_analysis": {{
+      "capabilities": ["capability1", "capability2"],
+      "limitations": ["limitation1", "limitation2"],
+      "performance": {{"benchmark1": "value1", "benchmark2": "value2"}},
+      "scalability": ["factor1", "factor2"]
+    }},
+    "strategic_implications": {{
+      "business_impact": ["impact1", "impact2"],
+      "implementation": ["step1", "step2"],
+      "risks": ["risk1", "risk2"],
+      "future_outlook": ["prediction1", "prediction2"]
+    }}
+  }}
+}}
+
+CRITICAL: Respond with ONLY the JSON object. No additional text."""
 
         try:
             response = await self._call_llm(
                 prompt=prompt,
-                system_prompt="You are an expert Research Agent with comprehensive knowledge of cloud infrastructure, emerging technologies, and market intelligence. Provide thorough, accurate, and actionable research insights based on your knowledge base.",
+                system_prompt="You are an expert Research Agent with comprehensive knowledge of cloud infrastructure, emerging technologies, and market intelligence. Provide thorough, accurate, and actionable research insights based on your knowledge base. CRITICAL: You MUST respond with ONLY a valid JSON object. No text before or after the JSON. No explanations, no markdown formatting, no code blocks - just pure JSON.",
                 temperature=0.3,
                 max_tokens=2000
             )
             
-            # Parse LLM response
+            # Parse LLM response with enhanced error handling
             import json
+            import re
             try:
-                research_results = json.loads(response)
+                # Clean response - remove any potential markdown formatting or extra text
+                cleaned_response = response.strip()
                 
+                # Try to extract JSON from response if it's wrapped in text
+                if not cleaned_response.startswith('{'):
+                    json_match = re.search(r'(\{.*\})', cleaned_response, re.DOTALL)
+                    if json_match:
+                        cleaned_response = json_match.group(1)
+                
+                research_results = json.loads(cleaned_response)
+                
+                # Validate that we have a proper dictionary structure
                 if not isinstance(research_results, dict):
+                    logger.warning("LLM response is not a dictionary, falling back to text parsing")
                     research_results = self._parse_research_topic_text(response, topic)
+                
+                # Ensure expected nested structure exists
+                if "research_results" in research_results:
+                    results_data = research_results["research_results"]
+                else:
+                    results_data = research_results
+                    research_results = {"research_results": results_data}
+                
+                # Ensure nested structures exist with defaults
+                if "key_findings" not in results_data:
+                    results_data["key_findings"] = []
+                if "recommendations" not in results_data:
+                    results_data["recommendations"] = []
+                if "market_analysis" not in results_data:
+                    results_data["market_analysis"] = {"size": "", "growth": "", "key_players": [], "pricing_trends": []}
+                if "technical_analysis" not in results_data:
+                    results_data["technical_analysis"] = {"capabilities": [], "limitations": [], "performance": {}, "scalability": []}
                 
                 # Add metadata indicating this is LLM-only
                 research_results.update({
@@ -415,7 +536,7 @@ Respond in JSON format with structured research results."""
                     "timestamp": datetime.now(timezone.utc).isoformat()
                 }
                 
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
                 logger.warning("Failed to parse LLM JSON response for fallback research")
                 research_results = self._parse_research_topic_text(response, topic)
                 
@@ -645,11 +766,13 @@ Result {i}:
         """Analyze what data needs to be collected using real LLM analysis."""
         logger.debug("Analyzing data collection requirements with LLM")
         
-        assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+        assessment_data = self.current_assessment.model_dump() if self.current_assessment else {}
         technical_req = assessment_data.get("technical_requirements", {})
         business_req = assessment_data.get("business_requirements", {})
         
-        prompt = f"""As a Research Agent, analyze the following infrastructure assessment requirements and determine comprehensive data collection needs:
+        prompt = f"""CRITICAL: You must respond with ONLY a valid JSON object. No text before or after the JSON.
+
+As a Research Agent, analyze the following infrastructure assessment requirements and determine comprehensive data collection needs:
 
 BUSINESS REQUIREMENTS:
 {self._format_data_for_llm(business_req)}
@@ -697,46 +820,112 @@ Determine optimal data collection strategy including:
 
 Provide specific, actionable data collection requirements that will enable comprehensive infrastructure recommendations.
 
-Respond in JSON format with structured data requirements analysis."""
+CRITICAL: You must respond with ONLY a valid JSON object following this exact schema:
+{{
+  "data_requirements": {{
+    "workload_analysis": {{
+      "types": ["workload_type1", "workload_type2"],
+      "scale_requirements": ["requirement1", "requirement2"],
+      "performance_needs": ["need1", "need2"],
+      "compliance_requirements": ["compliance1", "compliance2"]
+    }},
+    "required_services": ["service1", "service2", "service3"],
+    "pricing_requirements": {{
+      "budget_ranges": ["range1", "range2"],
+      "cost_models": ["model1", "model2"],
+      "optimization_areas": ["area1", "area2"],
+      "tco_factors": ["factor1", "factor2"]
+    }},
+    "benchmark_requirements": {{
+      "performance": ["benchmark1", "benchmark2"],
+      "industry_standards": ["standard1", "standard2"],
+      "scalability": ["metric1", "metric2"],
+      "security": ["security1", "security2"]
+    }},
+    "collection_priorities": {{
+      "high": ["priority1", "priority2"],
+      "medium": ["priority3", "priority4"],
+      "low": ["priority5", "priority6"],
+      "freshness_requirements": ["fresh1", "fresh2"]
+    }},
+    "collection_scope": {{
+      "providers": ["provider1", "provider2"],
+      "regions": ["region1", "region2"],
+      "categories": ["category1", "category2"],
+      "analysis_depth": "depth_level"
+    }}
+  }}
+}}
+
+CRITICAL: Respond with ONLY the JSON object. No additional text."""
 
         try:
             response = await self._call_llm(
                 prompt=prompt,
-                system_prompt="You are an expert Research Agent with deep knowledge of cloud infrastructure data sources, market intelligence requirements, and comprehensive analysis methodologies. Provide detailed, actionable data collection strategies that ensure thorough infrastructure assessment.",
+                system_prompt="You are an expert Research Agent with deep knowledge of cloud infrastructure data sources, market intelligence requirements, and comprehensive analysis methodologies. Provide detailed, actionable data collection strategies that ensure thorough infrastructure assessment. CRITICAL: You MUST respond with ONLY a valid JSON object. No text before or after the JSON. No explanations, no markdown formatting, no code blocks - just pure JSON.",
                 temperature=0.2,
                 max_tokens=2000
             )
             
-            # Parse LLM response
+            # Parse LLM response with enhanced error handling
             import json
+            import re
             try:
-                llm_requirements = json.loads(response)
+                # Clean response - remove any potential markdown formatting or extra text
+                cleaned_response = response.strip()
                 
-                # Validate and enhance the result
+                # Try to extract JSON from response if it's wrapped in text
+                if not cleaned_response.startswith('{'):
+                    json_match = re.search(r'(\{.*\})', cleaned_response, re.DOTALL)
+                    if json_match:
+                        cleaned_response = json_match.group(1)
+                
+                llm_requirements = json.loads(cleaned_response)
+                
+                # Validate that we have a proper dictionary structure
                 if not isinstance(llm_requirements, dict):
+                    logger.warning("LLM response is not a dictionary, falling back to text parsing")
                     llm_requirements = self._parse_data_requirements_text(response)
+                
+                # Handle nested data_requirements structure
+                if "data_requirements" in llm_requirements:
+                    requirements_data = llm_requirements["data_requirements"]
+                else:
+                    requirements_data = llm_requirements
                 
                 # Extract traditional requirements as fallback
                 workload_types = technical_req.get("workload_types", [])
                 expected_users = technical_req.get("expected_users", 1000)
                 budget_range = business_req.get("budget_range", "$10k-50k")
                 
+                # Ensure nested structures exist with defaults
+                if "workload_analysis" not in requirements_data:
+                    requirements_data["workload_analysis"] = {}
+                if "pricing_requirements" not in requirements_data:
+                    requirements_data["pricing_requirements"] = {}
+                if "benchmark_requirements" not in requirements_data:
+                    requirements_data["benchmark_requirements"] = {}
+                if "collection_priorities" not in requirements_data:
+                    requirements_data["collection_priorities"] = {}
+                if "collection_scope" not in requirements_data:
+                    requirements_data["collection_scope"] = {}
+                
                 # Enhance with traditional analysis
                 enhanced_requirements = {
-                    "workload_analysis": llm_requirements.get("workload_analysis", {
+                    "workload_analysis": requirements_data.get("workload_analysis", {
                         "types": workload_types,
                         "expected_users": expected_users,
                         "budget_range": budget_range
                     }),
-                    "required_services": llm_requirements.get("required_service_categories", 
+                    "required_services": requirements_data.get("required_services", 
                                                            self._determine_required_services(workload_types)),
-                    "pricing_requirements": llm_requirements.get("pricing_data_requirements",
+                    "pricing_requirements": requirements_data.get("pricing_requirements",
                                                                self._determine_pricing_requirements(budget_range, expected_users)),
-                    "benchmark_requirements": llm_requirements.get("benchmark_data_requirements",
+                    "benchmark_requirements": requirements_data.get("benchmark_requirements",
                                                                  self._determine_benchmark_requirements(workload_types, expected_users)),
-                    "data_priorities": llm_requirements.get("data_collection_priorities", 
+                    "data_priorities": requirements_data.get("collection_priorities", 
                                                           self._prioritize_data_collection(self._determine_required_services(workload_types))),
-                    "collection_scope": llm_requirements.get("collection_scope", {
+                    "collection_scope": requirements_data.get("collection_scope", {
                         "providers": ["aws", "azure", "gcp"],
                         "regions": ["us-east-1", "eastus", "us-central1"],
                         "service_categories": self._determine_required_services(workload_types)
@@ -747,7 +936,7 @@ Respond in JSON format with structured data requirements analysis."""
                 
                 return enhanced_requirements
                 
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
                 logger.warning("Failed to parse LLM JSON response for data requirements")
                 return self._parse_data_requirements_text(response)
                 
@@ -1088,7 +1277,9 @@ Respond in JSON format with structured data requirements analysis."""
         # Prepare data summary for LLM analysis
         data_summary = self._prepare_trend_analysis_summary(providers_data)
         
-        prompt = f"""As a Research Agent specializing in cloud infrastructure market analysis, analyze the following real-time data to identify trends and patterns:
+        prompt = f"""CRITICAL: You must respond with ONLY a valid JSON object. No text before or after the JSON.
+
+As a Research Agent specializing in cloud infrastructure market analysis, analyze the following real-time data to identify trends and patterns:
 
 COLLECTED DATA SUMMARY:
 {self._format_data_for_llm(data_summary)}
@@ -1130,24 +1321,88 @@ Perform comprehensive trend analysis including:
 
 Provide specific, data-driven insights with quantitative analysis where possible.
 
-Respond in JSON format with structured trend analysis."""
+CRITICAL: You must respond with ONLY a valid JSON object following this exact schema:
+{{
+  "trend_analysis": {{
+    "pricing_trends_analysis": {{
+      "cost_leadership": ["pattern1", "pattern2"],
+      "competitiveness": {{"provider1": "analysis1", "provider2": "analysis2"}},
+      "optimization_opportunities": ["opportunity1", "opportunity2"]
+    }},
+    "service_availability_trends": {{
+      "portfolio_comparison": ["comparison1", "comparison2"],
+      "emerging_services": ["service1", "service2"],
+      "feature_differentiation": ["feature1", "feature2"],
+      "service_gaps": ["gap1", "gap2"]
+    }},
+    "market_intelligence_insights": {{
+      "positioning": ["insight1", "insight2"],
+      "innovation_patterns": ["pattern1", "pattern2"],
+      "consolidation_trends": ["trend1", "trend2"],
+      "regional_preferences": ["pref1", "pref2"]
+    }},
+    "emerging_patterns": {{
+      "technology_adoption": ["tech1", "tech2"],
+      "pricing_evolution": ["evolution1", "evolution2"],
+      "bundling_strategies": ["strategy1", "strategy2"],
+      "developer_trends": ["trend1", "trend2"]
+    }},
+    "strategic_implications": {{
+      "decision_impact": ["impact1", "impact2"],
+      "vendor_criteria": ["criteria1", "criteria2"],
+      "market_predictions": ["prediction1", "prediction2"],
+      "opportunities": ["opportunity1", "opportunity2"]
+    }}
+  }}
+}}
+
+CRITICAL: Respond with ONLY the JSON object. No additional text."""
 
         try:
             response = await self._call_llm(
                 prompt=prompt,
-                system_prompt="You are an expert market analyst specializing in cloud infrastructure trends, competitive intelligence, and technology adoption patterns. Provide comprehensive, data-driven trend analysis that helps organizations understand market dynamics and make strategic decisions.",
+                system_prompt="You are an expert market analyst specializing in cloud infrastructure trends, competitive intelligence, and technology adoption patterns. Provide comprehensive, data-driven trend analysis that helps organizations understand market dynamics and make strategic decisions. CRITICAL: You MUST respond with ONLY a valid JSON object. No text before or after the JSON. No explanations, no markdown formatting, no code blocks - just pure JSON.",
                 temperature=0.2,
                 max_tokens=2500
             )
             
-            # Parse LLM response
+            # Parse LLM response with enhanced error handling
             import json
+            import re
             try:
-                llm_trends = json.loads(response)
+                # Clean response - remove any potential markdown formatting or extra text
+                cleaned_response = response.strip()
                 
-                # Validate and enhance the result
+                # Try to extract JSON from response if it's wrapped in text
+                if not cleaned_response.startswith('{'):
+                    json_match = re.search(r'(\{.*\})', cleaned_response, re.DOTALL)
+                    if json_match:
+                        cleaned_response = json_match.group(1)
+                
+                llm_trends = json.loads(cleaned_response)
+                
+                # Validate that we have a proper dictionary structure
                 if not isinstance(llm_trends, dict):
+                    logger.warning("LLM response is not a dictionary, falling back to text parsing")
                     llm_trends = self._parse_trend_analysis_text(response)
+                
+                # Handle nested trend_analysis structure
+                if "trend_analysis" in llm_trends:
+                    trends_data = llm_trends["trend_analysis"]
+                else:
+                    trends_data = llm_trends
+                
+                # Ensure nested structures exist with defaults
+                if "pricing_trends_analysis" not in trends_data:
+                    trends_data["pricing_trends_analysis"] = {}
+                if "service_availability_trends" not in trends_data:
+                    trends_data["service_availability_trends"] = {}
+                if "market_intelligence_insights" not in trends_data:
+                    trends_data["market_intelligence_insights"] = {}
+                if "emerging_patterns" not in trends_data:
+                    trends_data["emerging_patterns"] = {}
+                if "strategic_implications" not in trends_data:
+                    trends_data["strategic_implications"] = {}
                 
                 # Combine with traditional analysis
                 traditional_trends = {
@@ -1158,11 +1413,11 @@ Respond in JSON format with structured trend analysis."""
                 
                 # Enhanced trend analysis
                 enhanced_trends = {
-                    "pricing_trends": llm_trends.get("pricing_trends_analysis", traditional_trends["pricing_trends"]),
-                    "service_trends": llm_trends.get("service_availability_trends", traditional_trends["service_trends"]),
-                    "market_insights": llm_trends.get("market_intelligence_insights", []),
-                    "emerging_patterns": llm_trends.get("emerging_patterns", traditional_trends["emerging_patterns"]),
-                    "strategic_implications": llm_trends.get("strategic_implications", []),
+                    "pricing_trends": trends_data.get("pricing_trends_analysis", traditional_trends["pricing_trends"]),
+                    "service_trends": trends_data.get("service_availability_trends", traditional_trends["service_trends"]),
+                    "market_insights": trends_data.get("market_intelligence_insights", []),
+                    "emerging_patterns": trends_data.get("emerging_patterns", traditional_trends["emerging_patterns"]),
+                    "strategic_implications": trends_data.get("strategic_implications", []),
                     "trend_timestamp": datetime.now(timezone.utc).isoformat(),
                     "llm_powered": True,
                     "analysis_confidence": 0.85
@@ -1176,7 +1431,7 @@ Respond in JSON format with structured trend analysis."""
                 
                 return enhanced_trends
                 
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
                 logger.warning("Failed to parse LLM JSON response for trend analysis")
                 return self._parse_trend_analysis_text(response)
                 
@@ -1327,7 +1582,9 @@ Respond in JSON format with structured trend analysis."""
             "benchmark_categories": list(benchmark_data.get("performance_benchmarks", {}).keys())
         }
         
-        prompt = f"""As a Research Agent specializing in cloud infrastructure market intelligence, analyze the following comprehensive data and generate strategic research insights:
+        prompt = f"""CRITICAL: You must respond with ONLY a valid JSON object. No text before or after the JSON.
+
+As a Research Agent specializing in cloud infrastructure market intelligence, analyze the following comprehensive data and generate strategic research insights:
 
 DATA COLLECTION RESULTS:
 {self._format_data_for_llm(collected_data)}
@@ -1379,33 +1636,91 @@ Ensure insights are:
 - Specific and quantified where possible
 - Clearly prioritized by business impact
 
-Respond in JSON format with structured analysis for each section."""
+CRITICAL: You must respond with ONLY a valid JSON object following this exact schema:
+{{
+  "research_insights": {{
+    "key_market_findings": ["finding1", "finding2", "finding3"],
+    "strategic_recommendations": {{
+      "provider_selection": ["rec1", "rec2"],
+      "cost_optimization": ["strategy1", "strategy2"],
+      "risk_mitigation": ["risk1", "risk2"]
+    }},
+    "market_intelligence": {{
+      "industry_trends": ["trend1", "trend2"],
+      "emerging_technologies": ["tech1", "tech2"],
+      "competitive_positioning": ["insight1", "insight2"],
+      "future_outlook": ["prediction1", "prediction2"]
+    }},
+    "data_quality_assessment": {{
+      "reliability": "assessment_level",
+      "confidence_levels": {{"category1": "high", "category2": "medium"}},
+      "research_gaps": ["gap1", "gap2"]
+    }},
+    "research_summary": {{
+      "executive_overview": "summary_text",
+      "methodology": ["method1", "method2"],
+      "data_sources": ["source1", "source2"],
+      "limitations": ["limitation1", "limitation2"]
+    }}
+  }}
+}}
+
+CRITICAL: Respond with ONLY the JSON object. No additional text."""
 
         try:
             response = await self._call_llm(
                 prompt=prompt,
-                system_prompt="You are an expert Research Agent with deep expertise in cloud infrastructure market analysis, competitive intelligence, and data-driven insights. Provide comprehensive, actionable research insights that help organizations make informed infrastructure decisions based on real market data.",
+                system_prompt="You are an expert Research Agent with deep expertise in cloud infrastructure market analysis, competitive intelligence, and data-driven insights. Provide comprehensive, actionable research insights that help organizations make informed infrastructure decisions based on real market data. CRITICAL: You MUST respond with ONLY a valid JSON object. No text before or after the JSON. No explanations, no markdown formatting, no code blocks - just pure JSON.",
                 temperature=0.2,
                 max_tokens=2500
             )
             
-            # Parse LLM response
+            # Parse LLM response with enhanced error handling
             import json
+            import re
             try:
-                llm_insights = json.loads(response)
+                # Clean response - remove any potential markdown formatting or extra text
+                cleaned_response = response.strip()
                 
-                # Validate and enhance the result
+                # Try to extract JSON from response if it's wrapped in text
+                if not cleaned_response.startswith('{'):
+                    json_match = re.search(r'(\{.*\})', cleaned_response, re.DOTALL)
+                    if json_match:
+                        cleaned_response = json_match.group(1)
+                
+                llm_insights = json.loads(cleaned_response)
+                
+                # Validate that we have a proper dictionary structure
                 if not isinstance(llm_insights, dict):
+                    logger.warning("LLM response is not a dictionary, falling back to text parsing")
                     llm_insights = self._parse_insights_text(response)
+                
+                # Handle nested research_insights structure
+                if "research_insights" in llm_insights:
+                    insights_data = llm_insights["research_insights"]
+                else:
+                    insights_data = llm_insights
+                
+                # Ensure nested structures exist with defaults
+                if "key_market_findings" not in insights_data:
+                    insights_data["key_market_findings"] = []
+                if "strategic_recommendations" not in insights_data:
+                    insights_data["strategic_recommendations"] = {}
+                if "market_intelligence" not in insights_data:
+                    insights_data["market_intelligence"] = {}
+                if "data_quality_assessment" not in insights_data:
+                    insights_data["data_quality_assessment"] = {}
+                if "research_summary" not in insights_data:
+                    insights_data["research_summary"] = {}
                 
                 # Merge with traditional analysis
                 enhanced_insights = {
-                    "key_findings": llm_insights.get("key_market_findings", [])[:8],  # Limit findings
-                    "recommendations": self._enhance_llm_recommendations(llm_insights.get("strategic_recommendations", [])),
-                    "market_intelligence": llm_insights.get("market_intelligence", {}),
+                    "key_findings": insights_data.get("key_market_findings", [])[:8],  # Limit findings
+                    "recommendations": self._enhance_llm_recommendations(insights_data.get("strategic_recommendations", [])),
+                    "market_intelligence": insights_data.get("market_intelligence", {}),
                     "data_quality_assessment": data_validation.get("overall_quality", "unknown"),
                     "confidence_level": self._assess_confidence_level(data_validation, collected_data),
-                    "research_summary": llm_insights.get("research_summary", {}),
+                    "research_summary": insights_data.get("research_summary", {}),
                     "llm_powered": True,
                     "analysis_confidence": 0.9
                 }
@@ -1417,7 +1732,7 @@ Respond in JSON format with structured analysis for each section."""
                 
                 return enhanced_insights
                 
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
                 logger.warning("Failed to parse LLM JSON response for research insights")
                 return self._parse_insights_text(response)
                 

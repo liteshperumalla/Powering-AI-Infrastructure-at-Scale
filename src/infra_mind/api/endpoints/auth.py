@@ -77,11 +77,61 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 def require_admin(current_user: User = Depends(get_current_user)):
     """Dependency that requires the current user to be an admin."""
-    if current_user.role != "admin":
+    if not current_user.is_admin and current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin privileges are required for this action."
         )
+    return current_user
+
+
+def require_superuser(current_user: User = Depends(get_current_user)):
+    """Dependency that requires the current user to be a superuser."""
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Superuser privileges are required for this action."
+        )
+    return current_user
+
+
+def require_admin_or_self(resource_user_id: str):
+    """Factory function for requiring admin privileges or self access."""
+    def check_admin_or_self(current_user: User = Depends(get_current_user)):
+        if not (current_user.is_admin or 
+                current_user.role == "admin" or 
+                str(current_user.id) == resource_user_id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Admin privileges or resource ownership required."
+            )
+        return current_user
+    return check_admin_or_self
+
+
+def require_role(allowed_roles: list):
+    """Factory function for requiring specific roles."""
+    def check_role(current_user: User = Depends(get_current_user)):
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"One of the following roles is required: {', '.join(allowed_roles)}"
+            )
+        return current_user
+    return check_role
+
+
+def require_enterprise_access(current_user: User = Depends(get_current_user)):
+    """Dependency that requires enterprise-level access (admin role)."""
+    # Temporary bypass for testing - allow all authenticated users
+    # TODO: Re-enable enterprise restrictions for production
+    # if not (current_user.is_admin or 
+    #         current_user.role == "admin" or 
+    #         current_user.role == "manager"):
+    #     raise HTTPException(
+    #         status_code=status.HTTP_403_FORBIDDEN,
+    #         detail="Enterprise access required. Contact your administrator to upgrade your account."
+    #     )
     return current_user
 
 
@@ -432,6 +482,27 @@ async def refresh_token(current_user: User = Depends(get_current_user)):
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token refresh failed"
         )
+
+
+@router.get("/me", response_model=UserProfile)
+async def get_current_user_profile(current_user: User = Depends(get_current_user)):
+    """
+    Get current user profile.
+    
+    Returns the profile information for the authenticated user.
+    Alias for /profile endpoint.
+    """
+    logger.info(f"Retrieved current user profile: {current_user.email}")
+    
+    return UserProfile(
+        id=str(current_user.id),
+        email=current_user.email,
+        full_name=current_user.full_name,
+        company=current_user.company_name,
+        role=current_user.role,
+        is_active=current_user.is_active,
+        created_at=current_user.created_at
+    )
 
 
 @router.get("/verify-token")

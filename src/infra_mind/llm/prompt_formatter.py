@@ -122,11 +122,12 @@ class PromptFormatter:
             pass
         
         # Add provider-specific context
-        formatted_request.context["formatted_for_provider"] = provider.value
+        provider_name = provider.value if hasattr(provider, 'value') else str(provider)
+        formatted_request.context["formatted_for_provider"] = provider_name
         formatted_request.context["original_prompt"] = request.prompt
         formatted_request.context["original_system_prompt"] = request.system_prompt
         
-        logger.debug(f"Formatted request for {provider.value} provider")
+        logger.debug(f"Formatted request for {provider_name} provider")
         return formatted_request
     
     def _format_for_gemini(self, request: LLMRequest, template: Dict[str, Any]) -> LLMRequest:

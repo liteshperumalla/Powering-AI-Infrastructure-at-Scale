@@ -8,14 +8,11 @@ import {
   Button,
   Card,
   CardContent,
-  AppBar,
-  Toolbar,
   useTheme,
   Grid,
   Divider,
 } from '@mui/material';
 import {
-  ArrowBack,
   CloudQueue,
   Security,
   Analytics,
@@ -24,40 +21,14 @@ import {
   TrendingUp,
 } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
+import ResponsiveLayout from '@/components/ResponsiveLayout';
 
 export default function About() {
   const theme = useTheme();
   const router = useRouter();
 
   return (
-    <>
-      {/* Navigation Bar */}
-      <AppBar position="static" elevation={1}>
-        <Toolbar>
-          <Button
-            startIcon={<ArrowBack />}
-            color="inherit"
-            onClick={() => router.push('/')}
-            sx={{ mr: 2 }}
-          >
-            Home
-          </Button>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            About Infra Mind
-          </Typography>
-          <Button color="inherit" onClick={() => router.push('/auth/login')}>
-            Login
-          </Button>
-          <Button
-            color="inherit"
-            variant="outlined"
-            sx={{ ml: 1 }}
-            onClick={() => router.push('/auth/register')}
-          >
-            Get Started
-          </Button>
-        </Toolbar>
-      </AppBar>
+    <ResponsiveLayout title="About Infra Mind">
 
       {/* Hero Section */}
       <Box
@@ -280,7 +251,7 @@ export default function About() {
             <Button
               variant="contained"
               size="large"
-              onClick={() => router.push('/assessment')}
+              onClick={() => router.push('/assessments')}
               sx={{ px: 4, py: 1.5 }}
             >
               Start Assessment
@@ -288,10 +259,10 @@ export default function About() {
             <Button
               variant="outlined"
               size="large"
-              onClick={() => router.push('/auth/register')}
+              onClick={() => router.push('/auth/login')}
               sx={{ px: 4, py: 1.5 }}
             >
-              Create Account
+              Sign In
             </Button>
           </Box>
         </Container>
@@ -323,6 +294,6 @@ export default function About() {
           </Box>
         </Container>
       </Box>
-    </>
+    </ResponsiveLayout>
   );
 }

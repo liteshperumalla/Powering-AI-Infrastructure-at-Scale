@@ -10,6 +10,33 @@ from .user import User
 from .report import Report, ReportSection
 from .metrics import Metric, AgentMetrics
 from .conversation import Conversation, ConversationSummary, ChatAnalytics
+from .compliance import (
+    ComplianceFramework,
+    AutomatedCheck,
+    CheckExecution,
+    EvidenceRequirement,
+    ComplianceEvidence,
+    RemediationAction,
+    ComplianceAudit,
+    ComplianceAlert,
+    ComplianceDashboardMetrics
+)
+from .experiment import (
+    Experiment,
+    ExperimentVariant,
+    ExperimentResult,
+    ExperimentEvent,
+    ExperimentStatus,
+    VariantType
+)
+from .feedback import (
+    UserFeedback,
+    FeedbackAnalytics,
+    QualityMetric,
+    FeedbackType,
+    FeedbackChannel,
+    SentimentScore
+)
 
 # List of all document models for Beanie initialization
 __all__ = [
@@ -23,7 +50,28 @@ __all__ = [
     "AgentMetrics",
     "Conversation",
     "ConversationSummary",
-    "ChatAnalytics"
+    "ChatAnalytics",
+    "ComplianceFramework",
+    "AutomatedCheck",
+    "CheckExecution", 
+    "EvidenceRequirement",
+    "ComplianceEvidence",
+    "RemediationAction",
+    "ComplianceAudit",
+    "ComplianceAlert",
+    "ComplianceDashboardMetrics",
+    "Experiment",
+    "ExperimentVariant",
+    "ExperimentResult", 
+    "ExperimentEvent",
+    "ExperimentStatus",
+    "VariantType",
+    "UserFeedback",
+    "FeedbackAnalytics",
+    "QualityMetric",
+    "FeedbackType",
+    "FeedbackChannel",
+    "SentimentScore"
 ]
 
 # Document models list for Beanie
@@ -38,5 +86,21 @@ DOCUMENT_MODELS = [
     AgentMetrics,
     Conversation,
     ConversationSummary,
-    ChatAnalytics
+    ChatAnalytics,
+    ComplianceFramework,
+    AutomatedCheck,
+    CheckExecution,
+    EvidenceRequirement,
+    ComplianceEvidence,
+    RemediationAction,
+    ComplianceAudit,
+    ComplianceAlert,
+    ComplianceDashboardMetrics,
+    Experiment,
+    ExperimentVariant,
+    ExperimentResult,
+    ExperimentEvent,
+    UserFeedback,
+    FeedbackAnalytics,
+    QualityMetric
 ]

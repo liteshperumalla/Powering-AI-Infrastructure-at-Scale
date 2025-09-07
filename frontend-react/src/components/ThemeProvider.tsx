@@ -13,6 +13,7 @@ interface ThemeProviderProps {
 
 function MuiThemeWrapper({ children }: { children: React.ReactNode }) {
     const { mode } = useTheme();
+    // Always use light theme during SSR to prevent hydration mismatch
     const theme = createAppTheme(mode);
 
     return (

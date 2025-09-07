@@ -29,10 +29,12 @@ interface ThemeContextProviderProps {
 
 export const ThemeContextProvider: React.FC<ThemeContextProviderProps> = ({ children }) => {
   const [mode, setModeState] = useState<PaletteMode>('light');
+  const [isHydrated, setIsHydrated] = useState(false);
 
   // Initialize theme from localStorage or system preference
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      setIsHydrated(true);
       const savedMode = localStorage.getItem('theme-mode') as PaletteMode;
       if (savedMode && (savedMode === 'light' || savedMode === 'dark')) {
         setModeState(savedMode);

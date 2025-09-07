@@ -24,6 +24,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["monitoring"])
 
 
+@router.get("/")
+async def get_monitoring_overview(
+    current_user: User = Depends(get_current_user)
+) -> Dict[str, Any]:
+    """Get monitoring system overview - main monitoring endpoint."""
+    return await get_monitoring_dashboard(current_user)
+
+
 @router.get("/dashboard")
 async def get_monitoring_dashboard(
     current_user: User = Depends(get_current_user)

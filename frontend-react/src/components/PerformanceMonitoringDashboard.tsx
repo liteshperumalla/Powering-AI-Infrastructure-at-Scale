@@ -125,13 +125,13 @@ const PerformanceMonitoringDashboard: React.FC = () => {
         lastMessage,
         sendMessage
     } = useWebSocket({
-        url: 'ws://localhost:8000/api/v1/performance/ws'
+        url: 'ws://localhost:8000/api/api/v1/performance/ws'
     });
 
     // Fetch dashboard data
     const fetchDashboardData = useCallback(async () => {
         try {
-            const response = await fetch('/api/v1/performance/dashboard-data');
+            const response = await fetch('/api/api/v1/performance/dashboard-data');
             if (!response.ok) {
                 throw new Error('Failed to fetch dashboard data');
             }

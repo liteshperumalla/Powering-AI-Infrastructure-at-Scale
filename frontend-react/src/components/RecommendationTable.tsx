@@ -319,7 +319,7 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
                                                             </Typography>
                                                             <List dense>
                                                                 {rec.pros.map((pro, index) => (
-                                                                    <ListItem key={index} sx={{ py: 0.5, px: 0 }}>
+                                                                    <ListItem key={`pro-${rec.id}-${index}`} sx={{ py: 0.5, px: 0 }}>
                                                                         <ListItemText
                                                                             primary={
                                                                                 <Typography variant="body2">
@@ -338,7 +338,7 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
                                                             </Typography>
                                                             <List dense>
                                                                 {rec.cons.map((con, index) => (
-                                                                    <ListItem key={index} sx={{ py: 0.5, px: 0 }}>
+                                                                    <ListItem key={`con-${rec.id}-${index}`} sx={{ py: 0.5, px: 0 }}>
                                                                         <ListItemText
                                                                             primary={
                                                                                 <Typography variant="body2">

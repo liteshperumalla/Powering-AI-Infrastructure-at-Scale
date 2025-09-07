@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import ResponsiveLayout from '@/components/ResponsiveLayout';
 import {
     Container,
     Box,
@@ -53,7 +54,6 @@ import {
     Business,
 } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
-import Navigation from '@/components/Navigation';
 import CostComparisonChart from '@/components/charts/CostComparisonChart';
 import RecommendationScoreChart from '@/components/charts/RecommendationScoreChart';
 import AssessmentResultsChart from '@/components/charts/AssessmentResultsChart';
@@ -227,27 +227,38 @@ export default function DashboardPage() {
                 setCostData(selectedAssessment.cost_data);
             }
 
-            // Update recommendation scores
-            if (selectedAssessment.recommendations) {
-                const scores = selectedAssessment.recommendations.map((rec: any, index: number) => ({
-                    category: rec.category || `Category ${index + 1}`,
-                    score: rec.confidence_score || Math.floor(Math.random() * 100),
-                    provider: rec.provider || 'Unknown'
-                }));
+            // Update recommendation scores - only use real data
+            if (selectedAssessment.recommendations && selectedAssessment.recommendations.length > 0) {
+                const scores = selectedAssessment.recommendations
+                    .filter((rec: any) => rec.confidence_score != null) // Only include real scores
+                    .map((rec: any, index: number) => ({
+                        category: rec.category || `Category ${index + 1}`,
+                        score: rec.confidence_score,
+                        provider: rec.provider || 'Unknown'
+                    }));
                 setRecommendationScores(scores);
+            } else {
+                setRecommendationScores([]); // No mock data
             }
 
-            // Update assessment results
-            const assessmentResult = {
-                assessment_id: selectedAssessment.id,
-                title: selectedAssessment.title,
-                overall_score: selectedAssessment.score || Math.floor(Math.random() * 100),
-                performance_score: selectedAssessment.performance_score || Math.floor(Math.random() * 100),
-                cost_score: selectedAssessment.cost_score || Math.floor(Math.random() * 100),
-                security_score: selectedAssessment.security_score || Math.floor(Math.random() * 100),
-                created_at: selectedAssessment.created_at
-            };
-            setAssessmentResults([assessmentResult]);
+            // Only show assessment results if they have real scores
+            if (selectedAssessment.score != null || 
+                selectedAssessment.performance_score != null || 
+                selectedAssessment.cost_score != null || 
+                selectedAssessment.security_score != null) {
+                const assessmentResult = {
+                    assessment_id: selectedAssessment.id,
+                    title: selectedAssessment.title,
+                    overall_score: selectedAssessment.score || 0,
+                    performance_score: selectedAssessment.performance_score || 0,
+                    cost_score: selectedAssessment.cost_score || 0,
+                    security_score: selectedAssessment.security_score || 0,
+                    created_at: selectedAssessment.created_at
+                };
+                setAssessmentResults([assessmentResult]);
+            } else {
+                setAssessmentResults([]); // No mock data
+            }
 
             // Send notification about dashboard update
             dispatch(addNotification({
@@ -1058,26 +1069,30 @@ export default function DashboardPage() {
                         progress: latestAssessment.progress?.progress_percentage || 0
                     });
                     
-                    // Always use fallback calculation for now since the visualization API endpoint needs more work
-                    const results = await calculateAssessmentResultsFallback(latestAssessment);
-                    setAssessmentResults(results);
-                    console.log('📈 Set fresh assessment results:', results);
-                    
-                    // Optionally try to enhance with backend visualization data
-                    try {
-                        const visualizationResponse = await apiClient.getAssessmentVisualizationData(latestAssessment.id);
-                        
-                        if (visualizationResponse && 
-                            visualizationResponse.data && 
-                            visualizationResponse.data.assessment_results && 
-                            visualizationResponse.data.assessment_results.length > 0) {
-                            // Use the backend visualization data if available and valid
-                            setAssessmentResults(visualizationResponse.data.assessment_results);
+                    // Only show results for completed assessments - get from backend API only
+                    if (latestAssessment.status === 'completed' || latestAssessment.status === 'processing') {
+                        try {
+                            const visualizationResponse = await apiClient.getAssessmentVisualizationData(latestAssessment.id);
+                            
+                            if (visualizationResponse && 
+                                visualizationResponse.data && 
+                                visualizationResponse.data.assessment_results && 
+                                visualizationResponse.data.assessment_results.length > 0) {
+                                // Use only real backend data
+                                setAssessmentResults(visualizationResponse.data.assessment_results);
+                                console.log('📊 Loaded real assessment results from backend');
+                            } else {
+                                setAssessmentResults([]);
+                                console.log('📭 No assessment results available from backend');
+                            }
+                        } catch (vizError) {
+                            console.warn('Assessment visualization API not available:', vizError);
+                            setAssessmentResults([]);
                         }
-                        // Otherwise keep using the fallback calculation results
-                    } catch (vizError) {
-                        console.warn('Visualization API not available, using calculated results:', vizError);
-                        // Keep using fallback results
+                    } else {
+                        // For draft assessments, show empty results
+                        setAssessmentResults([]);
+                        console.log('📝 Assessment in draft status - showing empty results');
                     }
                 } catch (fallbackError) {
                     console.error('Failed to calculate assessment results:', fallbackError);
@@ -1096,164 +1111,6 @@ export default function DashboardPage() {
         setLoadingAssessmentResults(false);
     };
 
-    const calculateAssessmentResultsFallback = async (assessment: any) => {
-        // Extract comprehensive assessment data for intelligent analytics
-        const businessReqs = assessment.business_requirements || assessment.businessRequirements;
-        const technicalReqs = assessment.technical_requirements || assessment.technicalRequirements;
-        const currentInfra = assessment.current_infrastructure || assessment.currentInfrastructure;
-        const scalabilityReqs = assessment.scalability_requirements || assessment.scalabilityRequirements;
-        
-        // Fetch related recommendations for this assessment to enhance analytics
-        let recommendationsForAssessment: any[] = [];
-        try {
-            if (assessment.id || assessment._id) {
-                const assessmentId = assessment.id || assessment._id;
-                const recommendationsResponse = await apiClient.getRecommendations({ assessmentId });
-                recommendationsForAssessment = recommendationsResponse?.recommendations || [];
-            }
-        } catch (error) {
-            console.log('Could not fetch recommendations for analytics:', error);
-        }
-        
-        // Get assessment progress and completion metrics
-        const assessmentProgress = assessment.progress?.progress_percentage || assessment.completion_percentage || 0;
-        const isCompleted = assessment.status === 'completed';
-        const hasRecommendations = assessment.recommendations_generated && recommendationsForAssessment.length > 0;
-        const hasReports = assessment.reports_generated;
-        
-        // AI-Enhanced Analytics: Generate intelligent recommendations based on real data patterns
-        const generateLLMAnalytics = (category: string, score: number, data: any) => {
-            const recommendations = [];
-            
-            if (category === 'Strategic Planning' && score < 80) {
-                if (!data.currentInfra?.cloud_providers || data.currentInfra.cloud_providers.includes('on_premise')) {
-                    recommendations.push("Consider multi-cloud migration strategy for improved scalability and redundancy");
-                }
-                if (!data.businessReqs?.objectives || data.businessReqs.objectives.length < 3) {
-                    recommendations.push("Define clearer business objectives and KPIs for infrastructure transformation");
-                }
-                if (data.businessReqs?.budget_constraint < 100000) {
-                    recommendations.push("Consider phased approach for infrastructure modernization within budget constraints");
-                }
-            }
-            
-            if (category === 'Technical Architecture' && score < 85) {
-                if (!data.technicalReqs?.scalability_needs?.auto_scaling) {
-                    recommendations.push("Implement auto-scaling capabilities to handle traffic variations efficiently");
-                }
-                if (data.currentInfra?.compute_resources?.containers < 50) {
-                    recommendations.push("Adopt containerization strategy for better resource utilization and deployment flexibility");
-                }
-                if (!data.technicalReqs?.scalability_needs?.load_balancing) {
-                    recommendations.push("Implement load balancing for high availability and performance distribution");
-                }
-            }
-            
-            if (category === 'Security & Compliance' && score < 85) {
-                const complianceReqs = data.businessReqs?.compliance_requirements || [];
-                if (complianceReqs.length === 0) {
-                    recommendations.push("Identify and implement industry-specific compliance requirements (ISO 27001, GDPR)");
-                }
-                if (!data.technicalReqs?.security_requirements || data.technicalReqs.security_requirements.length < 4) {
-                    recommendations.push("Strengthen security framework with zero-trust architecture and advanced threat detection");
-                }
-                if (!data.currentInfra?.security_tools || data.currentInfra.security_tools.length < 4) {
-                    recommendations.push("Deploy comprehensive security monitoring and automated threat response tools");
-                }
-            }
-            
-            if (category === 'Cost Optimization' && score < 75) {
-                if (data.currentInfra?.current_monthly_spend > 25000) {
-                    recommendations.push("Implement Reserved Instances and Spot Instances to reduce monthly infrastructure costs by 30-50%");
-                }
-                if (data.recommendationsForAssessment?.length === 0) {
-                    recommendations.push("Generate AI-powered cost optimization recommendations to identify immediate savings opportunities");
-                }
-                const totalRecommendedCost = data.recommendationsForAssessment?.reduce((sum: number, rec: any) => 
-                    sum + (rec.cost_estimates?.monthly_cost || 0), 0) || 0;
-                if (totalRecommendedCost > 0 && data.currentInfra?.current_monthly_spend > totalRecommendedCost) {
-                    const savings = data.currentInfra.current_monthly_spend - totalRecommendedCost;
-                    recommendations.push(`Implement recommended solutions to achieve $${savings.toLocaleString()} monthly savings`);
-                }
-            }
-            
-            if (category === 'Performance & Reliability' && score < 80) {
-                if (!data.technicalReqs?.performance_targets || data.technicalReqs.performance_targets.response_time_ms > 200) {
-                    recommendations.push("Optimize application performance to achieve sub-200ms response times through caching and CDN");
-                }
-                if (!data.currentInfra?.monitoring_tools || data.currentInfra.monitoring_tools.length < 3) {
-                    recommendations.push("Implement comprehensive monitoring and observability stack for proactive performance management");
-                }
-                if (data.technicalReqs?.performance_targets?.availability_percentage < 99.9) {
-                    recommendations.push("Design high-availability architecture with multi-region failover capabilities");
-                }
-                if (!data.currentInfra?.storage_systems?.databases?.includes('redis')) {
-                    recommendations.push("Implement Redis caching layer to improve application response times and reduce database load");
-                }
-            }
-            
-            return recommendations.slice(0, 2); // Limit to top 2 actionable recommendations
-        };
-        
-        // Intelligent scoring with real data analysis
-        const strategicScore = calculateInfrastructureReadiness(businessReqs, technicalReqs, currentInfra, recommendationsForAssessment);
-        const architectureScore = calculateScalability(technicalReqs, businessReqs, currentInfra);
-        const securityScore = calculateSecurityCompliance(businessReqs, technicalReqs, currentInfra);
-        const costScore = calculateCostOptimization(businessReqs, currentInfra, recommendationsForAssessment);
-        const performanceScore = calculatePerformance(technicalReqs, currentInfra, recommendationsForAssessment);
-        
-        const results = [
-            {
-                category: 'Strategic Planning',
-                currentScore: strategicScore,
-                targetScore: 90,
-                improvement: Math.max(0, 90 - strategicScore),
-                color: '#1f77b4',
-                aiRecommendations: generateLLMAnalytics('Strategic Planning', strategicScore, { businessReqs, currentInfra, recommendationsForAssessment })
-            },
-            {
-                category: 'Technical Architecture',
-                currentScore: architectureScore,
-                targetScore: 88,
-                improvement: Math.max(0, 88 - architectureScore),
-                color: '#ff7f0e',
-                aiRecommendations: generateLLMAnalytics('Technical Architecture', architectureScore, { technicalReqs, currentInfra })
-            },
-            {
-                category: 'Security & Compliance',
-                currentScore: securityScore,
-                targetScore: 95,
-                improvement: Math.max(0, 95 - securityScore),
-                color: '#2ca02c',
-                aiRecommendations: generateLLMAnalytics('Security & Compliance', securityScore, { businessReqs, technicalReqs })
-            },
-            {
-                category: 'Cost Optimization',
-                currentScore: costScore,
-                targetScore: 85,
-                improvement: Math.max(0, 85 - costScore),
-                color: '#d62728',
-                aiRecommendations: generateLLMAnalytics('Cost Optimization', costScore, { businessReqs, currentInfra, recommendationsForAssessment })
-            },
-            {
-                category: 'Performance & Reliability',
-                currentScore: performanceScore,
-                targetScore: 92,
-                improvement: Math.max(0, 92 - performanceScore),
-                color: '#9467bd',
-                aiRecommendations: generateLLMAnalytics('Performance & Reliability', performanceScore, { technicalReqs, currentInfra, recommendationsForAssessment })
-            }
-        ];
-        
-        // Calculate improvements and round scores
-        results.forEach(result => {
-            result.currentScore = Math.round(result.currentScore);
-            result.improvement = Math.max(result.targetScore - result.currentScore, 0);
-        });
-
-        return results;
-    };
-
     const loadRecommendationsData = async () => {
         setLoadingRecommendations(true);
         try {
@@ -1269,13 +1126,22 @@ export default function DashboardPage() {
                     const recommendations = await apiClient.getRecommendations(completedAssessment.id);
                     
                     if (recommendations && recommendations.length > 0) {
+                        // Remove any duplicate recommendations based on ID or title to prevent React key errors
+                        const uniqueRecommendations = recommendations.filter((rec: any, index: number, arr: any[]) => {
+                            const currentId = rec.id || rec._id;
+                            const currentTitle = rec.title;
+                            return arr.findIndex((r: any) => 
+                                (r.id || r._id) === currentId || r.title === currentTitle
+                            ) === index;
+                        });
+
                         // Convert API recommendations to table format - use new data structure
-                        const tableData = recommendations.slice(0, 5).map((rec: any) => {
+                        const tableData = uniqueRecommendations.slice(0, 5).map((rec: any, index: number) => {
                             const provider = rec.recommendation_data?.provider || 'multi_cloud';
                             
                             return {
-                                id: rec.id,
-                                serviceName: rec.title,
+                                id: rec.id || rec._id || `recommendation-${index}`,
+                                serviceName: rec.title || `Recommendation ${index + 1}`,
                                 provider: provider.toUpperCase() as 'AWS' | 'Azure' | 'GCP' | 'Alibaba' | 'IBM' | 'MULTI_CLOUD',
                                 serviceType: rec.category || 'Service',
                                 costEstimate: rec.cost_estimates?.monthly_cost || parseFloat(rec.total_estimated_monthly_cost) || 0,
@@ -1647,9 +1513,13 @@ export default function DashboardPage() {
     };
 
     return (
-        <ProtectedRoute>
-            <Navigation title="Dashboard">
-                <Container maxWidth="lg">
+        <ResponsiveLayout 
+            title="Dashboard"
+            loading={assessmentLoading || reportLoading}
+            showProgress={assessmentLoading}
+            progressValue={assessmentLoading ? 50 : 0}
+        >
+            <Container maxWidth="lg" sx={{ mt: 3, py: { xs: 2, sm: 3, md: 4 } }}>
                     {/* Welcome Section */}
                     <Box sx={{ mb: 4 }}>
                         <Typography variant="h4" gutterBottom>
@@ -1659,25 +1529,13 @@ export default function DashboardPage() {
                             Here&apos;s an overview of your AI infrastructure assessment progress.
                         </Typography>
 
-                        {/* System Status */}
+                        {/* Connection Status - User Level */}
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mt: 2 }}>
                             <Chip
                                 label={wsConnected ? 'Connected' : 'Disconnected'}
                                 color={wsConnected ? 'success' : 'error'}
                                 size="small"
                             />
-                            {systemHealth && (
-                                <Chip
-                                    label={`System: ${systemHealth.status}`}
-                                    color={systemHealth.status === 'healthy' ? 'success' : 'warning'}
-                                    size="small"
-                                />
-                            )}
-                            {systemMetrics && (
-                                <Typography variant="caption" color="text.secondary">
-                                    {systemMetrics.active_workflows} active workflows
-                                </Typography>
-                            )}
                             <Button
                                 variant="outlined"
                                 size="small"
@@ -1734,7 +1592,7 @@ export default function DashboardPage() {
                     </Box>
 
                     {/* Quick Actions */}
-                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: 'repeat(3, 1fr)' }, gap: 3, mb: 4 }}>
+                    <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 3, mb: 4 }}>
                         <Card>
                             <CardContent>
                                 <Typography variant="h6" gutterBottom>
@@ -1785,6 +1643,25 @@ export default function DashboardPage() {
                                     onClick={() => router.push('/cloud-services')}
                                 >
                                     Explore
+                                </Button>
+                            </CardContent>
+                        </Card>
+
+                        <Card>
+                            <CardContent>
+                                <Typography variant="h6" gutterBottom>
+                                    Compliance
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                                    Review security and compliance
+                                </Typography>
+                                <Button
+                                    variant="outlined"
+                                    fullWidth
+                                    onClick={() => router.push('/compliance')}
+                                    color="secondary"
+                                >
+                                    Review
                                 </Button>
                             </CardContent>
                         </Card>
@@ -2570,11 +2447,6 @@ export default function DashboardPage() {
                             onClick={() => handleSpeedDialAction('compare')}
                         />
                         <SpeedDialAction
-                            icon={<Analytics />}
-                            tooltipTitle="Advanced Analytics"
-                            onClick={() => handleSpeedDialAction('analytics')}
-                        />
-                        <SpeedDialAction
                             icon={<CloudDownload />}
                             tooltipTitle="Download Data"
                             onClick={() => handleSpeedDialAction('download')}
@@ -2592,8 +2464,7 @@ export default function DashboardPage() {
                         open={modals.scenarioComparison}
                         onClose={() => dispatch(closeModal('scenarioComparison'))}
                     />
-                </Container>
-            </Navigation>
-        </ProtectedRoute>
+            </Container>
+        </ResponsiveLayout>
     );
 }

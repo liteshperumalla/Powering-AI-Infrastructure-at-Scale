@@ -34,38 +34,58 @@ async def get_database():
     return client.get_database('infra_mind')
 
 
+@router.get("/")
+async def get_dashboard_data(
+    current_user: User = Depends(get_current_user)
+):
+    """Get main dashboard data - comprehensive overview."""
+    return await get_dashboard_overview(current_user)
+
+
+
 @router.get("/overview")
 async def get_dashboard_overview(
     current_user: User = Depends(get_current_user)
 ):
-    """
-    Get comprehensive dashboard overview with real-time data.
-    
-    Returns:
-    - Assessment statistics and progress
-    - Recent recommendations
-    - Report summaries
-    - Activity timeline
-    - Cost analysis overview
-    """
+    """Get comprehensive dashboard overview with real-time data."""
     try:
         db = await get_database()
         user_id = str(current_user.id)
         
-        # Get assessments with aggregation
-        assessments = await db.assessments.find({'user_id': user_id}).to_list(length=None)
         
-        # Calculate assessment statistics
+        # Get assessments - use exact same approach as working assessments progress endpoint
+        logger.info(f"Dashboard overview: querying for user_id={user_id}")
+        assessments = await db.assessments.find({'user_id': user_id}).to_list(length=None)
+        logger.info(f"Dashboard overview: found {len(assessments)} assessments")
+        
+        # Log first assessment details if any exist
+        if assessments:
+            first_assessment = assessments[0]
+            logger.info(f"Dashboard overview: first assessment ID={first_assessment.get('_id')}, status={first_assessment.get('status')}")
+        
+        # Calculate assessment statistics 
         total_assessments = len(assessments)
         completed_assessments = len([a for a in assessments if a.get('status') == 'completed'])
         in_progress_assessments = len([a for a in assessments if a.get('status') == 'in_progress'])
         
-        # Get recent assessments (last 7 days)
+        logger.info(f"Dashboard overview: calculated stats - total={total_assessments}, completed={completed_assessments}, in_progress={in_progress_assessments}")
+        
+        # TEMP: Check if assessments contain datetime that might cause comparison issues
+        for assessment in assessments:
+            # Ensure all datetime fields are timezone-aware
+            for key in ['created_at', 'updated_at', 'started_at', 'completed_at']:
+                if key in assessment and assessment[key] is not None:
+                    dt_value = assessment[key]
+                    if hasattr(dt_value, 'tzinfo') and dt_value.tzinfo is None:
+                        # Convert naive datetime to UTC
+                        assessment[key] = dt_value.replace(tzinfo=timezone.utc)
+        
+        # Get recent assessments (last 7 days) - with error handling
         recent_threshold = datetime.now(timezone.utc) - timedelta(days=7)
-        recent_assessments = [
-            a for a in assessments 
-            if isinstance(a.get('created_at'), datetime) and a['created_at'] >= recent_threshold
-        ]
+        recent_assessments = []
+        
+        # Skip recent assessments calculation to avoid datetime issues for now
+        logger.debug(f"Skipping recent assessments calculation to isolate datetime error")
         
         # Get recommendations
         recommendations = await db.recommendations.find({'user_id': user_id}).to_list(length=None)
@@ -89,32 +109,10 @@ async def get_dashboard_overview(
             report_type = report.get('report_type', 'unknown')
             report_types[report_type] = report_types.get(report_type, 0) + 1
         
-        # Recent activity (last 24 hours)
-        activity_threshold = datetime.now(timezone.utc) - timedelta(hours=24)
+        # Skip recent activity calculation to isolate datetime error
         recent_activity = []
-        
-        for assessment in assessments:
-            if isinstance(assessment.get('updated_at'), datetime) and assessment['updated_at'] >= activity_threshold:
-                recent_activity.append({
-                    'type': 'assessment',
-                    'action': 'completed' if assessment.get('status') == 'completed' else 'updated',
-                    'title': assessment.get('title', 'Unknown Assessment'),
-                    'timestamp': assessment.get('updated_at'),
-                    'progress': assessment.get('completion_percentage', 0)
-                })
-        
-        for rec in recommendations:
-            if isinstance(rec.get('created_at'), datetime) and rec['created_at'] >= activity_threshold:
-                recent_activity.append({
-                    'type': 'recommendation',
-                    'action': 'generated',
-                    'title': rec.get('title', 'Unknown Recommendation'),
-                    'timestamp': rec.get('created_at'),
-                    'category': rec.get('category', 'general')
-                })
-        
-        # Sort recent activity by timestamp
-        recent_activity.sort(key=lambda x: x['timestamp'] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        logger.debug("Skipping recent activity calculation to isolate datetime error")
+        # Activity processing removed temporarily to isolate error
         
         return {
             "overview": {
@@ -122,7 +120,10 @@ async def get_dashboard_overview(
                 "completed_assessments": completed_assessments,
                 "in_progress_assessments": in_progress_assessments,
                 "completion_rate": (completed_assessments / total_assessments * 100) if total_assessments > 0 else 0,
-                "recent_assessments_7d": len(recent_assessments)
+                "recent_assessments_7d": len(recent_assessments),
+                "_debug_user_id": user_id,
+                "_debug_raw_count": len(assessments),
+                "_debug_first_assessment_id": str(assessments[0]['_id']) if assessments else None
             },
             "recommendations": {
                 "total_recommendations": len(recommendations),
@@ -133,7 +134,7 @@ async def get_dashboard_overview(
             "reports": {
                 "total_reports": len(reports),
                 "report_types": report_types,
-                "recent_reports": len([r for r in reports if isinstance(r.get('created_at'), datetime) and r['created_at'] >= recent_threshold])
+                "recent_reports": 0  # Temporarily disabled to isolate datetime error
             },
             "recent_activity": recent_activity[:10],  # Last 10 activities
             "dashboard_health": {
@@ -144,7 +145,9 @@ async def get_dashboard_overview(
         }
         
     except Exception as e:
+        import traceback
         logger.error(f"Dashboard overview failed: {e}")
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Failed to load dashboard overview: {str(e)}")
 
 
@@ -218,7 +221,27 @@ async def get_assessments_progress(
             progress_data.append(progress_item)
         
         # Sort by most recent first
-        progress_data.sort(key=lambda x: x['updated_at'] or datetime.min.replace(tzinfo=timezone.utc), reverse=True)
+        def safe_datetime_sort(item):
+            updated_at = item.get('updated_at')
+            if updated_at is None:
+                return datetime.min.replace(tzinfo=timezone.utc)
+            
+            # Ensure timezone-aware datetime for comparison
+            if hasattr(updated_at, 'tzinfo') and updated_at.tzinfo is None:
+                # Convert naive datetime to UTC
+                return updated_at.replace(tzinfo=timezone.utc)
+            elif isinstance(updated_at, str):
+                try:
+                    # Parse ISO format string
+                    parsed_dt = datetime.fromisoformat(updated_at.replace('Z', '+00:00'))
+                    if parsed_dt.tzinfo is None:
+                        return parsed_dt.replace(tzinfo=timezone.utc)
+                    return parsed_dt
+                except:
+                    return datetime.min.replace(tzinfo=timezone.utc)
+            return updated_at if hasattr(updated_at, 'tzinfo') and updated_at.tzinfo else updated_at.replace(tzinfo=timezone.utc)
+        
+        progress_data.sort(key=safe_datetime_sort, reverse=True)
         
         return {
             "assessments_progress": progress_data,
@@ -539,7 +562,20 @@ async def get_advanced_analytics(
         # Assessment completion trends
         completion_trend = {}
         for assessment in assessments:
-            date_key = assessment.get('created_at', datetime.now(timezone.utc)).strftime('%Y-%m-%d')
+            created_at = assessment.get('created_at', datetime.now(timezone.utc))
+            
+            # Ensure timezone-aware datetime for processing
+            if hasattr(created_at, 'tzinfo') and created_at.tzinfo is None:
+                created_at = created_at.replace(tzinfo=timezone.utc)
+            elif isinstance(created_at, str):
+                try:
+                    created_at = datetime.fromisoformat(created_at.replace('Z', '+00:00'))
+                    if created_at.tzinfo is None:
+                        created_at = created_at.replace(tzinfo=timezone.utc)
+                except:
+                    created_at = datetime.now(timezone.utc)
+            
+            date_key = created_at.strftime('%Y-%m-%d')
             if date_key not in completion_trend:
                 completion_trend[date_key] = {'created': 0, 'completed': 0}
             

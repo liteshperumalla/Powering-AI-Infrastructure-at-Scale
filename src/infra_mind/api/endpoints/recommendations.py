@@ -93,6 +93,89 @@ class GenerateRecommendationsRequest(BaseModel):
     custom_config: Optional[Dict[str, Any]] = None
 
 
+@router.get("/", response_model=RecommendationListResponse)
+async def list_recommendations(
+    assessment_id: Optional[str] = Query(None, description="Filter by assessment ID"),
+    agent_filter: Optional[str] = Query(None, description="Filter by agent name"),
+    current_user: User = Depends(require_permission(Permission.READ_RECOMMENDATION)),
+    confidence_min: Optional[float] = Query(None, ge=0.0, le=1.0, description="Minimum confidence score"),
+    category_filter: Optional[str] = Query(None, description="Filter by category"),
+    limit: int = Query(10, ge=1, le=100, description="Number of recommendations to return"),
+    skip: int = Query(0, ge=0, description="Number of recommendations to skip")
+):
+    """
+    List recommendations with optional filtering.
+    
+    Returns recommendations based on query parameters. If no assessment_id is provided,
+    returns recommendations for all assessments accessible to the current user.
+    """
+    try:
+        logger.info(f"Listing recommendations for user: {current_user.email}")
+        
+        # Build query filter
+        query_filter = {}
+        if assessment_id:
+            query_filter["assessment_id"] = assessment_id
+        
+        if agent_filter:
+            query_filter["agent_name"] = {"$regex": agent_filter, "$options": "i"}
+            
+        if category_filter:
+            query_filter["category"] = category_filter
+            
+        # Get recommendations
+        recommendations = await Recommendation.find(query_filter).skip(skip).limit(limit).to_list()
+        total = await Recommendation.find(query_filter).count()
+        
+        logger.info(f"Found {len(recommendations)} recommendations (total: {total})")
+        
+        # Convert to response format
+        recommendation_responses = []
+        for rec in recommendations:
+            recommendation_responses.append(RecommendationResponse(
+                id=str(rec.id),
+                assessment_id=rec.assessment_id,
+                agent_name=rec.agent_name,
+                title=rec.title,
+                summary=rec.summary,
+                confidence_level=rec.confidence_level,
+                confidence_score=rec.confidence_score,
+                recommendation_data=convert_decimal128_to_decimal(rec.recommendation_data),
+                recommended_services=rec.recommended_services,
+                cost_estimates=rec.cost_estimates,
+                total_estimated_monthly_cost=rec.total_estimated_monthly_cost,
+                implementation_steps=rec.implementation_steps,
+                prerequisites=rec.prerequisites,
+                risks_and_considerations=rec.risks_and_considerations,
+                business_impact=rec.business_impact,
+                alignment_score=rec.alignment_score,
+                tags=rec.tags,
+                priority=rec.priority,
+                category=rec.category,
+                created_at=rec.created_at,
+                updated_at=rec.updated_at
+            ))
+        
+        return RecommendationListResponse(
+            recommendations=recommendation_responses,
+            total=total,
+            assessment_id=assessment_id or "all",
+            summary={
+                "total_recommendations": total,
+                "filtered_count": len(recommendations),
+                "avg_confidence": sum(r.confidence_score for r in recommendation_responses) / len(recommendation_responses) if recommendation_responses else 0,
+                "categories": list(set(r.category for r in recommendation_responses))
+            }
+        )
+        
+    except Exception as e:
+        logger.error(f"Failed to list recommendations: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve recommendations: {str(e)}"
+        )
+
+
 @router.get("/{assessment_id}", response_model=RecommendationListResponse)
 async def get_recommendations(
     assessment_id: str,
@@ -227,33 +310,79 @@ async def generate_recommendations(assessment_id: str, request: GenerateRecommen
             )
         
         # Start real workflow for recommendation generation
+        logger.info(f"🔍 IMPORTING AssessmentWorkflow")
+        print(f"🔍 IMPORTING AssessmentWorkflow")
         from ...workflows.assessment_workflow import AssessmentWorkflow
-        from ...workflows.base import workflow_manager
+        logger.info(f"✅ IMPORTED AssessmentWorkflow successfully")
+        print(f"✅ IMPORTED AssessmentWorkflow successfully")
         
-        # Create and register workflow
+        # Create workflow instance
+        logger.info(f"🏗️ CREATING AssessmentWorkflow instance")
+        print(f"🏗️ CREATING AssessmentWorkflow instance")
         workflow = AssessmentWorkflow()
         workflow_id = f"assessment_workflow_{assessment_id}_{uuid.uuid4().hex[:8]}"
+        logger.info(f"✅ CREATED workflow instance with ID: {workflow_id}")
+        print(f"✅ CREATED workflow instance with ID: {workflow_id}")
         
-        # Set the workflow ID and register it
-        workflow.workflow_id = workflow_id
-        workflow_manager.register_workflow(workflow)
-        
-        # Start asynchronous workflow execution
+        # Start asynchronous workflow execution using the workflow's own execute method
         import asyncio
         async def run_workflow():
             try:
-                result = await workflow_manager.execute_workflow(
+                logger.info(f"🔥 BACKGROUND TASK STARTING for workflow {workflow_id}")
+                print(f"🔥 BACKGROUND TASK STARTING for workflow {workflow_id}")
+                
+                # Initialize database connection for workflow context
+                from ...core.database import init_database
+                logger.info(f"🔄 INITIALIZING DATABASE in background task")
+                print(f"🔄 INITIALIZING DATABASE in background task")
+                await init_database()
+                logger.info(f"✅ DATABASE INITIALIZED in background task")
+                print(f"✅ DATABASE INITIALIZED in background task")
+                
+                # Use AssessmentWorkflow's execute_workflow method directly
+                logger.info(f"🚀 CALLING WORKFLOW EXECUTE for {workflow_id}")
+                print(f"🚀 CALLING WORKFLOW EXECUTE for {workflow_id}")
+                result = await workflow.execute_workflow(
                     workflow_id=workflow_id,
                     assessment=assessment
                 )
-                logger.info(f"Workflow {workflow_id} completed successfully")
+                logger.info(f"✅ Assessment workflow {workflow_id} completed successfully")
+                print(f"✅ Assessment workflow {workflow_id} completed successfully")
                 return result
             except Exception as e:
-                logger.error(f"Workflow {workflow_id} failed: {e}")
+                logger.error(f"❌ Assessment workflow {workflow_id} failed: {e}")
+                print(f"❌ Assessment workflow {workflow_id} failed: {e}")
+                import traceback
+                logger.error(f"Full traceback: {traceback.format_exc()}")
+                print(f"Full traceback: {traceback.format_exc()}")
                 raise
         
-        # Start workflow in background
-        asyncio.create_task(run_workflow())
+        # For debugging, let's try running the workflow directly to see what fails
+        try:
+            logger.info(f"🧪 TESTING DIRECT WORKFLOW EXECUTION for {workflow_id}")
+            print(f"🧪 TESTING DIRECT WORKFLOW EXECUTION for {workflow_id}")
+            
+            # Initialize database connection for workflow context
+            from ...core.database import init_database
+            await init_database()
+            
+            # Use AssessmentWorkflow's execute_workflow method directly
+            result = await workflow.execute_workflow(
+                workflow_id=workflow_id,
+                assessment=assessment
+            )
+            logger.info(f"🎉 DIRECT WORKFLOW EXECUTION SUCCEEDED for {workflow_id}")
+            print(f"🎉 DIRECT WORKFLOW EXECUTION SUCCEEDED for {workflow_id}")
+        except Exception as e:
+            logger.error(f"💥 DIRECT WORKFLOW EXECUTION FAILED for {workflow_id}: {e}")
+            print(f"💥 DIRECT WORKFLOW EXECUTION FAILED for {workflow_id}: {e}")
+            import traceback
+            logger.error(f"Full traceback: {traceback.format_exc()}")
+            print(f"Full traceback: {traceback.format_exc()}")
+        
+        # For now, also keep the background task
+        # task = asyncio.ensure_future(run_workflow())
+        # task.add_done_callback(lambda t: logger.info(f"📋 Background task completed for {workflow_id}") if not t.exception() else logger.error(f"💥 Background task failed for {workflow_id}: {t.exception()}"))
         
         logger.info(f"Started real recommendation generation workflow for assessment: {assessment_id}")
         

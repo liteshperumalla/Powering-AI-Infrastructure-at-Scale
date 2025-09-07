@@ -1122,10 +1122,22 @@ class AzurePricingClient:
                 continue
             
             # Skip obviously incorrect pricing (likely errors in API data)
-            # Most VM instances should be under $100/hour for standard usage
-            if retail_price > 100:
-                logger.warning(f"Skipping {sku_name} with unusually high price: ${retail_price}/hour")
-                continue
+            # Apply different price limits based on service type
+            if "Virtual Machines" in product_name:
+                # Most VM instances should be under $100/hour for standard usage
+                if retail_price > 100:
+                    logger.warning(f"Skipping VM {sku_name} with unusually high price: ${retail_price}/hour")
+                    continue
+            elif "Storage" in product_name or "Disk" in product_name:
+                # Storage can be much more expensive for enterprise volumes, but cap at $50,000/hour
+                if retail_price > 50000:
+                    logger.warning(f"Skipping Storage {sku_name} with unusually high price: ${retail_price}/hour")
+                    continue
+            else:
+                # Other services (databases, AI, etc.) - moderate limit
+                if retail_price > 1000:
+                    logger.warning(f"Skipping {sku_name} with unusually high price: ${retail_price}/hour")
+                    continue
             
             # Create a clean key for the service
             if "Virtual Machines" in product_name:
@@ -1500,6 +1512,10 @@ class AzureSQLClient:
                     "MISSING_SUBSCRIPTION_ID"
                 )
             
+            logger.info(f"Creating SQL Management client with subscription: {subscription_id}")
+            logger.info(f"Using tenant: {self.credential_manager.tenant_id}")
+            logger.info(f"Using client ID: {self.credential_manager.client_id}")
+            
             self._sql_client = SqlManagementClient(
                 credential=credential,
                 subscription_id=subscription_id
@@ -1522,6 +1538,28 @@ class AzureSQLClient:
             CloudServiceError: If unable to fetch real data
         """
         try:
+            # First check if we have valid Azure credentials and subscription access
+            # by making a simpler API call
+            try:
+                resource_client = self._get_resource_client()
+                await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: list(resource_client.resource_groups.list(top=1))
+                )
+            except Exception as auth_check_error:
+                logger.error(f"Azure authentication/subscription check failed: {auth_check_error}")
+                # If we can't access basic resource groups, skip SQL capabilities
+                # and try to get pricing data only
+                pricing_data = await self._pricing_client.get_service_pricing("SQL Database", region)
+                if pricing_data.get("real_data") and pricing_data.get("processed_pricing"):
+                    return await self._create_sql_services_from_pricing_only(region, pricing_data["processed_pricing"])
+                else:
+                    raise CloudServiceError(
+                        f"Cannot access Azure subscription and no pricing data available for region {region}",
+                        CloudProvider.AZURE,
+                        "NO_ACCESS"
+                    )
+            
             # Get SQL capabilities from Azure SDK
             sql_client = self._get_sql_client()
             
@@ -1561,6 +1599,50 @@ class AzureSQLClient:
                 CloudProvider.AZURE,
                 "SQL_API_ERROR"
             )
+    
+    async def _create_sql_services_from_pricing_only(self, region: str, pricing_data: Dict[str, Dict[str, Any]]) -> CloudServiceResponse:
+        """Create SQL Database services using only pricing data when subscription access is not available."""
+        services = []
+        
+        # Process pricing data to create services
+        for service_name, pricing_info in pricing_data.items():
+            if "sql" in service_name.lower() or "database" in service_name.lower():
+                try:
+                    hourly_price = float(pricing_info.get("price", 0))
+                    
+                    service = CloudService(
+                        id=f"azure-sql-{service_name.lower().replace(' ', '-')}",
+                        name=f"Azure SQL Database {service_name}",
+                        provider=CloudProvider.AZURE,
+                        category=ServiceCategory.DATABASE,
+                        description=f"Azure SQL Database service: {service_name}",
+                        pricing={
+                            "model": "Pay-as-you-go",
+                            "starting_price": hourly_price,
+                            "unit": "per hour"
+                        },
+                        features=["automated_backups", "high_availability", "point_in_time_restore"],
+                        rating=4.2,
+                        compliance=["SOC 2", "ISO 27001"],
+                        region_availability=[region],
+                        use_cases=["Production databases", "Development", "Testing"],
+                        integration=["REST API", "SDK", "CLI"],
+                        managed=True,
+                        api_source="azure_pricing_api"
+                    )
+                    services.append(service)
+                    
+                except (ValueError, KeyError) as e:
+                    logger.warning(f"Skipping invalid pricing data for {service_name}: {e}")
+                    continue
+        
+        return CloudServiceResponse(
+            services=services,
+            provider=CloudProvider.AZURE,
+            region=region,
+            timestamp=datetime.now(timezone.utc),
+            source="azure_pricing_api_only"
+        )
     
     async def _combine_sql_capabilities_with_pricing(self, region: str, location_capabilities, pricing_data: Dict[str, Dict[str, Any]]) -> CloudServiceResponse:
         """Combine real SQL capabilities from Azure SDK with pricing data."""
@@ -5160,4 +5242,25 @@ class AzureBackupClient:
             services=services,
             metadata={"mock_data": True, "service_count": len(services)}
         )
+    
+    async def close(self):
+        """Close Azure client connections to prevent memory leaks."""
+        try:
+            # Azure client uses context managers for httpx.AsyncClient, so no persistent sessions to close
+            # But we can clear any management client references
+            if hasattr(self, 'compute_client') and self.compute_client:
+                self.compute_client = None
+                logger.debug("Cleared Azure compute client reference")
+            
+            if hasattr(self, 'sql_client') and self.sql_client:
+                self.sql_client = None
+                logger.debug("Cleared Azure SQL client reference")
+            
+            # Clear credential references
+            if hasattr(self, 'credential') and self.credential:
+                self.credential = None
+                logger.debug("Cleared Azure credential reference")
+                
+        except Exception as e:
+            logger.error(f"Error closing Azure client: {e}")
 

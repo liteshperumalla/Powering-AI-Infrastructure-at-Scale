@@ -57,6 +57,12 @@ def convert_decimal128_to_decimal(value):
     return value
 
 
+@router.get("/")
+async def list_reports(current_user: User = Depends(get_current_user)):
+    """Get all reports for current user - main reports endpoint."""
+    return await get_all_user_reports(current_user)
+
+
 @router.get("/test")
 async def test_reports_endpoint():
     """Simple test endpoint to verify reports functionality."""
@@ -1116,10 +1122,10 @@ async def trigger_report_generation(
         
         logger.info(f"DEBUG: Step 11 - About to start background task")
         
-        # Start background task for real agent execution
+        # Start optimized background task for real agent execution
         async def generate_real_report():
             try:
-                logger.info("Executing AI agents for real recommendations...")
+                logger.info("Executing AI agents for real recommendations (optimized)...")
                 
                 # Execute agents with assessment context
                 assessment_context = {
@@ -1129,36 +1135,37 @@ async def trigger_report_generation(
                     "technical_requirements": assessment.technical_requirements if hasattr(assessment, 'technical_requirements') else {}
                 }
                 
-                # Generate comprehensive recommendations from all agents
-                logger.info("Setting context for all AI agents...")
+                # Use only core agents for faster generation (optimization)
+                logger.info("Setting context for core AI agents only...")
                 
-                # Set context for all agents
-                all_agents = [
+                # Limit to essential agents to reduce timeout issues
+                core_agents = [
                     ("CTO_Agent", cto_agent),
                     ("Cloud_Engineer_Agent", cloud_agent),
-                    ("Compliance_Agent", compliance_agent),
-                    ("Simulation_Agent", simulation_agent),
-                    ("Web_Research_Agent", web_research_agent),
-                    ("Infrastructure_Agent", infrastructure_agent),
-                    ("MLOps_Agent", mlops_agent),
-                    ("Research_Agent", research_agent),
-                    ("AI_Consultant_Agent", ai_consultant_agent)
+                    ("Report_Generator_Agent", report_agent)
                 ]
                 
-                for agent_name, agent in all_agents:
+                for agent_name, agent in core_agents:
                     agent.context = assessment_context
                     logger.info(f"Context set for {agent_name}")
                 
                 logger.info("Executing all AI agents for comprehensive analysis...")
                 
-                # Execute all agents and collect results
+                # Execute core agents and collect results (optimized for performance)
                 agent_results = {}
-                for agent_name, agent in all_agents:
+                for agent_name, agent in core_agents:
                     try:
                         logger.info(f"Executing {agent_name}...")
-                        result = await agent._execute_main_logic()
+                        # Add timeout control for each agent (10 seconds max)
+                        result = await asyncio.wait_for(
+                            agent._execute_main_logic(), 
+                            timeout=10.0
+                        )
                         agent_results[agent_name] = result
                         logger.info(f"{agent_name} completed successfully")
+                    except asyncio.TimeoutError:
+                        logger.warning(f"{agent_name} timed out after 10 seconds")
+                        agent_results[agent_name] = {"error": "timeout", "recommendations": []}
                     except Exception as e:
                         logger.error(f"Error executing {agent_name}: {e}")
                         agent_results[agent_name] = {"error": str(e), "recommendations": []}

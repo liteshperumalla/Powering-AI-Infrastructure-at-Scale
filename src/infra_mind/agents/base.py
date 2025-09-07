@@ -22,6 +22,7 @@ from ..core.error_handling import error_handler, ErrorContext
 from ..core.advanced_logging import get_agent_logger, log_context
 from .memory import AgentMemory
 from .tools import AgentToolkit, ToolResult
+from ..llm.manager import LLMManager
 
 logger = logging.getLogger(__name__)
 
@@ -107,12 +108,19 @@ class BaseAgent(ABC):
         self.start_time: Optional[datetime] = None
         self.end_time: Optional[datetime] = None
         
+        # Initialize LLM client
+        self.llm_client = LLMManager({
+            "model": config.model_name,
+            "temperature": config.temperature,
+            "max_tokens": config.max_tokens
+        })
+        
         # Agent state
         self.current_assessment: Optional[Assessment] = None
         self.context: Dict[str, Any] = {}
         self.iteration_count = 0
         
-        logger.info(f"Initialized agent {self.config.name} ({self.config.role.value})")
+        logger.info(f"Initialized agent {self.config.name} ({self.config.role.value}) with LLM client")
     
     @property
     def name(self) -> str:
@@ -240,7 +248,7 @@ class BaseAgent(ABC):
                         status=self.status,
                         recommendations=result.get("recommendations", []),
                         data=result.get("data", {}),
-                        metrics=self.metrics.dict() if self.metrics else None,
+                        metrics=self.metrics.model_dump() if self.metrics else None,
                         execution_time=self.execution_time
                     )
                     
@@ -425,12 +433,10 @@ class BaseAgent(ABC):
         
         # Get or create LLM manager instance with explicit configuration
         if not hasattr(self, '_llm_manager'):
-            # Ensure we have fresh settings
+            # Ensure we have fresh settings - use Azure OpenAI as configured
             settings = get_settings()
-            config = {
-                "preferred_provider": "openai"  # Force OpenAI as requested
-            }
-            self._llm_manager = LLMManager(config=config)
+            # Pass settings directly to LLMManager
+            self._llm_manager = LLMManager(settings)
         
         # Create LLM request
         request = LLMRequest(

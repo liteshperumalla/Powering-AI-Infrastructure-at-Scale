@@ -159,45 +159,49 @@ export const runScenarioSimulation = createAsyncThunk(
             const response = await new Promise<ScenarioResult>((resolve) => {
                 setTimeout(() => {
                     resolve({
-                        totalCost: Math.floor(Math.random() * 20000) + 8000,
-                        performanceScore: Math.floor(Math.random() * 30) + 70,
-                        complianceScore: Math.floor(Math.random() * 20) + 80,
-                        scalabilityScore: Math.floor(Math.random() * 25) + 75,
+                        totalCost: scenarioData.companySize === 'enterprise' ? 18000 : scenarioData.companySize === 'large' ? 12000 : scenarioData.companySize === 'medium' ? 7500 : 4500,
+                        performanceScore: Math.min(100, 75 + (scenarioData.companySize === 'enterprise' ? 20 : scenarioData.companySize === 'large' ? 15 : 10) + (scenarioData.requirements?.includes('high-performance') ? 8 : 0)),
+                        complianceScore: Math.min(100, 82 + (scenarioData.requirements?.includes('compliance') ? 15 : 0) + (scenarioData.companySize === 'enterprise' ? 10 : 5)),
+                        scalabilityScore: Math.min(100, 70 + (scenarioData.companySize === 'enterprise' ? 25 : scenarioData.companySize === 'large' ? 20 : 15) + (scenarioData.requirements?.length || 0) * 2),
                         services: [
                             {
                                 name: 'Compute Instance',
-                                provider: (['AWS', 'Azure', 'GCP', 'Alibaba', 'IBM'] as const)[Math.floor(Math.random() * 5)],
+                                provider: scenarioData.preferredProviders?.[0] || 'AWS',
                                 type: 'Compute',
-                                monthlyCost: Math.floor(Math.random() * 500) + 100,
-                                performance: Math.floor(Math.random() * 30) + 70,
-                                scalability: Math.floor(Math.random() * 30) + 70,
-                                compliance: Math.floor(Math.random() * 20) + 80,
+                                monthlyCost: scenarioData.companySize === 'enterprise' ? 800 : scenarioData.companySize === 'large' ? 400 : scenarioData.companySize === 'medium' ? 200 : 100,
+                                performance: scenarioData.companySize === 'enterprise' ? 95 : scenarioData.companySize === 'large' ? 90 : 85,
+                                scalability: scenarioData.companySize === 'enterprise' ? 98 : scenarioData.companySize === 'large' ? 92 : 88,
+                                compliance: scenarioData.requirements?.includes('compliance') ? 95 : 85,
                             },
                             {
                                 name: 'Database Service',
-                                provider: (['AWS', 'Azure', 'GCP', 'Alibaba', 'IBM'] as const)[Math.floor(Math.random() * 5)],
+                                provider: scenarioData.preferredProviders?.[1] || scenarioData.preferredProviders?.[0] || 'GCP',
                                 type: 'Database',
-                                monthlyCost: Math.floor(Math.random() * 300) + 150,
-                                performance: Math.floor(Math.random() * 25) + 75,
-                                scalability: Math.floor(Math.random() * 25) + 75,
-                                compliance: Math.floor(Math.random() * 15) + 85,
+                                monthlyCost: scenarioData.companySize === 'enterprise' ? 600 : scenarioData.companySize === 'large' ? 300 : scenarioData.companySize === 'medium' ? 180 : 150,
+                                performance: scenarioData.companySize === 'enterprise' ? 92 : scenarioData.companySize === 'large' ? 88 : 82,
+                                scalability: scenarioData.companySize === 'enterprise' ? 94 : scenarioData.companySize === 'large' ? 89 : 85,
+                                compliance: scenarioData.requirements?.includes('compliance') ? 98 : 88,
                             },
                             {
                                 name: 'Storage Service',
-                                provider: (['AWS', 'Azure', 'GCP', 'Alibaba', 'IBM'] as const)[Math.floor(Math.random() * 5)],
+                                provider: scenarioData.preferredProviders?.[2] || scenarioData.preferredProviders?.[0] || 'Azure',
                                 type: 'Storage',
-                                monthlyCost: Math.floor(Math.random() * 100) + 50,
-                                performance: Math.floor(Math.random() * 20) + 80,
-                                scalability: Math.floor(Math.random() * 20) + 80,
-                                compliance: Math.floor(Math.random() * 10) + 90,
+                                monthlyCost: scenarioData.companySize === 'enterprise' ? 200 : scenarioData.companySize === 'large' ? 120 : scenarioData.companySize === 'medium' ? 80 : 50,
+                                performance: scenarioData.companySize === 'enterprise' ? 96 : scenarioData.companySize === 'large' ? 91 : 86,
+                                scalability: scenarioData.companySize === 'enterprise' ? 97 : scenarioData.companySize === 'large' ? 93 : 89,
+                                compliance: scenarioData.requirements?.includes('compliance') ? 99 : 92,
                             },
                         ],
-                        projections: Array.from({ length: 12 }, (_, i) => ({
-                            month: i + 1,
-                            cost: Math.floor(Math.random() * 2000) + 8000 + (i * 200),
-                            performance: Math.floor(Math.random() * 20) + 75,
-                            utilization: Math.floor(Math.random() * 30) + 60 + (i * 1.5),
-                        })),
+                        projections: Array.from({ length: 12 }, (_, i) => {
+                            const baseCost = scenarioData.companySize === 'enterprise' ? 15000 : scenarioData.companySize === 'large' ? 8000 : scenarioData.companySize === 'medium' ? 4000 : 2000;
+                            const growthRate = scenarioData.companySize === 'enterprise' ? 150 : scenarioData.companySize === 'large' ? 100 : 75;
+                            return {
+                                month: i + 1,
+                                cost: baseCost + (i * growthRate) + (scenarioData.requirements?.includes('high-performance') ? 500 * i : 0),
+                                performance: Math.min(100, 80 + (scenarioData.companySize === 'enterprise' ? 15 : 10) + (i * 0.5)),
+                                utilization: Math.min(100, 65 + (i * 2.8) + (scenarioData.companySize === 'enterprise' ? 10 : 5)),
+                            };
+                        }),
                     });
                 }, 1000);
             });

@@ -666,12 +666,29 @@ class GCPSQLClient:
         """
         try:
             if not self.sql_service:
-                logger.warning("Cloud SQL client not available, using fallback data")
-                return await self._get_fallback_database_instances(region)
+                raise CloudServiceError(
+                    "Cloud SQL client not available - API may not be enabled",
+                    CloudProvider.GCP,
+                    "SQL_CLIENT_UNAVAILABLE"
+                )
             
             # Get tiers (instance types) from real API
-            tiers_response = self.sql_service.tiers().list(project=self.project_id).execute()
-            tiers = tiers_response.get('items', [])
+            try:
+                tiers_response = self.sql_service.tiers().list(project=self.project_id).execute()
+                tiers = tiers_response.get('items', [])
+            except Exception as api_error:
+                if "Cloud SQL Admin API has not been used" in str(api_error) or "accessNotConfigured" in str(api_error):
+                    raise CloudServiceError(
+                        f"Cloud SQL Admin API is not enabled for project {self.project_id}. Please enable it in the Google Cloud Console.",
+                        CloudProvider.GCP,
+                        "API_NOT_ENABLED"
+                    )
+                else:
+                    raise CloudServiceError(
+                        f"Cloud SQL API error: {str(api_error)}",
+                        CloudProvider.GCP,
+                        "SQL_API_ERROR"
+                    )
             
             # Get pricing data
             billing_client = GCPBillingClient(self.project_id, region, self.credentials)
@@ -738,12 +755,17 @@ class GCPSQLClient:
                     "SQL_RATE_LIMIT"
                 )
             else:
-                logger.error(f"GCP Cloud SQL API HTTP error: {e}")
-                return await self._get_fallback_database_instances(region)
+                raise CloudServiceError(
+                    f"GCP Cloud SQL API HTTP error: {str(e)}",
+                    CloudProvider.GCP,
+                    "SQL_HTTP_ERROR"
+                )
         except Exception as e:
-            logger.error(f"GCP Cloud SQL API error: {e}")
-            # Fallback to static data on API errors
-            return await self._get_fallback_database_instances(region)
+            raise CloudServiceError(
+                f"GCP Cloud SQL API error: {str(e)}",
+                CloudProvider.GCP,
+                "SQL_GENERAL_ERROR"
+            )
     
     def _get_sql_tier_price(self, tier_name: str, pricing_lookup: Dict, memory_gb: float) -> float:
         """Get SQL tier price from pricing lookup or calculate estimate."""
@@ -760,54 +782,6 @@ class GCPSQLClient:
         # Rough pricing calculation: $0.015 per GB memory/hour
         return memory_gb * 0.015
     
-    async def _get_fallback_database_instances(self, region: str) -> CloudServiceResponse:
-        """Get fallback database instances when API is unavailable."""
-        # Get pricing data
-        billing_client = GCPBillingClient(self.project_id, region, self.credentials)
-        pricing_data = await billing_client.get_service_pricing("Cloud SQL", region)
-        pricing_lookup = pricing_data.get("pricing_data", {})
-        
-        # Define Cloud SQL instance types
-        instance_types = [
-            {"name": "db-f1-micro", "vcpus": 1, "memory_gb": 0.6, "description": "Shared-core instance with 1 vCPU and 0.6 GB memory"},
-            {"name": "db-g1-small", "vcpus": 1, "memory_gb": 1.7, "description": "Shared-core instance with 1 vCPU and 1.7 GB memory"},
-            {"name": "db-n1-standard-1", "vcpus": 1, "memory_gb": 3.75, "description": "Standard instance with 1 vCPU and 3.75 GB memory"},
-            {"name": "db-n1-standard-2", "vcpus": 2, "memory_gb": 7.5, "description": "Standard instance with 2 vCPUs and 7.5 GB memory"},
-            {"name": "db-n1-standard-4", "vcpus": 4, "memory_gb": 15, "description": "Standard instance with 4 vCPUs and 15 GB memory"}
-        ]
-        
-        services = []
-        for instance_type in instance_types:
-            instance_name = instance_type["name"]
-            hourly_price = self._get_sql_tier_price(instance_name, pricing_lookup, instance_type["memory_gb"])
-            
-            service = CloudService(
-                provider=CloudProvider.GCP,
-                service_name=f"Cloud SQL {instance_name}",
-                service_id=instance_name,
-                category=ServiceCategory.DATABASE,
-                region=region,
-                description=f"Cloud SQL {instance_type['description']}",
-                hourly_price=hourly_price,
-                specifications={
-                    "vcpus": instance_type["vcpus"],
-                    "memory_gb": instance_type["memory_gb"],
-                    "engine": "mysql",
-                    "engine_version": "8.0",
-                    "max_connections": 4000,
-                    "storage_type": "ssd"
-                },
-                features=["automated_backups", "point_in_time_recovery", "high_availability", "read_replicas"]
-            )
-            services.append(service)
-        
-        return CloudServiceResponse(
-            provider=CloudProvider.GCP,
-            service_category=ServiceCategory.DATABASE,
-            region=region,
-            services=services,
-            metadata={"real_api": False, "pricing_source": "fallback_data", "fallback_reason": "API unavailable"}
-        )
 
 
 class GCPAIClient:
@@ -2440,3 +2414,23 @@ class GCPRecommenderClient:
             ])
         
         return recommendations
+    
+    async def close(self):
+        """Close GCP client connections to prevent memory leaks."""
+        try:
+            # Clear Google Cloud client references
+            if hasattr(self, 'compute_client') and self.compute_client:
+                # Google Cloud clients don't have explicit close methods but we can clear references
+                self.compute_client = None
+                logger.debug("Cleared GCP compute client reference")
+            
+            if hasattr(self, 'storage_client') and self.storage_client:
+                self.storage_client = None
+                logger.debug("Cleared GCP storage client reference")
+            
+            if hasattr(self, 'credentials') and self.credentials:
+                self.credentials = None
+                logger.debug("Cleared GCP credentials reference")
+                
+        except Exception as e:
+            logger.error(f"Error closing GCP client: {e}")

@@ -43,7 +43,7 @@ import {
     Speed,
     Shield,
 } from '@mui/icons-material';
-import Navigation from '@/components/Navigation';
+import ResponsiveLayout from '@/components/ResponsiveLayout';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { apiClient } from '@/services/api';
 import { cacheBuster, forceRefresh } from '@/utils/cache-buster';
@@ -161,13 +161,13 @@ export default function AnalyticsPage() {
     if (loading) {
         return (
             <ProtectedRoute>
-                <Navigation title="Advanced Analytics">
+                <ResponsiveLayout title="Advanced Analytics">
                     <Container maxWidth="lg">
                         <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
                             <CircularProgress size={60} />
                         </Box>
                     </Container>
-                </Navigation>
+                </ResponsiveLayout>
             </ProtectedRoute>
         );
     }
@@ -175,7 +175,7 @@ export default function AnalyticsPage() {
     if (error) {
         return (
             <ProtectedRoute>
-                <Navigation title="Advanced Analytics">
+                <ResponsiveLayout title="Advanced Analytics">
                     <Container maxWidth="lg">
                         <Alert severity="error" sx={{ mb: 3 }}>
                             <AlertTitle>Analytics Unavailable</AlertTitle>
@@ -189,15 +189,15 @@ export default function AnalyticsPage() {
                             Retry
                         </Button>
                     </Container>
-                </Navigation>
+                </ResponsiveLayout>
             </ProtectedRoute>
         );
     }
 
     return (
         <ProtectedRoute>
-            <Navigation title="Advanced Analytics">
-                <Container maxWidth="lg">
+            <ResponsiveLayout title="Advanced Analytics">
+                <Container maxWidth="lg" sx={{ mt: 3 }}>
                     <Box sx={{ mb: 4 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                             <Box>
@@ -290,7 +290,7 @@ export default function AnalyticsPage() {
                                                         <AccordionDetails>
                                                             <List dense>
                                                                 {analyticsData.analytics.cost_modeling.cost_optimization_opportunities.map((opportunity: any, index: number) => (
-                                                                    <ListItem key={index}>
+                                                                    <ListItem key={`cost-opp-${opportunity.opportunity?.replace(/\s+/g, '-') || index}`}>
                                                                         <ListItemText
                                                                             primary={opportunity.opportunity}
                                                                             secondary={`${opportunity.potential_savings} (${opportunity.savings_percentage}% savings)`}
@@ -508,7 +508,7 @@ export default function AnalyticsPage() {
                                         {analyticsData.optimization_opportunities?.length > 0 && (
                                             <Grid container spacing={2}>
                                                 {analyticsData.optimization_opportunities.map((opportunity, index) => (
-                                                    <Grid item xs={12} md={6} lg={4} key={index}>
+                                                    <Grid item xs={12} md={6} lg={4} key={`opt-opp-${opportunity.title?.replace(/\s+/g, '-') || index}`}>
                                                         <Paper sx={{ p: 2, height: '100%' }}>
                                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                                                                 <Typography variant="h6" sx={{ fontSize: '1rem' }}>
@@ -626,7 +626,7 @@ export default function AnalyticsPage() {
                         </Alert>
                     )}
                 </Container>
-            </Navigation>
+            </ResponsiveLayout>
         </ProtectedRoute>
     );
 }

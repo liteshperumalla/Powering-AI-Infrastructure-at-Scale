@@ -46,6 +46,25 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    command: >
+      /opt/venv/bin/gunicorn src.infra_mind.main:app
+      --bind 0.0.0.0:8000
+      --workers 4
+      --worker-class uvicorn.workers.UvicornWorker
+      --worker-connections 1000
+      --max-requests 1000
+      --max-requests-jitter 100
+      --timeout 600
+      --graceful-timeout 600
+      --keep-alive 2
+      --preload
+      --access-logfile -
+      --error-logfile -
+      --log-level info
+      --capture-output
+      --enable-stdio-inheritance
+    env_file:
+      - .env
     environment:
       # Database configuration
       INFRA_MIND_MONGODB_URL: mongodb://admin:password@mongodb:27017/infra_mind?authSource=admin
@@ -70,6 +89,12 @@ services:
       INFRA_MIND_AZURE_OPENAI_API_VERSION: ${INFRA_MIND_AZURE_OPENAI_API_VERSION:-}
       INFRA_MIND_LLM_MODEL: gpt-4
       INFRA_MIND_LLM_TEMPERATURE: "0.1"
+      
+      # Standard Azure OpenAI environment variables for agents
+      AZURE_OPENAI_API_KEY: ${INFRA_MIND_AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${INFRA_MIND_AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_API_VERSION: ${INFRA_MIND_AZURE_OPENAI_API_VERSION:-}
+      AZURE_OPENAI_DEPLOYMENT_NAME: ${INFRA_MIND_AZURE_OPENAI_DEPLOYMENT:-}
       
       # OpenAI (Fallback - disabled due to quota)
       INFRA_MIND_OPENAI_API_KEY: ${OPENAI_API_KEY:-}

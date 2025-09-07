@@ -11,7 +11,7 @@ from typing import Dict, Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from pydantic import BaseModel, Field
 
-from .auth import get_current_user
+from .auth import get_current_user, require_enterprise_access
 from ...models.user import User
 from ...integrations.compliance_databases import (
     ComplianceFramework, IndustryType, ComplianceRequirementType,
@@ -72,7 +72,7 @@ class SSOCallbackRequest(BaseModel):
 
 @router.get("/compliance/frameworks")
 async def get_compliance_frameworks(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_enterprise_access)
 ) -> Dict[str, Any]:
     """Get list of supported compliance frameworks."""
     frameworks = [
@@ -92,7 +92,7 @@ async def get_compliance_frameworks(
 
 @router.get("/compliance/industries")
 async def get_industry_types(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_enterprise_access)
 ) -> Dict[str, Any]:
     """Get list of supported industry types."""
     industries = [
@@ -114,7 +114,7 @@ async def get_industry_types(
 async def get_framework_requirements(
     framework: ComplianceFramework,
     industry: Optional[IndustryType] = Query(None),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_enterprise_access)
 ) -> Dict[str, Any]:
     """Get compliance requirements for a specific framework."""
     try:
@@ -138,7 +138,7 @@ async def get_framework_requirements(
 @router.post("/compliance/assess")
 async def assess_compliance(
     request: ComplianceAssessmentRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_enterprise_access)
 ) -> Dict[str, Any]:
     """Assess compliance against a specific framework."""
     try:
@@ -166,7 +166,7 @@ async def assess_compliance(
 @router.get("/compliance/industry-summary/{industry}")
 async def get_compliance_summary(
     industry: IndustryType,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_enterprise_access)
 ) -> Dict[str, Any]:
     """Get compliance summary for an industry."""
     try:
@@ -185,7 +185,7 @@ async def get_compliance_summary(
 
 @router.get("/business-tools/channels")
 async def get_notification_channels(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_enterprise_access)
 ) -> Dict[str, Any]:
     """Get list of supported notification channels."""
     channels = [
@@ -206,7 +206,7 @@ async def get_notification_channels(
 @router.post("/business-tools/notify")
 async def send_notification(
     request: NotificationRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_enterprise_access)
 ) -> Dict[str, Any]:
     """Send notification via specified channel."""
     try:
@@ -244,7 +244,7 @@ async def send_notification(
 
 @router.post("/business-tools/test")
 async def test_business_tools(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_enterprise_access)
 ) -> Dict[str, Any]:
     """Test business tools integrations."""
     try:
@@ -337,7 +337,7 @@ async def handle_sso_callback_endpoint(
 
 @router.post("/sso/test")
 async def test_sso_providers_endpoint(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_enterprise_access)
 ) -> Dict[str, Any]:
     """Test SSO provider configurations."""
     try:
@@ -361,7 +361,7 @@ async def test_sso_providers_endpoint(
 
 @router.get("/status")
 async def get_integration_status(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(require_enterprise_access)
 ) -> Dict[str, Any]:
     """Get status of all third-party integrations."""
     try:

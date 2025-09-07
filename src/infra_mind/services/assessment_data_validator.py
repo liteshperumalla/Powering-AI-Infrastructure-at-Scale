@@ -214,10 +214,11 @@ class AssessmentDataValidator:
         if not assessment.get('technical_requirements'):
             tech_req = {
                 'performance_targets': {
-                    'response_time_ms': random.randint(100, 300),
-                    'throughput_rps': random.randint(1000, 10000),
-                    'availability_percentage': random.choice([99.9, 99.95, 99.99]),
-                    'concurrent_users': random.randint(1000, 50000)
+                    # Base performance requirements on company size and business requirements
+                    'response_time_ms': 200 if business_reqs.get('company_size') in ['startup', 'small'] else 150 if business_reqs.get('company_size') == 'medium' else 100,
+                    'throughput_rps': 500 if business_reqs.get('company_size') in ['startup', 'small'] else 2000 if business_reqs.get('company_size') == 'medium' else 5000,
+                    'availability_percentage': 99.9 if business_reqs.get('company_size') in ['startup', 'small'] else 99.95 if business_reqs.get('company_size') == 'medium' else 99.99,
+                    'concurrent_users': 1000 if business_reqs.get('company_size') in ['startup', 'small'] else 5000 if business_reqs.get('company_size') == 'medium' else 20000
                 },
                 'security_requirements': [
                     'End-to-end encryption for data in transit',
@@ -232,8 +233,9 @@ class AssessmentDataValidator:
                     'Legacy system compatibility'
                 ],
                 'data_requirements': {
-                    'storage_size_tb': random.randint(5, 100),
-                    'backup_retention_days': random.choice([30, 90, 365]),
+                    # Storage size based on company size and expected data volume
+                    'storage_size_tb': 5 if business_reqs.get('company_size') in ['startup', 'small'] else 25 if business_reqs.get('company_size') == 'medium' else 100,
+                    'backup_retention_days': 30 if business_reqs.get('company_size') in ['startup', 'small'] else 90 if business_reqs.get('company_size') == 'medium' else 365,
                     'data_classification': ['public', 'internal', 'confidential'],
                     'compliance_requirements': assessment.get('compliance_requirements', ['gdpr', 'iso_27001'])
                 }
@@ -321,29 +323,124 @@ class AssessmentDataValidator:
             rec_updates = {}
             rec_id = rec['_id']
             
-            # Fix missing cost estimates
+            # Fix missing cost estimates with assessment-based calculations
             if not rec.get('cost_estimates') or not rec.get('cost_estimates', {}).get('monthly_cost'):
-                monthly_cost = random.randint(1000, 10000)
-                setup_cost = random.randint(5000, 25000)
-                
-                cost_estimates = {
-                    'monthly_cost': monthly_cost,
-                    'setup_cost': setup_cost,
-                    'annual_cost': monthly_cost * 12,
-                    'cost_breakdown': {
-                        'compute': monthly_cost * 0.6,
-                        'storage': monthly_cost * 0.2,
-                        'networking': monthly_cost * 0.15,
-                        'security': monthly_cost * 0.05
-                    },
-                    'roi_projection': {
-                        'cost_savings_annual': setup_cost * 0.3,
-                        'efficiency_improvement': f"{random.randint(20, 50)}%",
-                        'payback_period_months': random.randint(12, 24)
+                # Get the associated assessment for cost calculation
+                try:
+                    assessment_id = rec.get('assessment_id')
+                    if assessment_id:
+                        assessment = await Assessment.get(PydanticObjectId(assessment_id))
+                        if assessment:
+                            # Calculate costs based on assessment requirements
+                            business_reqs = assessment.business_requirements or {}
+                            tech_reqs = assessment.technical_requirements or {}
+                            
+                            company_size = business_reqs.get('company_size', 'small')
+                            perf_reqs = tech_reqs.get('performance_requirements', {})
+                            rps = perf_reqs.get('requests_per_second', 100)
+                            users = perf_reqs.get('concurrent_users', 1000)
+                            
+                            # Base costs by company size
+                            base_costs = {
+                                'startup': 800,
+                                'small': 1500,
+                                'medium': 4000,
+                                'large': 9000,
+                                'enterprise': 18000
+                            }
+                            base_monthly_cost = base_costs.get(company_size, 1500)
+                            
+                            # Adjust based on performance requirements
+                            performance_multiplier = 1.0 + (rps / 1000) * 0.5 + (users / 1000) * 0.3
+                            monthly_cost = int(base_monthly_cost * performance_multiplier)
+                            setup_cost = monthly_cost * 4  # 4 months of setup costs
+                            
+                            # Calculate efficiency based on assessment pain points
+                            pain_points = business_reqs.get('current_pain_points', [])
+                            efficiency_improvement = 25  # Base efficiency
+                            if 'High infrastructure costs' in pain_points:
+                                efficiency_improvement += 15
+                            if 'Manual scaling' in pain_points:
+                                efficiency_improvement += 10
+                            
+                            payback_months = max(6, int(setup_cost / (monthly_cost * 0.3)))  # Based on 30% cost savings
+                            
+                            cost_estimates = {
+                                'monthly_cost': monthly_cost,
+                                'setup_cost': setup_cost,
+                                'annual_cost': monthly_cost * 12,
+                                'cost_breakdown': {
+                                    'compute': monthly_cost * 0.6,
+                                    'storage': monthly_cost * 0.2,
+                                    'networking': monthly_cost * 0.15,
+                                    'security': monthly_cost * 0.05
+                                },
+                                'roi_projection': {
+                                    'cost_savings_annual': int(monthly_cost * 12 * 0.25),  # 25% annual savings
+                                    'efficiency_improvement': f"{efficiency_improvement}%",
+                                    'payback_period_months': payback_months
+                                },
+                                'calculation_source': f"assessment-based_{company_size}_{rps}rps_{users}users"
+                            }
+                        else:
+                            # Fallback to minimal estimated costs if assessment not found
+                            monthly_cost = 1500
+                            setup_cost = 6000
+                            cost_estimates = {
+                                'monthly_cost': monthly_cost,
+                                'setup_cost': setup_cost,
+                                'annual_cost': monthly_cost * 12,
+                                'cost_breakdown': {
+                                    'compute': monthly_cost * 0.6,
+                                    'storage': monthly_cost * 0.2,
+                                    'networking': monthly_cost * 0.15,
+                                    'security': monthly_cost * 0.05
+                                },
+                                'roi_projection': {
+                                    'cost_savings_annual': monthly_cost * 12 * 0.2,
+                                    'efficiency_improvement': "25%",
+                                    'payback_period_months': 18
+                                },
+                                'calculation_source': "fallback_estimation"
+                            }
+                    else:
+                        # No assessment ID available, use basic estimation
+                        monthly_cost = 1500
+                        setup_cost = 6000
+                        cost_estimates = {
+                            'monthly_cost': monthly_cost,
+                            'setup_cost': setup_cost,
+                            'annual_cost': monthly_cost * 12,
+                            'cost_breakdown': {
+                                'compute': monthly_cost * 0.6,
+                                'storage': monthly_cost * 0.2,
+                                'networking': monthly_cost * 0.15,
+                                'security': monthly_cost * 0.05
+                            },
+                            'roi_projection': {
+                                'cost_savings_annual': monthly_cost * 12 * 0.2,
+                                'efficiency_improvement': "25%",
+                                'payback_period_months': 18
+                            },
+                            'calculation_source': "no_assessment_id"
+                        }
+                        
+                    rec_updates['cost_estimates'] = cost_estimates
+                    fixes.append(f"Added assessment-based cost estimates for recommendation {rec.get('title', 'Unknown')}")
+                    
+                except Exception as e:
+                    logger.warning(f"Failed to calculate assessment-based costs for recommendation {rec.get('_id')}: {e}")
+                    # Fallback to basic estimation
+                    monthly_cost = 1500
+                    setup_cost = 6000
+                    cost_estimates = {
+                        'monthly_cost': monthly_cost,
+                        'setup_cost': setup_cost,
+                        'annual_cost': monthly_cost * 12,
+                        'calculation_source': f"error_fallback_{str(e)[:50]}"
                     }
-                }
-                rec_updates['cost_estimates'] = cost_estimates
-                fixes.append(f"Added cost estimates for recommendation {rec.get('title', 'Unknown')}")
+                    rec_updates['cost_estimates'] = cost_estimates
+                    fixes.append(f"Added fallback cost estimates for recommendation {rec.get('title', 'Unknown')}")
             
             # Fix missing technical data
             if not rec.get('recommendation_data') or not rec.get('recommendation_data', {}).get('provider'):

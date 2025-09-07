@@ -297,10 +297,6 @@ class InfrastructureAgent(BaseAgent):
         logger.info("Infrastructure Agent starting compute resource analysis")
         
         try:
-            # Initialize clients for real data collection
-            if not self.llm_client:
-                self.llm_client = LLMManager()
-            
             # Step 1: Analyze current infrastructure requirements with LLM enhancement
             infrastructure_analysis = await self._analyze_infrastructure_requirements_with_llm()
             
@@ -410,7 +406,7 @@ class InfrastructureAgent(BaseAgent):
             "data_insights": analysis_result.data if analysis_result.is_success else {}
         }
     
-    async def _perform_capacity_planning(self, infrastructure_analysis: Dict[str, Any]) -> Dict[str, Any]:
+    async def _perform_capacity_planning(self, infrastructure_analysis: Dict[str, Any], cloud_resource_data: Dict[str, Any] = None) -> Dict[str, Any]:
         """Perform comprehensive capacity planning analysis."""
         logger.debug("Performing capacity planning analysis")
         
@@ -452,7 +448,8 @@ class InfrastructureAgent(BaseAgent):
         }
     
     async def _design_scaling_strategies(self, infrastructure_analysis: Dict[str, Any],
-                                       capacity_analysis: Dict[str, Any]) -> Dict[str, Any]:
+                                       capacity_analysis: Dict[str, Any], 
+                                       cloud_resource_data: Dict[str, Any] = None) -> Dict[str, Any]:
         """Design comprehensive scaling strategies."""
         logger.debug("Designing scaling strategies")
         
@@ -496,13 +493,15 @@ class InfrastructureAgent(BaseAgent):
         }
     
     async def _optimize_resource_allocation(self, infrastructure_analysis: Dict[str, Any],
-                                          capacity_analysis: Dict[str, Any]) -> Dict[str, Any]:
+                                          capacity_analysis: Dict[str, Any],
+                                          cloud_resource_data: Dict[str, Any]) -> Dict[str, Any]:
         """Optimize resource allocation for cost and performance."""
         logger.debug("Optimizing resource allocation")
         
         compute_requirements = infrastructure_analysis.get("compute_requirements", {})
         current_capacity = capacity_analysis.get("current_capacity", {})
         utilization_targets = capacity_analysis.get("utilization_targets", {})
+        cloud_pricing = cloud_resource_data.get("pricing", {})
         
         # Optimize compute resource allocation
         compute_optimization = self._optimize_compute_allocation(
@@ -1262,7 +1261,7 @@ class InfrastructureAgent(BaseAgent):
             Return in JSON format with: compute_architecture, scaling_strategy, performance_optimization, cost_optimization, technology_stack, regional_strategy, reliability_strategy, security_requirements.
             """
             
-            llm_response = await self.llm_client.generate_text(
+            llm_response = await self._call_llm(
                 prompt=analysis_prompt,
                 system_prompt="You are an infrastructure architect with expertise in cloud-native design, performance optimization, and cost-effective scaling strategies.",
                 temperature=0.1,
@@ -1294,12 +1293,33 @@ class InfrastructureAgent(BaseAgent):
             return await self._analyze_infrastructure_requirements()
     
     def _parse_llm_response(self, response: str) -> Dict[str, Any]:
-        """Parse LLM response, handling both JSON and text formats."""
+        """Parse LLM response, handling both JSON and text formats with robust error handling."""
         import json
+        import re
+        
         try:
+            # Clean the response
+            response = response.strip()
+            
+            # Try to extract JSON from markdown code blocks
+            json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+            if json_match:
+                response = json_match.group(1)
+            
             # Try to parse as JSON first
-            return json.loads(response)
-        except json.JSONDecodeError:
+            result = json.loads(response)
+            
+            # Validate result is a dictionary
+            if not isinstance(result, dict):
+                return {
+                    "analysis": str(response),
+                    "extracted_points": self._extract_key_points_from_text(str(response))
+                }
+                
+            return result
+            
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            logger.warning(f"Failed to parse LLM JSON response: {e}")
             # Fallback to extracting structured information from text
             return {
                 "analysis": response,

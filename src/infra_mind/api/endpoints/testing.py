@@ -216,11 +216,15 @@ async def execute_test_scenario(
 @router.post("/sample-data")
 async def generate_sample_data(request: SampleDataRequest):
     """
-    Generate sample data for testing.
+    DISABLED: Sample data generation endpoint has been disabled for production safety.
     
-    Creates realistic sample data that can be used for testing API endpoints.
-    Supports various data types including assessments, recommendations, and reports.
+    This endpoint previously generated mock data which is dangerous for production use.
+    Use real assessment data and proper API integrations instead.
     """
+    raise HTTPException(
+        status_code=status.HTTP_410_GONE,
+        detail="Sample data generation has been permanently disabled for production safety. Use real assessments and data instead."
+    )
     try:
         sample_data = []
         

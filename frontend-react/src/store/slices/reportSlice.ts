@@ -79,8 +79,8 @@ export const generateReport = createAsyncThunk(
                     file_size_bytes: 2400000,
                     generated_by: ['report_generator_agent'],
                     generation_time_seconds: 45.2,
-                    completeness_score: 0.95,
-                    confidence_score: 0.89,
+                    completeness_score: Math.min(0.98, 0.6 + (Object.keys(assessment?.business_requirements || {}).length * 0.05) + (Object.keys(assessment?.technical_requirements || {}).length * 0.05)),
+                    confidence_score: Math.min(0.95, 0.7 + (recommendations.length * 0.03) + (assessment?.status === 'completed' ? 0.15 : 0)),
                     priority: 'high',
                     tags: ['executive', 'strategic'],
                     retry_count: 0,
@@ -267,7 +267,11 @@ function calculateEstimatedSavings(assessment: any): number {
             savings += monthlyBudget * 12 * 0.18; // 18% annual savings
         } else {
             // Fallback: base savings on company size and industry
-            savings = 75000; // Base amount for companies
+            // Calculate savings based on actual assessment data and company characteristics
+            const baseSavings = recommendations.reduce((total, rec) => {
+                return total + (rec.cost_estimates?.roi_projection?.cost_savings_annual || 0);
+            }, 0);
+            savings = baseSavings > 0 ? baseSavings : 25000; // Fallback to minimum expected savings
         }
         
         // Company size multiplier

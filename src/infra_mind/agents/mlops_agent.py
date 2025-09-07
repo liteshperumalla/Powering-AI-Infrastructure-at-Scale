@@ -165,7 +165,7 @@ class MLOpsAgent(BaseAgent):
         """Analyze ML workload requirements and characteristics."""
         logger.debug("Analyzing ML workload requirements")
         
-        assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+        assessment_data = self.current_assessment.model_dump() if self.current_assessment else {}
         technical_req = assessment_data.get("technical_requirements", {})
         business_req = assessment_data.get("business_requirements", {})
         
@@ -207,7 +207,7 @@ class MLOpsAgent(BaseAgent):
         """Assess current ML maturity level and identify gaps."""
         logger.debug("Assessing ML maturity level")
         
-        assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+        assessment_data = self.current_assessment.model_dump() if self.current_assessment else {}
         business_req = assessment_data.get("business_requirements", {})
         technical_req = assessment_data.get("technical_requirements", {})
         
@@ -1322,14 +1322,14 @@ class MLOpsAgent(BaseAgent):
             # Get base analysis first
             base_analysis = await self._analyze_ml_requirements()
             
-            assessment_data = self.current_assessment.dict() if self.current_assessment else {}
+            assessment_data = self.current_assessment.model_dump() if self.current_assessment else {}
             technical_req = assessment_data.get("technical_requirements", {})
             business_req = assessment_data.get("business_requirements", {})
             
             # Research latest MLOps trends and tools
             mlops_trends = await self.web_search_client.search(
                 "MLOps trends 2024 2025 machine learning operations best practices tools platforms",
-                num_results=5
+                max_results=5
             )
             
             # Prepare context for LLM analysis
@@ -1378,7 +1378,7 @@ class MLOpsAgent(BaseAgent):
             Return in JSON format with: workload_classification, platform_architecture, cicd_design, deployment_strategy, data_pipeline, monitoring_strategy, collaboration_tools, scalability_plan, cost_optimization, governance_framework.
             """
             
-            llm_response = await self.llm_client.generate_text(
+            llm_response = await self._call_llm(
                 prompt=analysis_prompt,
                 system_prompt="You are an MLOps expert with deep knowledge of machine learning operations, data engineering, and ML infrastructure at scale.",
                 temperature=0.1,
@@ -1412,12 +1412,33 @@ class MLOpsAgent(BaseAgent):
             return await self._analyze_ml_requirements()
     
     def _parse_llm_response(self, response: str) -> Dict[str, Any]:
-        """Parse LLM response, handling both JSON and text formats."""
+        """Parse LLM response, handling both JSON and text formats with robust error handling."""
         import json
+        import re
+        
         try:
+            # Clean the response
+            response = response.strip()
+            
+            # Try to extract JSON from markdown code blocks
+            json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+            if json_match:
+                response = json_match.group(1)
+            
             # Try to parse as JSON first
-            return json.loads(response)
-        except json.JSONDecodeError:
+            result = json.loads(response)
+            
+            # Validate result is a dictionary
+            if not isinstance(result, dict):
+                return {
+                    "analysis": str(response),
+                    "extracted_points": self._extract_key_points_from_text(str(response))
+                }
+                
+            return result
+            
+        except (json.JSONDecodeError, ValueError, TypeError) as e:
+            logger.warning(f"Failed to parse LLM JSON response: {e}")
             # Fallback to extracting structured information from text
             return {
                 "analysis": response,

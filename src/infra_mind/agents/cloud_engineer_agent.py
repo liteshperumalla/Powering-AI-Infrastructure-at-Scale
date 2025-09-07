@@ -7,6 +7,7 @@ Focuses on multi-cloud service comparison, cost optimization, and best practices
 
 import logging
 import json
+import re
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone
 
@@ -160,12 +161,26 @@ class CloudEngineerAgent(BaseAgent):
                 temperature=0.2
             )
             
-            # Try to parse JSON response
-            import json
+            # Try to parse JSON response with robust error handling
             try:
+                # Clean the response
+                llm_response = llm_response.strip()
+                
+                # Try to extract JSON from markdown code blocks
+                json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', llm_response, re.DOTALL)
+                if json_match:
+                    llm_response = json_match.group(1)
+                
                 analysis = json.loads(llm_response)
+                
+                # Validate result is a dictionary
+                if not isinstance(analysis, dict):
+                    return self._parse_infrastructure_analysis(str(llm_response), requirements)
+                
                 return analysis
-            except json.JSONDecodeError:
+                
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
+                logger.warning(f"Failed to parse LLM JSON response for infrastructure analysis: {e}")
                 # Fallback parsing from text
                 return self._parse_infrastructure_analysis(llm_response, requirements)
                 
@@ -208,15 +223,28 @@ class CloudEngineerAgent(BaseAgent):
                 temperature=0.3
             )
             
-            # Parse LLM response
+            # Parse LLM response with robust error handling
             try:
+                # Clean the response
+                llm_response = llm_response.strip()
+                
+                # Try to extract JSON from markdown code blocks
+                json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', llm_response, re.DOTALL)
+                if json_match:
+                    llm_response = json_match.group(1)
+                
                 recommendations = json.loads(llm_response)
+                
+                # Validate result is a dictionary
+                if not isinstance(recommendations, dict):
+                    return self._parse_service_recommendations(str(llm_response), requirements)
                 
                 # Enhance with real cost data
                 enhanced_recommendations = await self._enhance_recommendations_with_real_costs(recommendations)
                 return enhanced_recommendations
                 
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
+                logger.warning(f"Failed to parse LLM JSON response for service recommendations: {e}")
                 # Fallback parsing
                 return self._parse_service_recommendations(llm_response, requirements)
                 
@@ -256,15 +284,28 @@ class CloudEngineerAgent(BaseAgent):
                 temperature=0.2
             )
             
-            # Parse LLM response
+            # Parse LLM response with robust error handling
             try:
+                # Clean the response
+                llm_response = llm_response.strip()
+                
+                # Try to extract JSON from markdown code blocks
+                json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', llm_response, re.DOTALL)
+                if json_match:
+                    llm_response = json_match.group(1)
+                
                 architecture = json.loads(llm_response)
+                
+                # Validate result is a dictionary
+                if not isinstance(architecture, dict):
+                    return self._parse_architecture_design(str(llm_response), requirements)
                 
                 # Validate and enhance architecture design
                 validated_architecture = await self._validate_architecture_design(architecture, requirements)
                 return validated_architecture
                 
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
+                logger.warning(f"Failed to parse LLM JSON response for architecture design: {e}")
                 # Fallback parsing
                 return self._parse_architecture_design(llm_response, requirements)
                 
@@ -321,21 +362,34 @@ class CloudEngineerAgent(BaseAgent):
                 temperature=0.2
             )
             
-            # Parse and enhance cost analysis
+            # Parse and enhance cost analysis with robust error handling
             try:
+                # Clean the response
+                llm_response = llm_response.strip()
+                
+                # Try to extract JSON from markdown code blocks
+                json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', llm_response, re.DOTALL)
+                if json_match:
+                    llm_response = json_match.group(1)
+                
                 cost_analysis = json.loads(llm_response)
                 
-                # Add real-time pricing data
-                cost_analysis["pricing_data"] = {
-                    "last_updated": datetime.now(timezone.utc).isoformat(),
-                    "detailed_costs": cost_estimates,
-                    "total_monthly": total_monthly_cost,
-                    "pricing_source": "real_api_data"
-                }
+                # Validate result is a dictionary
+                if not isinstance(cost_analysis, dict):
+                    cost_analysis = self._parse_cost_analysis(str(llm_response), requirements, cost_estimates)
+                else:
+                    # Add real-time pricing data
+                    cost_analysis["pricing_data"] = {
+                        "last_updated": datetime.now(timezone.utc).isoformat(),
+                        "detailed_costs": cost_estimates,
+                        "total_monthly": total_monthly_cost,
+                        "pricing_source": "real_api_data"
+                    }
                 
                 return cost_analysis
                 
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
+                logger.warning(f"Failed to parse LLM JSON response for cost analysis: {e}")
                 # Fallback parsing
                 return self._parse_cost_analysis(llm_response, cost_estimates, total_monthly_cost)
                 
@@ -749,12 +803,26 @@ Please respond in JSON format with structured data for each section."""
                 max_tokens=2000
             )
             
-            # Try to parse JSON response
+            # Try to parse JSON response with robust error handling
             try:
-                import json
+                # Clean the response
+                response = response.strip()
+                
+                # Try to extract JSON from markdown code blocks
+                json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+                if json_match:
+                    response = json_match.group(1)
+                
                 analysis = json.loads(response)
+                
+                # Validate result is a dictionary
+                if not isinstance(analysis, dict):
+                    return self._parse_llm_analysis_response(str(response))
+                
                 return analysis
-            except json.JSONDecodeError:
+                
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
+                logger.warning(f"Failed to parse LLM JSON response for technical analysis: {e}")
                 # If JSON parsing fails, return structured fallback
                 return self._parse_llm_analysis_response(response)
             
@@ -769,7 +837,6 @@ Please respond in JSON format with structured data for each section."""
         service_data: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         """Use LLM to generate specific cloud service recommendations."""
-        import json
         
         prompt = f"""Based on the technical analysis and available cloud services, recommend specific cloud services for this infrastructure assessment.
 
@@ -817,17 +884,29 @@ Respond in JSON format with an array of recommendations."""
                 max_tokens=2500
             )
             
-            # Parse recommendations
-            import json
+            # Parse recommendations with robust error handling
             try:
+                # Clean the response
+                response = response.strip()
+                
+                # Try to extract JSON from markdown code blocks
+                json_match = re.search(r'```(?:json)?\s*(\{.*?\}|\[.*?\])\s*```', response, re.DOTALL)
+                if json_match:
+                    response = json_match.group(1)
+                
                 recommendations = json.loads(response)
+                
                 if isinstance(recommendations, list):
                     return recommendations
                 elif isinstance(recommendations, dict) and "recommendations" in recommendations:
                     return recommendations["recommendations"]
-                else:
+                elif isinstance(recommendations, dict):
                     return [recommendations]
-            except json.JSONDecodeError:
+                else:
+                    return self._parse_llm_recommendations_response(str(response))
+                    
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
+                logger.warning(f"Failed to parse LLM JSON response for service recommendations: {e}")
                 return self._parse_llm_recommendations_response(response)
             
         except Exception as e:
@@ -890,12 +969,25 @@ Respond in JSON format with structured guidance for each section."""
                 temperature=0.3,
                 max_tokens=2000
             )
-            
-            import json
             try:
+                # Clean the response
+                response = response.strip()
+                
+                # Try to extract JSON from markdown code blocks
+                json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response, re.DOTALL)
+                if json_match:
+                    response = json_match.group(1)
+                
                 guidance = json.loads(response)
+                
+                # Validate result is a dictionary
+                if not isinstance(guidance, dict):
+                    return self._parse_llm_guidance_response(str(response))
+                
                 return guidance
-            except json.JSONDecodeError:
+                
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
+                logger.warning(f"Failed to parse LLM JSON response for implementation guidance: {e}")
                 return self._parse_llm_guidance_response(response)
             
         except Exception as e:
@@ -2780,7 +2872,19 @@ Respond in JSON format with structured guidance for each section."""
             )
             
             try:
+                # Clean the response
+                llm_response = llm_response.strip()
+                
+                # Try to extract JSON from markdown code blocks
+                json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', llm_response, re.DOTALL)
+                if json_match:
+                    llm_response = json_match.group(1)
+                
                 insights = json.loads(llm_response)
+                
+                # Validate result is a dictionary
+                if not isinstance(insights, dict):
+                    return self._fallback_technical_insights(workflow_data)
                 
                 # Add metadata
                 insights["analysis_quality"] = "comprehensive"
@@ -2789,7 +2893,8 @@ Respond in JSON format with structured guidance for each section."""
                 
                 return insights
                 
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, ValueError, TypeError) as e:
+                logger.warning(f"Failed to parse LLM JSON response for technical insights: {e}")
                 return self._parse_technical_insights(llm_response)
                 
         except Exception as e:

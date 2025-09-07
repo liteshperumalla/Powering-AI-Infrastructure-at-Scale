@@ -230,7 +230,7 @@ class ApiClient {
     // Token management
     private getStoredToken(): string | null {
         if (typeof window !== 'undefined') {
-            return localStorage.getItem('auth_token');
+            return typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
         }
         return null;
     }
@@ -250,7 +250,7 @@ class ApiClient {
     // Clear old tokens that might be missing required claims
     public clearOldTokens(): void {
         if (typeof window !== 'undefined') {
-            const token = localStorage.getItem('auth_token');
+            const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
             if (token) {
                 try {
                     // Decode token without verification to check claims
@@ -305,8 +305,8 @@ class ApiClient {
         const config: RequestInit = {
             ...fetchOptions,
             headers,
-            // Add timeout for requests
-            signal: AbortSignal.timeout(30000), // 30 second timeout
+            // Add timeout for requests - longer for cloud services
+            signal: AbortSignal.timeout(60000), // 60 second timeout for cloud services
         };
 
         try {
@@ -461,7 +461,7 @@ class ApiClient {
         // This prevents users from getting stuck with expired tokens
         if (!shouldLogout && errorData.status_code === 401) {
             // Check if we have a stored token - if yes and getting 401, likely expired
-            const hasToken = typeof window !== 'undefined' && localStorage.getItem('auth_token');
+            const hasToken = typeof window !== 'undefined' && typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
             if (hasToken) {
                 console.log('🔒 401 error with stored token - likely expired, logging out');
                 return true;
@@ -1769,6 +1769,61 @@ class ApiClient {
             }
         };
         return help[fieldName] || null;
+    }
+
+    // Workflow control methods
+    async getAssessmentWorkflowStatus(assessmentId: string): Promise<{
+        assessment_id: string;
+        current_step: string;
+        progress: number;
+        status: string;
+        steps: Array<{
+            name: string;
+            status: 'pending' | 'in_progress' | 'completed' | 'failed';
+        }>;
+        can_advance: boolean;
+        is_running: boolean;
+        workflow_id: string;
+        last_updated: string;
+    }> {
+        return this.request(`/assessments/${assessmentId}/workflow/status`);
+    }
+
+    async advanceAssessmentWorkflow(assessmentId: string): Promise<{
+        assessment_id: string;
+        previous_step: string;
+        current_step: string;
+        progress: number;
+        status: string;
+        message: string;
+        completed: boolean;
+    }> {
+        return this.request(`/assessments/${assessmentId}/workflow/advance`, {
+            method: 'POST',
+        });
+    }
+
+    async pauseAssessmentWorkflow(assessmentId: string): Promise<{
+        assessment_id: string;
+        status: string;
+        message: string;
+        paused_at: string;
+    }> {
+        return this.request(`/assessments/${assessmentId}/workflow/pause`, {
+            method: 'POST',
+        });
+    }
+
+    async resumeAssessmentWorkflow(assessmentId: string): Promise<{
+        assessment_id: string;
+        status: string;
+        current_step: string;
+        message: string;
+        resumed_at: string;
+    }> {
+        return this.request(`/assessments/${assessmentId}/workflow/resume`, {
+            method: 'POST',
+        });
     }
 }
 

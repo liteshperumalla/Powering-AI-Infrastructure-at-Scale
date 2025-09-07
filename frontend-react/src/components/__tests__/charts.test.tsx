@@ -129,7 +129,7 @@ describe('Data Visualization Components', () => {
     test('RecommendationTable renders correctly', () => {
         render(<RecommendationTable recommendations={mockRecommendations} />);
         expect(screen.getByText('Service Recommendations')).toBeInTheDocument();
-        expect(screen.getByText('Amazon EC2 t3.large')).toBeInTheDocument();
+        expect(screen.getAllByText('Amazon EC2 t3.large')[0]).toBeInTheDocument();
     });
 
     test('ReportPreview renders correctly', () => {

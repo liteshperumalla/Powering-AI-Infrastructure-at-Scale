@@ -100,7 +100,7 @@ jobs:
     
     - name: Run load test
       env:
-        TARGET_URL: ${{ github.event.inputs.environment == 'production' && 'https://api.infra-mind.example.com' || 'https://api-staging.infra-mind.example.com' }}
+        TARGET_URL: ${{ github.event.inputs.environment == 'production' && 'https://api.infra-mind.com' || 'https://api-staging.infra-mind.com' }}
         DURATION: ${{ github.event.inputs.duration || '10' }}
       run: |
         locust -f locustfile.py \
@@ -162,7 +162,7 @@ jobs:
           },
         };
         
-        const BASE_URL = __ENV.TARGET_URL || 'https://api-staging.infra-mind.example.com';
+        const BASE_URL = __ENV.TARGET_URL || 'https://api-staging.infra-mind.com';
         
         export default function() {
           // Health check
@@ -188,7 +188,7 @@ jobs:
     
     - name: Run stress test
       env:
-        TARGET_URL: ${{ github.event.inputs.environment == 'production' && 'https://api.infra-mind.example.com' || 'https://api-staging.infra-mind.example.com' }}
+        TARGET_URL: ${{ github.event.inputs.environment == 'production' && 'https://api.infra-mind.com' || 'https://api-staging.infra-mind.com' }}
       run: |
         k6 run --out json=stress-test-results.json stress-test.js
     
