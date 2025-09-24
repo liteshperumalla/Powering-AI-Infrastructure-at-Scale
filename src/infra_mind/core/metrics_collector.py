@@ -164,9 +164,9 @@ class MetricsCollector:
             return True
         except Exception as e:
             if not self._database_available:
-                logger.debug(f"Database not available, skipping metric: {kwargs.get('name', 'unknown')}")
+                logger.debug(f"Database not available, skipping metric: {kwargs.get('name')}")
             else:
-                logger.debug(f"Failed to record metric {kwargs.get('name', 'unknown')}: {e}")
+                logger.debug(f"Failed to record metric {kwargs.get('name')}: {e}")
                 self._database_available = False
             return False
     
@@ -297,7 +297,7 @@ class MetricsCollector:
         return len([
             action for action in self._user_actions
             if (action.get('timestamp', datetime.utcnow()) > minute_ago and
-                action.get('type', '').startswith('llm_'))
+                action.get('type').startswith('llm_'))
         ])
     
     def _count_cloud_api_calls_last_minute(self) -> int:
@@ -306,7 +306,7 @@ class MetricsCollector:
         return len([
             action for action in self._user_actions
             if (action.get('timestamp', datetime.utcnow()) > minute_ago and
-                action.get('type', '').startswith('cloud_api_'))
+                action.get('type').startswith('cloud_api_'))
         ])
     
     async def collect_system_metrics(self) -> None:
@@ -549,7 +549,7 @@ class MetricsCollector:
             # Action type breakdown
             action_types = defaultdict(int)
             for action in recent_actions:
-                action_type = action.get('type', 'unknown')
+                action_type = action.get('type')
                 action_types[action_type] += 1
             
             for action_type, count in action_types.items():

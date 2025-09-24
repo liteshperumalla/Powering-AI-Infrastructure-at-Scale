@@ -1086,14 +1086,14 @@ class CloudAPITool(BaseTool):
             
             services = []
             for instance in instances:
-                if 'storage' in instance.get('name', '').lower() or 'cos' in instance.get('name', '').lower():
+                if 'storage' in instance.get('name').lower() or 'cos' in instance.get('name').lower():
                     services.append({
                         "service_id": f"ibm_storage_{instance['id'][:8]}",
                         "name": f"Storage Service ({instance['name']})",
                         "specifications": {
                             "state": instance['state'],
-                            "type": instance.get('type', 'Unknown'),
-                            "region": instance.get('region_id', 'Unknown')
+                            "type": instance.get('type'),
+                            "region": instance.get('region_id')
                         },
                         "features": ["Encryption", "Cross-region replication", "Lifecycle management"],
                         "api_source": "ibm_sdk"

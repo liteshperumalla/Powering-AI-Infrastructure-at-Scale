@@ -1983,8 +1983,8 @@ class SimulationAgent(BaseAgent):
             if sources:
                 context_parts.append(f"{category.replace('_', ' ').title()}:")
                 for source in sources[:3]:  # Limit to top 3 per category
-                    title = source.get("title", "")
-                    snippet = source.get("snippet", "")
+                    title = source.get("title")
+                    snippet = source.get("snippet")
                     context_parts.append(f"- {title}: {snippet[:200]}...")
         
         return "\n".join(context_parts)

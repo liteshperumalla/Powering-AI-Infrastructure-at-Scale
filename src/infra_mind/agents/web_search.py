@@ -14,7 +14,7 @@ import json
 
 # Optional imports - will use graceful fallbacks
 try:
-    from duckduckgo_search import DDGS
+    from ddgs import DDGS
     DDGS_AVAILABLE = True
 except ImportError:
     DDGS_AVAILABLE = False
@@ -174,10 +174,10 @@ class WebSearchClient:
             
             for result in ddgs_results:
                 processed_result = {
-                    "title": result.get("title", ""),
-                    "url": result.get("href", ""),
-                    "snippet": result.get("body", ""),
-                    "published_date": result.get("published", ""),
+                    "title": result.get("title"),
+                    "url": result.get("href"),
+                    "snippet": result.get("body"),
+                    "published_date": result.get("published"),
                     "source": "duckduckgo",
                     "relevance_score": 0.8  # Default score for DDG
                 }
@@ -233,10 +233,10 @@ class WebSearchClient:
             
             for result in organic_results:
                 processed_result = {
-                    "title": result.get("title", ""),
-                    "url": result.get("link", ""),
-                    "snippet": result.get("snippet", ""),
-                    "published_date": result.get("date", ""),
+                    "title": result.get("title"),
+                    "url": result.get("link"),
+                    "snippet": result.get("snippet"),
+                    "published_date": result.get("date"),
                     "source": "google",
                     "relevance_score": 0.9  # Higher score for Google results
                 }
@@ -270,10 +270,10 @@ class WebSearchClient:
             
             for result in tavily_results.get("results", []):
                 processed_result = {
-                    "title": result.get("title", ""),
-                    "url": result.get("url", ""),
-                    "snippet": result.get("content", ""),
-                    "published_date": result.get("published_date", ""),
+                    "title": result.get("title"),
+                    "url": result.get("url"),
+                    "snippet": result.get("content"),
+                    "published_date": result.get("published_date"),
                     "source": "tavily",
                     "relevance_score": result.get("score", 0.7)
                 }
@@ -310,7 +310,7 @@ class WebSearchClient:
                         if title_elem:
                             processed_result = {
                                 "title": title_elem.text.strip(),
-                                "url": title_elem.get('href', ''),
+                                "url": title_elem.get('href'),
                                 "snippet": snippet_elem.text.strip() if snippet_elem else "",
                                 "published_date": "",
                                 "source": "web_scraping",

@@ -215,15 +215,135 @@ class UnifiedCloudClient:
                             region: Optional[str] = None) -> Dict[CloudProvider, CloudServiceResponse]:
         """
         Get AI/ML services from specified provider(s).
-        
+
         Args:
             provider: Specific cloud provider (optional, if None, query all available)
             region: Region to query (optional, if None, use default for provider)
-            
+
         Returns:
             Dictionary mapping providers to their AI/ML service responses
         """
         return await self._get_services_by_category(ServiceCategory.MACHINE_LEARNING, provider, region)
+
+    async def get_analytics_services(self, provider: Optional[CloudProvider] = None,
+                                   region: Optional[str] = None) -> Dict[CloudProvider, CloudServiceResponse]:
+        """
+        Get analytics services from specified provider(s).
+
+        Analytics services include data warehouses, ETL tools, business intelligence,
+        and data processing services.
+
+        Args:
+            provider: Specific cloud provider (optional, if None, query all available)
+            region: Region to query (optional, if None, use default for provider)
+
+        Returns:
+            Dictionary mapping providers to their analytics service responses
+        """
+        # Analytics services typically come from AI/ML and Database categories
+        results = {}
+
+        # Get AI/ML services (many include analytics capabilities)
+        ai_services = await self._get_services_by_category(ServiceCategory.MACHINE_LEARNING, provider, region)
+
+        # Get database services (many include analytics capabilities)
+        db_services = await self._get_services_by_category(ServiceCategory.DATABASE, provider, region)
+
+        # Combine and filter for analytics-related services
+        for prov, response in {**ai_services, **db_services}.items():
+            analytics_services = []
+            for service in response.services:
+                # Filter services that are analytics-related
+                analytics_keywords = [
+                    'analytics', 'data', 'warehouse', 'etl', 'bigquery', 'redshift',
+                    'synapse', 'kinesis', 'dataflow', 'athena', 'quicksight',
+                    'databricks', 'powerbi', 'tableau', 'glue', 'emr', 'hdinsight',
+                    'dataproc', 'dataflow', 'pubsub', 'kafka', 'stream'
+                ]
+
+                if any(keyword in service.service_name.lower() or
+                       keyword in service.description.lower() for keyword in analytics_keywords):
+                    # Update service category to analytics
+                    service.category = ServiceCategory.ANALYTICS
+                    analytics_services.append(service)
+
+            if analytics_services:
+                analytics_response = CloudServiceResponse(
+                    provider=prov,
+                    service_category=ServiceCategory.ANALYTICS,
+                    region=response.region,
+                    services=analytics_services,
+                    metadata={"source": "analytics_filter", "original_categories": ["ai_ml", "database"]},
+                    timestamp=datetime.now(timezone.utc)
+                )
+                results[prov] = analytics_response
+
+        return results
+
+    async def get_management_services(self, provider: Optional[CloudProvider] = None,
+                                    region: Optional[str] = None) -> Dict[CloudProvider, CloudServiceResponse]:
+        """
+        Get management and monitoring services from specified provider(s).
+
+        Management services include monitoring, logging, configuration management,
+        backup, and operational tools.
+
+        Args:
+            provider: Specific cloud provider (optional, if None, query all available)
+            region: Region to query (optional, if None, use default for provider)
+
+        Returns:
+            Dictionary mapping providers to their management service responses
+        """
+        # Management services typically span across multiple categories
+        results = {}
+
+        # Get services from all categories and filter for management-related ones
+        all_categories = [
+            ServiceCategory.COMPUTE, ServiceCategory.STORAGE,
+            ServiceCategory.DATABASE, ServiceCategory.MACHINE_LEARNING
+        ]
+
+        all_services = {}
+        for category in all_categories:
+            category_services = await self._get_services_by_category(category, provider, region)
+            for prov, response in category_services.items():
+                if prov not in all_services:
+                    all_services[prov] = []
+                all_services[prov].extend(response.services)
+
+        # Filter for management-related services
+        for prov, services in all_services.items():
+            management_services = []
+            for service in services:
+                # Filter services that are management-related
+                management_keywords = [
+                    'monitor', 'manage', 'cloudwatch', 'operations', 'logging',
+                    'cloudformation', 'systems', 'config', 'governance', 'compliance',
+                    'backup', 'cloudtrail', 'inspector', 'trusted', 'advisor',
+                    'resource', 'tag', 'cost', 'billing', 'budget', 'organization',
+                    'account', 'identity', 'access', 'security', 'audit', 'log'
+                ]
+
+                if any(keyword in service.service_name.lower() or
+                       keyword in service.description.lower() for keyword in management_keywords):
+                    # Update service category to management
+                    service.category = ServiceCategory.MANAGEMENT
+                    management_services.append(service)
+
+            if management_services:
+                region_to_use = region or self.provider_regions.get(prov, "us-east-1")
+                management_response = CloudServiceResponse(
+                    provider=prov,
+                    service_category=ServiceCategory.MANAGEMENT,
+                    region=region_to_use,
+                    services=management_services,
+                    metadata={"source": "management_filter", "original_categories": ["compute", "storage", "database", "ai_ml"]},
+                    timestamp=datetime.now(timezone.utc)
+                )
+                results[prov] = management_response
+
+        return results
     
     async def _get_services_by_category(self, category: ServiceCategory,
                                       provider: Optional[CloudProvider] = None,

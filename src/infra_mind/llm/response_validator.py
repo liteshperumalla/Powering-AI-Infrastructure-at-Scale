@@ -363,7 +363,7 @@ class ResponseValidator:
         if not context:
             return issues
         
-        agent_name = context.get("agent_name", "") or ""
+        agent_name = context.get("agent_name") or ""
         
         # CTO Agent specific validation
         if agent_name and "cto" in agent_name.lower():

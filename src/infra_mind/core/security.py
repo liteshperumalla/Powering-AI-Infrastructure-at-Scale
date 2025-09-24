@@ -465,7 +465,7 @@ class SecurityMonitor:
             self.suspicious_ips.add(client_ip)
         
         # Check for suspicious patterns in headers
-        user_agent = request.headers.get("user-agent", "")
+        user_agent = request.headers.get("user-agent")
         if self.is_suspicious_user_agent(user_agent):
             results["warnings"].append("Suspicious user agent")
             self.suspicious_ips.add(client_ip)

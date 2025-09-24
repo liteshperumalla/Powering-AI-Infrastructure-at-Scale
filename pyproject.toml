@@ -45,6 +45,7 @@ dependencies = [
     # Cloud APIs
     "boto3>=1.34.0",  # AWS SDK
     "azure-mgmt-compute>=30.0.0",  # Azure Compute
+    "azure-mgmt-storage>=21.0.0",  # Azure Storage
     "azure-mgmt-sql>=3.0.0",  # Azure SQL
     "azure-mgmt-resource>=23.0.0",  # Azure Resource Manager
     "azure-mgmt-monitor>=6.0.0",  # Azure Monitor
@@ -91,6 +92,15 @@ dependencies = [
     "bcrypt>=4.0.0",
     "python-multipart>=0.0.6",
     
+    # Email Services
+    "fastapi-mail>=1.4.1",  # Email sending
+    "aiosmtplib>=3.0.0",  # Async SMTP
+    "email-validator>=2.1.0",  # Email validation
+    
+    # Multi-Factor Authentication
+    "pyotp>=2.9.0",  # TOTP/HOTP implementation
+    "qrcode[pil]>=7.4.2",  # QR code generation for MFA setup
+    
     # PDF Generation
     "reportlab>=4.0.0",  # PDF generation
     "Pillow>=10.0.0",  # Image processing for PDFs
@@ -102,7 +112,7 @@ dependencies = [
     "psutil>=5.9.0",  # System monitoring
     "watchdog>=2.2.0", # For log monitoring
     "beautifulsoup4>=4.12.0", # For web scraping
-    "duckduckgo-search>=4.0.0", # For web search API
+    "ddgs>=4.0.0", # For web search API (renamed from duckduckgo-search)
     "google-search-results>=2.4.0", # For Google Search API (SerpAPI)
     "tavily-python>=0.3.0", # For Tavily Search API
 ]

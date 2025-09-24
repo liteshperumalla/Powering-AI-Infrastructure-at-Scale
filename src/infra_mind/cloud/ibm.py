@@ -190,7 +190,7 @@ class IBMCloudClient(BaseCloudClient):
             # Filter for database services
             databases = []
             for resource in response.get("resources", []):
-                resource_plan = resource.get("resource_plan_id", "")
+                resource_plan = resource.get("resource_plan_id")
                 if "database" in resource_plan.lower() or "mongo" in resource_plan.lower():
                     databases.append(resource)
             
@@ -214,7 +214,7 @@ class IBMCloudClient(BaseCloudClient):
             # Filter for Cloud Object Storage
             storage_instances = []
             for resource in response.get("resources", []):
-                if "cloud-object-storage" in resource.get("resource_id", ""):
+                if "cloud-object-storage" in resource.get("resource_id"):
                     storage_instances.append(resource)
             
             return storage_instances
@@ -260,7 +260,7 @@ class IBMCloudClient(BaseCloudClient):
             ]
             
             for resource in response.get("resources", []):
-                resource_id = resource.get("resource_id", "")
+                resource_id = resource.get("resource_id")
                 if any(service_id in resource_id for service_id in watson_service_ids):
                     watson_services.append(resource)
             

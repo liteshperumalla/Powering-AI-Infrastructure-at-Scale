@@ -41,6 +41,7 @@ import {
     BarChart as BarChartIcon,
     PieChart as PieChartIcon,
     ShowChart as LineChartIcon,
+    Close as CloseIcon,
 } from '@mui/icons-material';
 import {
     LineChart,

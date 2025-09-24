@@ -741,8 +741,8 @@ class ContinuousImprovementSystem:
                 title="Improve Recommendation Quality",
                 description=f"Multiple quality alerts detected ({len(alerts)} alerts). Consider retraining agents or updating knowledge bases.",
                 priority=3,
-                affected_agents=list(set([alert.get("affected_component", "").replace("agent_", "") 
-                                        for alert in alerts if "agent_" in alert.get("affected_component", "")])),
+                affected_agents=list(set([alert.get("affected_component").replace("agent_", "") 
+                                        for alert in alerts if "agent_" in alert.get("affected_component")])),
                 expected_impact="Improved recommendation quality and user satisfaction",
                 implementation_effort="high"
             )

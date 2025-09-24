@@ -336,7 +336,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     def _check_request_security(self, request: Request):
         """Perform basic security checks."""
         # Check for suspicious user agents
-        user_agent = request.headers.get("user-agent", "").lower()
+        user_agent = request.headers.get("user-agent").lower()
         suspicious_agents = ["sqlmap", "nikto", "nmap", "masscan"]
         
         if any(agent in user_agent for agent in suspicious_agents):
@@ -399,7 +399,7 @@ class APIVersioningMiddleware(BaseHTTPMiddleware):
                 return version
         
         # Check Accept header
-        accept_header = request.headers.get("accept", "")
+        accept_header = request.headers.get("accept")
         for version in self.supported_versions:
             if f"application/vnd.infra-mind.{version}+json" in accept_header:
                 return version

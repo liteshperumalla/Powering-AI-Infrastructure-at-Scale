@@ -291,11 +291,26 @@ export default function SettingsPage() {
             <ResponsiveLayout title="Settings">
                 <Container maxWidth="lg" sx={{ mt: 3 }}>
                     <Box sx={{ mb: 4 }}>
-                        <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Typography
+                            variant="h4"
+                            gutterBottom
+                            sx={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: 2,
+                                color: 'text.primary',
+                                fontWeight: 'bold'
+                            }}
+                        >
                             <SettingsIcon sx={{ fontSize: 40 }} />
                             Settings
                         </Typography>
-                        <Typography variant="body1" color="text.secondary">
+                        <Typography
+                            variant="body1"
+                            sx={{
+                                color: 'text.secondary'
+                            }}
+                        >
                             Comprehensive configuration hub for your profile, preferences, notifications, and security settings.
                         </Typography>
                     </Box>

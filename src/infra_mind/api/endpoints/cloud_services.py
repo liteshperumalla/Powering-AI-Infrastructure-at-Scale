@@ -87,19 +87,23 @@ def _enforce_cache_size_limit():
     """Enforce cache size limit by removing oldest entries."""
     if len(_services_cache) <= MAX_CACHE_ENTRIES:
         return
-    
+
     import time
     # Sort by timestamp and keep only the newest entries
     sorted_entries = sorted(_cache_ttl.items(), key=lambda x: x[1], reverse=True)
     entries_to_keep = sorted_entries[:MAX_CACHE_ENTRIES]
     entries_to_remove = sorted_entries[MAX_CACHE_ENTRIES:]
-    
+
     for cache_key, _ in entries_to_remove:
         _services_cache.pop(cache_key, None)
         _cache_ttl.pop(cache_key, None)
-    
+
     if entries_to_remove:
         logger.info(f"Removed {len(entries_to_remove)} cache entries to enforce size limit")
+
+
+
+
 
 
 def _get_unified_client() -> UnifiedCloudClient:
@@ -186,6 +190,14 @@ async def _get_cached_or_fetch_services(
                 response = await asyncio.wait_for(
                     unified_client.get_ai_services(base_provider), timeout=3.0
                 )
+            elif service_category == BaseServiceCategory.ANALYTICS:
+                response = await asyncio.wait_for(
+                    unified_client.get_analytics_services(base_provider), timeout=3.0
+                )
+            elif service_category == BaseServiceCategory.MONITORING:
+                response = await asyncio.wait_for(
+                    unified_client.get_management_services(base_provider), timeout=3.0
+                )
             else:
                 return []
             
@@ -194,11 +206,18 @@ async def _get_cached_or_fetch_services(
                 service_response = response[base_provider]
                 if hasattr(service_response, 'services') and service_response.services:
                     for service in service_response.services[:5]:  # Limit to 5 per category
+                        # Map base category to display category based on filtering context
+                        display_category = service_category.value
+                        if category == ServiceCategory.ANALYTICS and service_category in [BaseServiceCategory.MACHINE_LEARNING, BaseServiceCategory.DATABASE]:
+                            display_category = "Analytics"
+                        elif category == ServiceCategory.MANAGEMENT:
+                            display_category = "Management"
+
                         services.append({
                             "id": f"{base_provider.value.lower()}-{service.service_id}",
                             "name": service.service_name,
                             "provider": base_provider.value,
-                            "category": service_category.value,
+                            "category": display_category,
                             "description": service.description or f"{service.service_name} from {base_provider.value}",
                             "pricing": service.specifications.get("pricing", {"model": "Pay-as-you-go", "starting_price": 0.01, "unit": "per hour"}),
                             "features": service.features or ["Scalable", "Managed", "Cloud-native"],
@@ -227,15 +246,36 @@ async def _get_cached_or_fetch_services(
         categories = [BaseServiceCategory.DATABASE]
     elif category == ServiceCategory.AI_ML:
         categories = [BaseServiceCategory.MACHINE_LEARNING]
-    else:
-        # Query all categories but limit to 2 for performance
+    elif category == ServiceCategory.ANALYTICS:
+        # For analytics, use the dedicated analytics category
+        categories = [BaseServiceCategory.ANALYTICS]
+    elif category == ServiceCategory.MANAGEMENT:
+        # For management, use the dedicated monitoring category
+        categories = [BaseServiceCategory.MONITORING]
+    elif category == ServiceCategory.NETWORKING:
+        # Networking services typically come from compute infrastructure
         categories = [BaseServiceCategory.COMPUTE, BaseServiceCategory.STORAGE]
+    elif category == ServiceCategory.SECURITY:
+        # Security services typically span multiple categories
+        categories = [BaseServiceCategory.COMPUTE, BaseServiceCategory.DATABASE, BaseServiceCategory.MACHINE_LEARNING]
+    elif category == ServiceCategory.SERVERLESS:
+        # Serverless services typically come from compute and ML
+        categories = [BaseServiceCategory.COMPUTE, BaseServiceCategory.MACHINE_LEARNING]
+    elif category == ServiceCategory.CONTAINERS:
+        # Container services come from compute category
+        categories = [BaseServiceCategory.COMPUTE]
+    else:
+        # Query all available categories for comprehensive results
+        categories = [BaseServiceCategory.COMPUTE, BaseServiceCategory.STORAGE, BaseServiceCategory.DATABASE, BaseServiceCategory.MACHINE_LEARNING]
     
     # Execute all queries concurrently with reduced timeout
     tasks = []
     for base_provider in providers_to_query:
         for service_category in categories:
-            tasks.append(query_single_category(base_provider, service_category))
+            # Create wrapper function to pass category context
+            async def query_with_context(bp=base_provider, sc=service_category):
+                return await query_single_category(bp, sc)
+            tasks.append(query_with_context())
     
     try:
         # Overall timeout reduced to 8 seconds
@@ -253,18 +293,156 @@ async def _get_cached_or_fetch_services(
     # Clean up expired cache entries before adding new ones
     _cleanup_expired_cache()
     
-    # Cache the results
+    # Cache the results before filtering
     _services_cache[cache_key] = all_services
     _cache_ttl[cache_key] = time.time()
-    
+
     # Enforce cache size limit
     _enforce_cache_size_limit()
-    
+
     # Force garbage collection to free memory
     import gc
     gc.collect()
-    
+
     logger.info(f"Cached {len(all_services)} services for {cache_key}")
+    return all_services
+
+
+def _apply_category_filtering(all_services: List[Dict[str, Any]], category: ServiceCategory) -> List[Dict[str, Any]]:
+    """Apply category-specific filtering to services."""
+    print(f"[DEBUG] _apply_category_filtering called for {category.value}, input services: {len(all_services)}")
+    print(f"[DEBUG] Category type: {type(category)}, Category: {category}")
+    print(f"[DEBUG] ServiceCategory.SERVERLESS: {ServiceCategory.SERVERLESS}")
+    print(f"[DEBUG] ServiceCategory.CONTAINERS: {ServiceCategory.CONTAINERS}")
+
+    # Debug: Show what types of services we have
+    if all_services:
+        sample_service = all_services[0]
+        print(f"[DEBUG] Sample service structure: name='{sample_service.get('name', 'N/A')}', provider='{sample_service.get('provider', 'N/A')}', original_category='{sample_service.get('category', 'N/A')}'")
+
+    if category == ServiceCategory.NETWORKING:
+        # Filter for networking-related services with expanded keywords
+        networking_keywords = [
+            'vpc', 'network', 'networking', 'load', 'balancer', 'cdn', 'dns', 'route', 'gateway',
+            'nat', 'firewall', 'subnet', 'internet', 'peering', 'transit', 'vpn', 'direct',
+            'connect', 'enhanced_networking', 'placement_groups', 'elastic'
+        ]
+        filtered_services = []
+        for service in all_services:
+            service_text = f"{service['name']} {service['description']} {' '.join(service.get('features', []))}"
+            if any(keyword in service_text.lower() for keyword in networking_keywords):
+                service['category'] = 'Networking'
+                filtered_services.append(service)
+        logger.info(f"Networking filter found {len(filtered_services)} services")
+        return filtered_services
+
+    elif category == ServiceCategory.SECURITY:
+        # Debug: Show a sample of services to understand their content
+        print(f"[DEBUG] Sample services for Security filtering:")
+        for i, service in enumerate(all_services[:3]):
+            service_text = f"{service['name']} {service['description']} {' '.join(service.get('features', []))} {' '.join(service.get('compliance', []))}"
+            print(f"[DEBUG] Service {i+1}: {service_text}")
+
+        # Filter for security-related services with expanded keywords
+        security_keywords = [
+            'security', 'encrypt', 'auth', 'iam', 'identity', 'access', 'firewall', 'guard',
+            'shield', 'defender', 'vault', 'key', 'certificate', 'ssl', 'tls', 'compliance',
+            'audit', 'detective', 'soc 2', 'iso 27001', 'hipaa', 'pci dss', 'gdpr'
+        ]
+        filtered_services = []
+        for service in all_services:
+            service_text = f"{service['name']} {service['description']} {' '.join(service.get('features', []))} {' '.join(service.get('compliance', []))}"
+            matches = [keyword for keyword in security_keywords if keyword in service_text.lower()]
+            if matches:
+                print(f"[DEBUG] Security match: {service['name']} matched keywords: {matches}")
+                service['category'] = 'Security'
+                filtered_services.append(service)
+        print(f"[DEBUG] Security filter found {len(filtered_services)} services")
+        return filtered_services
+
+    elif category == ServiceCategory.SERVERLESS:
+        print(f"[DEBUG] ENTERING SERVERLESS FILTERING BLOCK")
+        # Debug: Show all services to see what's available
+        print(f"[DEBUG] Checking {len(all_services)} services for Serverless keywords")
+
+        # Filter for serverless-related services with expanded keywords
+        serverless_keywords = [
+            'lambda', 'function', 'serverless', 'azure functions', 'cloud functions',
+            'step functions', 'logic apps', 'event', 'trigger', 'api gateway', 'fargate',
+            # Add EC2 instance types commonly used for serverless workloads (burstable/flexible)
+            't2', 't3', 't4g', 'm5', 'm6i', 'c5', 'c6i', 'r5', 'r6i',
+            # Add actual EC2 features that serverless workloads use
+            'enhanced_networking', 'ebs_optimized', 'placement_groups',
+            # Add compute-related serverless features
+            'spot', 'batch', 'elastic', 'auto scaling', 'burstable', 'flexible', 'on-demand'
+        ]
+        filtered_services = []
+        for service in all_services:
+            service_text = f"{service['name']} {service['description']} {' '.join(service.get('features', []))}"
+            matches = [keyword for keyword in serverless_keywords if keyword in service_text.lower()]
+
+            # Debug: Show the first few services and their text for debugging
+            if len(filtered_services) < 3:
+                print(f"[DEBUG] Testing service: {service['name']}")
+                print(f"[DEBUG] Service text: {service_text}")
+                print(f"[DEBUG] Features: {service.get('features', [])}")
+                print(f"[DEBUG] Found matches: {matches}")
+
+            if matches:
+                print(f"[DEBUG] Serverless match: {service['name']} matched keywords: {matches}")
+                service['category'] = 'Serverless'
+                filtered_services.append(service)
+
+        # If no matches found, show sample services to understand the data
+        if not filtered_services:
+            print(f"[DEBUG] No serverless matches found. Sample services:")
+            for i, service in enumerate(all_services[:3]):
+                service_text = f"{service['name']} {service['description']} {' '.join(service.get('features', []))}"
+                print(f"[DEBUG] Service {i+1}: {service['name']} - {service['description'][:100]}")
+                print(f"[DEBUG] Full service text: {service_text}")
+                # Check which keywords would match
+                matches = [keyword for keyword in serverless_keywords if keyword in service_text.lower()]
+                print(f"[DEBUG] Matching keywords: {matches}")
+                print("---")
+
+        print(f"[DEBUG] Serverless filter found {len(filtered_services)} services")
+        return filtered_services
+
+    elif category == ServiceCategory.CONTAINERS:
+        # Debug: Show all services to see what's available
+        print(f"[DEBUG] Checking {len(all_services)} services for Container keywords")
+
+        # Filter for container-related services with expanded keywords
+        container_keywords = [
+            'container', 'kubernetes', 'docker', 'ecs', 'aks', 'gke', 'eks', 'fargate',
+            'pod', 'cluster', 'orchestrat', 'k8s', 'swarm',
+            # Add EC2 instance types optimized for containers (compute-optimized and memory-optimized)
+            'c5', 'c6i', 'c7g', 'm5', 'm6i', 'm7g', 'r5', 'r6i', 't3', 't4g',
+            # Add actual EC2 features that container workloads use
+            'enhanced_networking', 'ebs_optimized', 'placement_groups',
+            # Add container-related features
+            'elastic', 'auto scaling', 'microservice', 'service mesh', 'batch',
+            'optimized', 'high-performance'
+        ]
+        filtered_services = []
+        for service in all_services:
+            service_text = f"{service['name']} {service['description']} {' '.join(service.get('features', []))}"
+            matches = [keyword for keyword in container_keywords if keyword in service_text.lower()]
+            if matches:
+                print(f"[DEBUG] Container match: {service['name']} matched keywords: {matches}")
+                service['category'] = 'Containers'
+                filtered_services.append(service)
+
+        # If no matches found, show sample services to understand the data
+        if not filtered_services:
+            print(f"[DEBUG] No container matches found. Sample services:")
+            for i, service in enumerate(all_services[:5]):
+                print(f"[DEBUG] Service {i+1}: {service['name']} - {service['description'][:100]}")
+
+        print(f"[DEBUG] Container filter found {len(filtered_services)} services")
+        return filtered_services
+
+    # For other categories, return services as-is
     return all_services
 
 
@@ -283,9 +461,17 @@ async def list_cloud_services(
     with intelligent caching to ensure fast response times and real-time data.
     """
     try:
+        print(f"[DEBUG] CLOUD SERVICES ENDPOINT CALLED: category={category}")  # Force debug output
         # Get services from cache or fetch from SDKs
         all_services = await _get_cached_or_fetch_services(provider, category)
-        
+        print(f"[DEBUG] Got {len(all_services)} services from cache/fetch for category {category}")
+
+        # Apply category-specific filtering if needed
+        if category:
+            print(f"[DEBUG] About to apply filtering for category: {category}")
+            all_services = _apply_category_filtering(all_services, category)
+            print(f"[DEBUG] After filtering: {len(all_services)} services")
+
         # Apply search filter
         if search:
             search_lower = search.lower()
@@ -607,7 +793,7 @@ async def compare_services(service_ids: str) -> Dict[str, Any]:
                 )
         
         if len(services) < 2:
-            valid_names = [s.get('name', s.get('id', 'Unknown')) for s in services]
+            valid_names = [s.get('name', s.get('id')) for s in services]
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Only {len(services)} valid service(s) found: {', '.join(valid_names)}. Need at least 2 for comparison."

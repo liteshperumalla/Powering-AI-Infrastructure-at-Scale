@@ -62,7 +62,7 @@ async def get_monitoring_dashboard(
                 "total_components_monitored": len(health_manager.health_checks),
                 "active_alerts": len(health_status.get('alerts', {}).get('active_alerts', [])),
                 "last_health_check": max([
-                    result.get('last_check', '') for result in health_status.get('components', {}).values()
+                    result.get('last_check') for result in health_status.get('components', {}).values()
                     if result.get('last_check')
                 ], default='')
             }
@@ -273,7 +273,7 @@ async def trigger_recovery(
             "data": {
                 "component_name": component_name,
                 "recovery_initiated": recovery_result.get('success', False),
-                "message": recovery_result.get('message', ''),
+                "message": recovery_result.get('message'),
                 "strategies_attempted": recovery_result.get('strategies_attempted', [])
             }
         }

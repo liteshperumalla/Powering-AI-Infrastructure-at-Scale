@@ -14,10 +14,10 @@ from openai import AsyncAzureOpenAI
 from openai.types.chat import ChatCompletion
 
 from .interface import (
-    LLMProviderInterface, 
-    LLMProvider, 
-    LLMRequest, 
-    LLMResponse, 
+    LLMProviderInterface,
+    LLMProvider,
+    LLMRequest,
+    LLMResponse,
     TokenUsage,
     LLMError,
     LLMAuthenticationError,
@@ -26,6 +26,7 @@ from .interface import (
     LLMModelNotFoundError,
     LLMTimeoutError
 )
+from ..services.llm_service import llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -147,39 +148,50 @@ class AzureOpenAIProvider(LLMProviderInterface):
     
     async def generate_response(self, request: LLMRequest) -> LLMResponse:
         """
-        Generate response using Azure OpenAI API.
-        
+        Generate response using Azure OpenAI API with enhanced timeout handling.
+
         Args:
             request: LLM request with prompt and parameters
-            
+
         Returns:
             LLM response with content and metadata
-            
+
         Raises:
             LLMError: For various API failures
         """
         start_time = time.time()
-        
+
         try:
             # Use model from request or fall back to default
             model = request.model or self.model
-            
-            # Prepare messages
-            messages = []
-            if request.system_prompt:
-                messages.append({"role": "system", "content": request.system_prompt})
-            messages.append({"role": "user", "content": request.prompt})
-            
-            # Make API call
-            response = await self.client.chat.completions.create(
-                model=model,
-                messages=messages,
-                temperature=request.temperature or self.temperature,
-                max_tokens=request.max_tokens or self.max_tokens,
-                top_p=1.0,
-                frequency_penalty=0,
-                presence_penalty=0
+
+            # Determine if this is a workflow request (longer timeout) or suggestion request (shorter timeout)
+            use_case = "workflow" if request.max_tokens and request.max_tokens > 1500 else "suggestions"
+
+            # Use our enhanced LLM service with appropriate timeout configuration
+            response_content = await llm_service.generate_workflow_response(
+                system_prompt=request.system_prompt or "You are a helpful AI assistant.",
+                user_prompt=request.prompt,
+                max_tokens=request.max_tokens or (4000 if use_case == "workflow" else 800),
+                temperature=request.temperature or self.temperature
             )
+
+            # Create mock response object for compatibility with existing interface
+            class MockResponse:
+                def __init__(self, content: str):
+                    self.choices = [type('Choice', (), {
+                        'message': type('Message', (), {
+                            'content': content
+                        })(),
+                        'finish_reason': 'stop'
+                    })()]
+                    self.usage = type('Usage', (), {
+                        'prompt_tokens': len(request.prompt.split()) * 1.3,  # Rough estimate
+                        'completion_tokens': len(content.split()) * 1.3,
+                        'total_tokens': len(request.prompt.split()) * 1.3 + len(content.split()) * 1.3
+                    })()
+
+            response = MockResponse(response_content)
             
             # Calculate response time
             response_time = time.time() - start_time

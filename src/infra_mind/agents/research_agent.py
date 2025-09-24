@@ -208,7 +208,7 @@ class ResearchAgent(BaseAgent):
                         
                         # Track unique sources
                         for result in search_result["results"]:
-                            source = result.get("source", "unknown")
+                            source = result.get("source")
                             if source not in web_search_results["sources_used"]:
                                 web_search_results["sources_used"].append(source)
                     
@@ -565,8 +565,8 @@ CRITICAL: Respond with ONLY the JSON object. No additional text."""
         unique_results = []
         
         for result in results:
-            url = result.get("url", "")
-            title = result.get("title", "")
+            url = result.get("url")
+            title = result.get("title")
             
             # Skip if we've seen this URL or very similar title
             if url in seen_urls:
@@ -577,7 +577,7 @@ CRITICAL: Respond with ONLY the JSON object. No additional text."""
             is_duplicate = False
             
             for existing_result in unique_results:
-                existing_title_words = set(existing_result.get("title", "").lower().split())
+                existing_title_words = set(existing_result.get("title").lower().split())
                 if len(title_words & existing_title_words) > len(title_words) * 0.7:
                     is_duplicate = True
                     break
@@ -615,13 +615,13 @@ CRITICAL: Respond with ONLY the JSON object. No additional text."""
         for i, result in enumerate(search_results[:10], 1):  # Top 10 results
             formatted_result = f"""
 Result {i}:
-- Title: {result.get('title', 'N/A')}
-- URL: {result.get('url', 'N/A')}
-- Source: {result.get('source', 'N/A')}
+- Title: {result.get('title')}
+- URL: {result.get('url')}
+- Source: {result.get('source')}
 - Focus Area: {result.get('focus_area', 'general')}
-- Published: {result.get('published_date', 'N/A')}
-- Snippet: {result.get('snippet', 'N/A')[:200]}...
-- Relevance Score: {result.get('relevance_score', 'N/A')}
+- Published: {result.get('published_date')}
+- Snippet: {result.get('snippet')[:200]}...
+- Relevance Score: {result.get('relevance_score')}
 """
             formatted_results.append(formatted_result)
         
@@ -1596,7 +1596,7 @@ BENCHMARK DATA:
 {self._format_data_for_llm(benchmark_data)}
 
 DATA VALIDATION:
-- Overall Quality: {data_validation.get('overall_quality', 'unknown')}
+- Overall Quality: {data_validation.get('overall_quality')}
 - Quality Score: {data_validation.get('quality_score', 0.0):.2f}/1.0
 - Data Freshness: {', '.join(data_validation.get('freshness_check', {}).keys())}
 
@@ -1718,7 +1718,7 @@ CRITICAL: Respond with ONLY the JSON object. No additional text."""
                     "key_findings": insights_data.get("key_market_findings", [])[:8],  # Limit findings
                     "recommendations": self._enhance_llm_recommendations(insights_data.get("strategic_recommendations", [])),
                     "market_intelligence": insights_data.get("market_intelligence", {}),
-                    "data_quality_assessment": data_validation.get("overall_quality", "unknown"),
+                    "data_quality_assessment": data_validation.get("overall_quality"),
                     "confidence_level": self._assess_confidence_level(data_validation, collected_data),
                     "research_summary": insights_data.get("research_summary", {}),
                     "llm_powered": True,
@@ -1864,7 +1864,7 @@ CRITICAL: Respond with ONLY the JSON object. No additional text."""
         insights = {
             "key_findings": [],
             "recommendations": [],
-            "data_quality_assessment": data_validation.get("overall_quality", "unknown"),
+            "data_quality_assessment": data_validation.get("overall_quality"),
             "confidence_level": "medium",
             "research_summary": {},
             "llm_powered": False,
@@ -2336,7 +2336,7 @@ CRITICAL: Respond with ONLY the JSON object. No additional text."""
                 for service_category, service_data in services.items():
                     if isinstance(service_data, dict) and "services" in service_data:
                         for service in service_data["services"]:
-                            service_name = service.get("name", "").lower()
+                            service_name = service.get("name").lower()
                             if any(indicator in service_name for indicator in serverless_indicators):
                                 serverless_count += 1
                                 break

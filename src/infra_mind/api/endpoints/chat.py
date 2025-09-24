@@ -609,9 +609,19 @@ async def send_message(
                 bot_response.get("ticket_id", f"CHAT-{uuid.uuid4().hex[:8].upper()}")
             )
         
+        # Auto-generate title after 3-4 messages if still using default title
+        if (len(conversation.messages) >= 4 and
+            (conversation.title == "New Chat" or not conversation.title or conversation.title.startswith("New "))):
+            try:
+                generated_title = await generate_conversation_title(conversation)
+                conversation.title = generated_title
+                logger.info(f"Auto-generated title for active conversation {conversation_id}: '{generated_title}'")
+            except Exception as e:
+                logger.warning(f"Failed to auto-generate title for active conversation {conversation_id}: {str(e)}")
+
         # Save updated conversation
         await conversation.save()
-        
+
         # Schedule background tasks
         background_tasks.add_task(
             _update_conversation_analytics,
@@ -642,6 +652,155 @@ async def send_message(
 
 class UpdateTitleRequest(BaseModel):
     title: str = Field(description="New conversation title")
+
+
+async def generate_conversation_title(conversation: Conversation) -> str:
+    """
+    Generate an appropriate title for a conversation based on its content.
+
+    Args:
+        conversation: The conversation to generate a title for
+
+    Returns:
+        Generated title string
+    """
+    try:
+        # Only generate title if we have enough messages (at least 2-4 exchanges)
+        if len(conversation.messages) < 2:
+            return conversation.title or "New Chat"
+
+        # Get the first few user messages to understand the conversation topic
+        user_messages = [msg.content for msg in conversation.messages if msg.role == MessageRole.USER][:3]
+        assistant_messages = [msg.content for msg in conversation.messages if msg.role == MessageRole.ASSISTANT][:2]
+
+        if not user_messages:
+            return conversation.title or "New Chat"
+
+        # Create a prompt for title generation
+        conversation_context = "\n".join([
+            "User: " + msg for msg in user_messages
+        ] + [
+            "Assistant: " + msg[:200] + ("..." if len(msg) > 200 else "") for msg in assistant_messages
+        ])
+
+        from infra_mind.llm.manager import LLMManager
+        from infra_mind.llm.interface import LLMRequest
+        from infra_mind.core.config import get_settings
+
+        # Initialize LLM manager
+        llm_config = {
+            "preferred_provider": "azure_openai",
+            "validation": {"enabled": False}
+        }
+        llm_manager = LLMManager(config=llm_config)
+
+        # Get Azure OpenAI model name
+        settings = get_settings()
+        azure_creds = settings.get_azure_openai_credentials()
+        model_name = azure_creds["deployment"] or "gpt-4"
+
+        title_prompt = f"""Based on this conversation, generate a concise, descriptive title (3-6 words max) that captures the main topic:
+
+{conversation_context}
+
+Generate only the title, nothing else. Make it specific and professional. Examples:
+- "AWS Lambda Setup Help"
+- "Kubernetes Deployment Issues"
+- "Cost Optimization Strategy"
+- "Infrastructure Security Review"
+- "Docker Configuration Guide"
+
+Title:"""
+
+        llm_request = LLMRequest(
+            prompt=title_prompt,
+            model=model_name,
+            system_prompt="You are a helpful assistant that generates concise, professional titles for technical conversations. Always respond with just the title, nothing else.",
+            max_tokens=50,
+            temperature=0.3,
+            context={
+                "agent_name": "title_generator",
+                "session_id": conversation.session_id
+            }
+        )
+
+        response = await llm_manager.process_request(llm_request)
+
+        # Clean up the response (remove quotes, extra whitespace, etc.)
+        title = response.content.strip().strip('"').strip("'").strip()
+
+        # Fallback to a default if generation fails or is too long/short
+        if not title or len(title) < 3 or len(title) > 60:
+            # Create a simple title based on the first user message
+            first_message = user_messages[0][:50]
+            if "aws" in first_message.lower():
+                title = "AWS Infrastructure Help"
+            elif "azure" in first_message.lower():
+                title = "Azure Infrastructure Help"
+            elif "gcp" in first_message.lower() or "google cloud" in first_message.lower():
+                title = "GCP Infrastructure Help"
+            elif "kubernetes" in first_message.lower() or "k8s" in first_message.lower():
+                title = "Kubernetes Help"
+            elif "docker" in first_message.lower():
+                title = "Docker Help"
+            elif "terraform" in first_message.lower():
+                title = "Terraform Help"
+            elif "cost" in first_message.lower():
+                title = "Cost Optimization"
+            elif "security" in first_message.lower():
+                title = "Security Guidance"
+            else:
+                title = "Infrastructure Help"
+
+        return title
+
+    except Exception as e:
+        logger.warning(f"Failed to generate conversation title: {str(e)}")
+        # Return a fallback title
+        return conversation.title or "New Chat"
+
+@router.post("/conversations/{conversation_id}/generate-title")
+async def generate_title_for_conversation(
+    conversation_id: str,
+    http_request: Request,
+    current_user: User = Depends(get_current_user)
+):
+    """Generate an automatic title for a conversation based on its content."""
+    try:
+        conversation = await Conversation.get(conversation_id)
+
+        if not conversation:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Conversation not found"
+            )
+
+        if conversation.user_id != str(current_user.id):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied"
+            )
+
+        # Generate new title
+        generated_title = await generate_conversation_title(conversation)
+        conversation.title = generated_title
+        conversation.last_activity = datetime.utcnow()
+        await conversation.save()
+
+        return {
+            "message": "Title generated successfully",
+            "title": generated_title
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to generate conversation title: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate title"
+        )
+
 
 @router.put("/conversations/{conversation_id}/title")
 async def update_conversation_title(
@@ -743,10 +902,22 @@ async def end_conversation(
                 detail="Access denied"
             )
         
+        # Generate a meaningful title if the conversation still has the default title
+        if conversation.title == "New Chat" or not conversation.title or conversation.title.startswith("New "):
+            try:
+                generated_title = await generate_conversation_title(conversation)
+                conversation.title = generated_title
+                logger.info(f"Auto-generated title for conversation {conversation_id}: '{generated_title}'")
+            except Exception as e:
+                logger.warning(f"Failed to auto-generate title for conversation {conversation_id}: {str(e)}")
+
         conversation.end_conversation(satisfaction_rating)
         await conversation.save()
-        
-        return {"message": "Conversation ended successfully"}
+
+        return {
+            "message": "Conversation ended successfully",
+            "title": conversation.title
+        }
         
     except HTTPException:
         raise

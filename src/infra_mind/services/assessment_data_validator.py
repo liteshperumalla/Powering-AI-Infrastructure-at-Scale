@@ -88,7 +88,7 @@ class AssessmentDataValidator:
             if not assessment:
                 return False, ['Assessment not found'], []
             
-            logger.info(f"🔍 Validating assessment: {assessment.get('title', 'Unknown')}")
+            logger.info(f"🔍 Validating assessment: {assessment.get('title')}")
             
             issues_found = []
             fixes_applied = []
@@ -426,7 +426,7 @@ class AssessmentDataValidator:
                         }
                         
                     rec_updates['cost_estimates'] = cost_estimates
-                    fixes.append(f"Added assessment-based cost estimates for recommendation {rec.get('title', 'Unknown')}")
+                    fixes.append(f"Added assessment-based cost estimates for recommendation {rec.get('title')}")
                     
                 except Exception as e:
                     logger.warning(f"Failed to calculate assessment-based costs for recommendation {rec.get('_id')}: {e}")
@@ -440,7 +440,7 @@ class AssessmentDataValidator:
                         'calculation_source': f"error_fallback_{str(e)[:50]}"
                     }
                     rec_updates['cost_estimates'] = cost_estimates
-                    fixes.append(f"Added fallback cost estimates for recommendation {rec.get('title', 'Unknown')}")
+                    fixes.append(f"Added fallback cost estimates for recommendation {rec.get('title')}")
             
             # Fix missing technical data
             if not rec.get('recommendation_data') or not rec.get('recommendation_data', {}).get('provider'):
@@ -465,7 +465,7 @@ class AssessmentDataValidator:
                     'migration_complexity': random.choice(['low', 'medium', 'high'])
                 }
                 rec_updates['recommendation_data'] = recommendation_data
-                fixes.append(f"Added technical data for recommendation {rec.get('title', 'Unknown')}")
+                fixes.append(f"Added technical data for recommendation {rec.get('title')}")
             
             # Fix missing technical specifications
             if not rec.get('technical_specifications'):
@@ -479,7 +479,7 @@ class AssessmentDataValidator:
                     'disaster_recovery_rpo': f"{random.randint(15, 240)} minutes"
                 }
                 rec_updates['technical_specifications'] = technical_specs
-                fixes.append(f"Added technical specifications for recommendation {rec.get('title', 'Unknown')}")
+                fixes.append(f"Added technical specifications for recommendation {rec.get('title')}")
             
             if rec_updates:
                 await db.recommendations.update_one(
@@ -507,7 +507,7 @@ class AssessmentDataValidator:
         # Check for duplicate reports and remove them
         reports_by_type = {}
         for report in reports:
-            report_type = report.get('report_type', 'unknown')
+            report_type = report.get('report_type')
             if report_type not in reports_by_type:
                 reports_by_type[report_type] = []
             reports_by_type[report_type].append(report)
@@ -541,7 +541,7 @@ class AssessmentDataValidator:
                     {'_id': report['_id']},
                     {'$set': updates}
                 )
-                fixes.append(f"Fixed report quality metrics for {report.get('title', 'Unknown')}")
+                fixes.append(f"Fixed report quality metrics for {report.get('title')}")
         
         return issues, fixes
     
@@ -658,7 +658,7 @@ class AssessmentDataValidator:
             
             for assessment in assessments:
                 assessment_id = str(assessment['_id'])
-                title = assessment.get('title', 'Unknown')
+                title = assessment.get('title')
                 
                 try:
                     success, issues, fixes = await self.validate_and_enhance_assessment(assessment_id)

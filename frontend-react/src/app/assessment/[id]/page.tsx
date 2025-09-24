@@ -204,11 +204,11 @@ export default function AssessmentDetailPage() {
               <Box sx={{ mb: 2 }}>
                 <LinearProgress
                   variant="determinate"
-                  value={assessment.completion_percentage || 0}
+                  value={assessment.progress_percentage || assessment.completion_percentage || 0}
                   sx={{ height: 8, borderRadius: 4 }}
                 />
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  {assessment.completion_percentage || 0}% Complete
+                  {assessment.progress_percentage || assessment.completion_percentage || 0}% Complete
                 </Typography>
               </Box>
             </CardContent>

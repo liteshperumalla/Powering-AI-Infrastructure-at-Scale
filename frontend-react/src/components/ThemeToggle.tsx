@@ -20,7 +20,7 @@ const ThemeToggle: React.FC<ThemeToggleProps> = ({
   const muiTheme = useMuiTheme();
 
   const isDark = mode === 'dark';
-  const icon = isDark ? <Brightness7 /> : <Brightness4 />;
+  const icon = isDark ? <Brightness4 /> : <Brightness7 />;
   const tooltipText = `Switch to ${isDark ? 'light' : 'dark'} mode`;
 
   const button = (

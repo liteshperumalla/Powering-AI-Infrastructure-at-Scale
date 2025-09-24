@@ -153,10 +153,10 @@ class PDFReportGenerator:
             created_date = created_date.strftime('%Y-%m-%d')
         
         metadata_data = [
-            ['Report ID:', report_data.get('report_id', 'N/A')],
+            ['Report ID:', report_data.get('report_id')],
             ['Generated:', str(created_date)],
             ['Status:', report_data.get('status', 'Completed').title()],
-            ['Pages:', str(report_data.get('total_pages', 'N/A'))],
+            ['Pages:', str(report_data.get('total_pages'))],
             ['Word Count:', f"{report_data.get('word_count', 0):,}"]
         ]
         
@@ -176,7 +176,7 @@ class PDFReportGenerator:
         
         # Executive summary if available
         sections = report_data.get('sections', [])
-        exec_summary = next((s for s in sections if 'executive' in s.get('title', '').lower()), None)
+        exec_summary = next((s for s in sections if 'executive' in s.get('title').lower()), None)
         
         if exec_summary and exec_summary.get('content'):
             story.append(Paragraph("Executive Summary", self.styles['SectionHeading']))
@@ -191,7 +191,7 @@ class PDFReportGenerator:
         
         for section in sections:
             section_title = section.get('title', 'Untitled Section')
-            section_content = section.get('content', '')
+            section_content = section.get('content')
             section_type = section.get('type', 'content')
             
             # Skip executive summary as it's already in title page
@@ -245,8 +245,8 @@ class PDFReportGenerator:
         
         Report Generation Details:
         • Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-        • Report ID: {report_data.get('report_id', 'N/A')}
-        • Assessment ID: {report_data.get('assessment_id', 'N/A')}
+        • Report ID: {report_data.get('report_id')}
+        • Assessment ID: {report_data.get('assessment_id')}
         • Platform Version: 2.0
         
         For questions about this report, please contact your infrastructure advisory team.

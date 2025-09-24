@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from .base import BaseAgent, AgentConfig, AgentRole
 from .tools import ToolResult
 from ..models.assessment import Assessment
+from ..core.smart_defaults import smart_get, SmartDefaults
 
 logger = logging.getLogger(__name__)
 
@@ -138,11 +139,11 @@ class CloudEngineerAgent(BaseAgent):
             analysis_prompt = f"""
             Analyze the following business requirements and determine specific infrastructure needs:
             
-            Company Size: {requirements.get("company_size", "unknown")}
-            Industry: {requirements.get("industry", "unknown")}
+            Company Size: {smart_get(requirements, "company_size")}
+            Industry: {smart_get(requirements, "industry")}
             Primary Goals: {requirements.get("primary_goals", [])}
             Compliance Requirements: {requirements.get("compliance_requirements", {})}
-            Expected Users: {requirements.get("expected_users", "unknown")}
+            Expected Users: {smart_get(requirements, "expected_users")}
             
             Provide infrastructure assessment in JSON format with these categories:
             - compute_requirements: (light/medium/heavy/enterprise)
@@ -342,9 +343,9 @@ class CloudEngineerAgent(BaseAgent):
             TOTAL MONTHLY COST: ${total_monthly_cost}
             
             BUSINESS CONTEXT:
-            - Company Size: {requirements.get("company_size", "unknown")}
-            - Industry: {requirements.get("industry", "unknown")}
-            - Budget Range: {requirements.get("budget_range", "unknown")}
+            - Company Size: {smart_get(requirements, "company_size")}
+            - Industry: {smart_get(requirements, "industry")}
+            - Budget Range: {smart_get(requirements, "budget_range")}
             
             Provide cost analysis in JSON format with:
             - monthly_estimate: total monthly cost with ranges (low/medium/high scenarios)
@@ -740,10 +741,10 @@ class CloudEngineerAgent(BaseAgent):
             
             return {
                 "title": assessment_dict.get("title", "Infrastructure Assessment"),
-                "description": assessment_dict.get("description", ""),
+                "description": assessment_dict.get("description"),
                 "business_requirements": business_req,
                 "technical_requirements": technical_req,
-                "assessment_id": str(assessment_dict.get("id", "")),
+                "assessment_id": str(assessment_dict.get("id")),
                 "created_at": assessment_dict.get("created_at"),
                 "priority": assessment_dict.get("priority", "medium")
             }
@@ -756,8 +757,8 @@ class CloudEngineerAgent(BaseAgent):
         prompt = f"""As a Cloud Engineer, analyze the following infrastructure assessment and provide detailed technical analysis:
 
 ASSESSMENT OVERVIEW:
-Title: {assessment_data.get('title', 'N/A')}
-Description: {assessment_data.get('description', 'N/A')}
+Title: {assessment_data.get('title')}
+Description: {assessment_data.get('description')}
 
 BUSINESS REQUIREMENTS:
 {self._format_requirements(assessment_data.get('business_requirements', {}))}
@@ -1029,7 +1030,7 @@ Respond in JSON format with structured guidance for each section."""
                     services = category_data["services"][:3]  # Limit to top 3 per category
                     formatted.append(f"  {category.title()}:")
                     for service in services:
-                        name = service.get("name", "Unknown")
+                        name = service.get("name")
                         specs = service.get("specifications", {})
                         pricing = service.get("pricing", {})
                         formatted.append(f"    - {name}: {specs} (${pricing})")
@@ -1043,8 +1044,8 @@ Respond in JSON format with structured guidance for each section."""
             cost_breakdown = {}
             
             for rec in recommendations:
-                service_name = rec.get("service_name", "Unknown")
-                provider = rec.get("provider", "unknown")
+                service_name = rec.get("service_name")
+                provider = smart_get(rec, "provider", requirements)
                 
                 # Use cloud API tool to get real pricing data
                 try:
@@ -1146,7 +1147,7 @@ Respond in JSON format with structured guidance for each section."""
                             provider = CloudProvider.AWS
                         
                         service_rec = ServiceRecommendation(
-                            service_name=service.get("name", "Unknown"),
+                            service_name=service.get("name"),
                             provider=provider,
                             service_category=service.get("category", "general"),
                             estimated_monthly_cost=service.get("estimated_cost", 0),
@@ -1168,12 +1169,15 @@ Respond in JSON format with structured guidance for each section."""
                     confidence_level = RecommendationConfidence.LOW
                 
                 # Create main recommendation
+                # Use the base agent utility for unique title generation
+                unique_title = self.generate_unique_title(rec_data, "Cloud Service")
+
                 recommendation = Recommendation(
                     assessment_id=str(self.current_assessment.id) if self.current_assessment else "unknown",
                     agent_name=self.config.name,
                     agent_version=self.config.version,
-                    title=rec_data.get("title", "Cloud Service Recommendation"),
-                    summary=rec_data.get("description", "")[:500],
+                    title=unique_title,
+                    summary=rec_data.get("description")[:500],
                     confidence_level=confidence_level,
                     confidence_score=confidence_score,
                     recommendation_data=rec_data,
@@ -1534,7 +1538,7 @@ Respond in JSON format with structured guidance for each section."""
     
     def _assess_compliance_needs(self, business_req: Dict[str, Any]) -> Dict[str, Any]:
         """Assess compliance requirements."""
-        industry = business_req.get("industry", "")
+        industry = business_req.get("industry")
         compliance_reqs = business_req.get("compliance_requirements", {})
         
         high_compliance = industry in ["healthcare", "finance", "fintech"]
@@ -1591,8 +1595,8 @@ Respond in JSON format with structured guidance for each section."""
                         service_info = {
                             "provider": provider,
                             "category": category,
-                            "name": service.get("name", "Unknown"),
-                            "service_id": service.get("service_id", ""),
+                            "name": service.get("name"),
+                            "service_id": service.get("service_id"),
                             "pricing": service.get("pricing", {}),
                             "specifications": service.get("specifications", {}),
                             "features": service.get("features", [])
@@ -1667,7 +1671,7 @@ Respond in JSON format with structured guidance for each section."""
             score += 5
         
         # Provider preference (20% weight)
-        provider = service.get("provider", "")
+        provider = service.get("provider")
         if provider == "aws":
             score += 20  # AWS gets slight preference for maturity
         elif provider == "azure":
@@ -1769,8 +1773,8 @@ Respond in JSON format with structured guidance for each section."""
     def _create_service_rationale(self, service: Dict[str, Any], category: str, 
                                  technical_analysis: Dict[str, Any]) -> str:
         """Create rationale for service recommendation."""
-        provider = service.get("provider", "").upper()
-        name = service.get("name", "")
+        provider = service.get("provider").upper()
+        name = service.get("name")
         score = service.get("ranking_score", 0)
         
         rationale = f"{provider} {name} scored highest ({score:.1f}/100) based on cost-effectiveness, performance, and feature set."
@@ -1791,8 +1795,8 @@ Respond in JSON format with structured guidance for each section."""
     
     def _create_implementation_steps(self, service: Dict[str, Any], category: str) -> List[str]:
         """Create implementation steps for a service."""
-        provider = service.get("provider", "").lower()
-        name = service.get("name", "")
+        provider = service.get("provider").lower()
+        name = service.get("name")
         
         base_steps = [
             f"Set up {provider.upper()} account and configure billing",
@@ -1831,7 +1835,7 @@ Respond in JSON format with structured guidance for each section."""
     def _assess_business_alignment(self, service: Dict[str, Any], technical_analysis: Dict[str, Any]) -> Dict[str, Any]:
         """Assess how well service aligns with business goals."""
         # Simple alignment assessment
-        provider = service.get("provider", "")
+        provider = service.get("provider")
         pricing = service.get("pricing", {})
         hourly_price = pricing.get("hourly", pricing.get("hourly_price", 1.0))
         
@@ -2395,8 +2399,8 @@ Respond in JSON format with structured guidance for each section."""
     
     def _fallback_infrastructure_analysis(self, requirements: Dict[str, Any]) -> Dict[str, Any]:
         """Fallback infrastructure analysis when LLM fails."""
-        company_size = requirements.get("company_size", "unknown")
-        industry = requirements.get("industry", "unknown")
+        company_size = smart_get(requirements, "company_size")
+        industry = smart_get(requirements, "industry")
         
         return {
             "compute_requirements": "enterprise" if company_size == "large" else "medium",
@@ -2529,12 +2533,12 @@ Respond in JSON format with structured guidance for each section."""
             # Adjust architecture based on company size
             if company_size == "small" and architecture.get("architecture_pattern") == "microservices":
                 validated["architecture_pattern"] = "monolithic"
-                validated["reasoning"] = validated.get("reasoning", "") + " Adjusted to monolithic for small company size."
+                validated["reasoning"] = validated.get("reasoning") + " Adjusted to monolithic for small company size."
             
             # Enhance security for regulated industries
             if industry in ["finance", "healthcare"] and architecture.get("security_architecture") == "basic":
                 validated["security_architecture"] = "zero_trust"
-                validated["reasoning"] = validated.get("reasoning", "") + f" Enhanced security for {industry} industry compliance."
+                validated["reasoning"] = validated.get("reasoning") + f" Enhanced security for {industry} industry compliance."
             
             # Add validation timestamp
             validated["validation_timestamp"] = datetime.now(timezone.utc).isoformat()

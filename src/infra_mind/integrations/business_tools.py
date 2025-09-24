@@ -866,7 +866,7 @@ class BusinessToolsIntegrator:
         Date: {start_time.strftime('%Y-%m-%d')}
         Time: {start_time.strftime('%H:%M')} - {end_time.strftime('%H:%M')} UTC
         
-        Calendar Link: {event_data.get('calendar_link', 'N/A')}
+        Calendar Link: {event_data.get('calendar_link')}
         
         Please add this meeting to your calendar and join at the scheduled time.
         

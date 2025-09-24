@@ -277,7 +277,7 @@ class GCPBillingClient:
             # Find matching service
             target_service = None
             for service in services:
-                if service_name.lower() in service.get('displayName', '').lower():
+                if service_name.lower() in service.get('displayName').lower():
                     target_service = service
                     break
             
@@ -296,8 +296,8 @@ class GCPBillingClient:
             
             pricing_data = {}
             for sku in skus:
-                sku_id = sku.get('skuId', '')
-                description = sku.get('description', '')
+                sku_id = sku.get('skuId')
+                description = sku.get('description')
                 
                 # Check if SKU is for the specified region
                 service_regions = sku.get('serviceRegions', [])
@@ -319,7 +319,7 @@ class GCPBillingClient:
                         pricing_data[sku_id] = {
                             "description": description,
                             "unit_price": unit_price,
-                            "base_unit": pricing_expr.get('baseUnit', ''),
+                            "base_unit": pricing_expr.get('baseUnit'),
                             "currency": pricing_info[0].get('currencyCode', 'USD')
                         }
             
@@ -328,7 +328,7 @@ class GCPBillingClient:
                 "region": region,
                 "pricing_data": pricing_data,
                 "real_data": True,
-                "service_id": target_service.get('name', '') if target_service else None
+                "service_id": target_service.get('name') if target_service else None
             }
             
         except HttpError as e:
@@ -463,7 +463,7 @@ class GCPComputeClient:
             
             services = []
             for machine_type in machine_types:
-                name = machine_type.get('name', '')
+                name = machine_type.get('name')
                 guest_cpus = machine_type.get('guestCpus', 1)
                 memory_mb = machine_type.get('memoryMb', 1024)
                 memory_gb = memory_mb / 1024.0
@@ -540,9 +540,9 @@ class GCPComputeClient:
             
             region_zones = []
             for zone in zones:
-                zone_region = zone.get('region', '').split('/')[-1]  # Extract region from URL
+                zone_region = zone.get('region').split('/')[-1]  # Extract region from URL
                 if zone_region == region:
-                    region_zones.append(zone.get('name', ''))
+                    region_zones.append(zone.get('name'))
             
             return region_zones[:3] if region_zones else [f"{region}-a", f"{region}-b", f"{region}-c"]
             
@@ -557,7 +557,7 @@ class GCPComputeClient:
             for sku_id, sku_data in pricing_lookup.items():
                 # Check if sku_data is a dictionary or just a price value
                 if isinstance(sku_data, dict):
-                    if machine_name.lower() in sku_data.get('description', '').lower():
+                    if machine_name.lower() in sku_data.get('description').lower():
                         return sku_data.get('unit_price', 0.0)
                 elif isinstance(sku_data, (int, float)):
                     # If it's just a price value, use it for exact name matches
@@ -697,7 +697,7 @@ class GCPSQLClient:
             
             services = []
             for tier in tiers:
-                tier_name = tier.get('tier', '')
+                tier_name = tier.get('tier')
                 ram_bytes = tier.get('RAM', 0)
                 memory_gb = ram_bytes / (1024 ** 3) if ram_bytes else 0
                 disk_quota = tier.get('DiskQuota', 0)
@@ -771,7 +771,7 @@ class GCPSQLClient:
         """Get SQL tier price from pricing lookup or calculate estimate."""
         # Try to find exact match in pricing data
         for sku_id, sku_data in pricing_lookup.items():
-            if tier_name.lower() in sku_data.get('description', '').lower():
+            if tier_name.lower() in sku_data.get('description').lower():
                 return sku_data.get('unit_price', 0.0)
         
         # Fallback to calculated price
@@ -1071,8 +1071,8 @@ class GCPGKEClient:
                             
                             service = CloudService(
                                 provider=CloudProvider.GCP,
-                                service_name=f"GKE Node Pool - {node_pool.get('name', 'default')}",
-                                service_id=f"gke_{node_pool.get('name', 'default').replace('-', '_')}",
+                                service_name=f"GKE Node Pool - {node_pool.get('name')}",
+                                service_id=f"gke_{node_pool.get('name').replace('-', '_')}",
                                 category=ServiceCategory.CONTAINER,
                                 region=region,
                                 description=f"GKE node pool with {machine_type} instances",
@@ -1082,7 +1082,7 @@ class GCPGKEClient:
                                     "disk_size_gb": disk_size_gb,
                                     "disk_type": config.get('diskType', 'pd-standard'),
                                     "preemptible": config.get('preemptible', False),
-                                    "cluster_name": cluster.get('name', ''),
+                                    "cluster_name": cluster.get('name'),
                                     "initial_node_count": node_pool.get('initialNodeCount', 1)
                                 },
                                 features=["auto_scaling", "auto_upgrade", "auto_repair", "network_policy"]
@@ -1243,10 +1243,10 @@ class GCPAssetClient:
             assets = []
             for asset in assets_response.get('assets', []):
                 asset_info = {
-                    "name": asset.get('name', ''),
-                    "asset_type": asset.get('assetType', ''),
+                    "name": asset.get('name'),
+                    "asset_type": asset.get('assetType'),
                     "resource": asset.get('resource', {}),
-                    "update_time": asset.get('updateTime', '')
+                    "update_time": asset.get('updateTime')
                 }
                 assets.append(asset_info)
             
@@ -1338,10 +1338,10 @@ class GCPRecommenderClient:
             recommendations = []
             for recommendation in recommendations_response.get('recommendations', []):
                 rec_info = {
-                    "name": recommendation.get('name', ''),
-                    "description": recommendation.get('description', ''),
-                    "recommender_subtype": recommendation.get('recommenderSubtype', ''),
-                    "last_refresh_time": recommendation.get('lastRefreshTime', ''),
+                    "name": recommendation.get('name'),
+                    "description": recommendation.get('description'),
+                    "recommender_subtype": recommendation.get('recommenderSubtype'),
+                    "last_refresh_time": recommendation.get('lastRefreshTime'),
                     "priority": recommendation.get('priority', 'UNKNOWN'),
                     "state": recommendation.get('state', {}).get('state', 'UNKNOWN'),
                     "primary_impact": recommendation.get('primaryImpact', {})

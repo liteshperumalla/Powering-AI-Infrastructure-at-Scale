@@ -466,7 +466,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
     
     def _is_json_request(self, request: Request) -> bool:
         """Check if request contains JSON data."""
-        content_type = request.headers.get("content-type", "")
+        content_type = request.headers.get("content-type")
         return "application/json" in content_type.lower()
     
     def _add_security_headers(self, response: Response) -> Response:

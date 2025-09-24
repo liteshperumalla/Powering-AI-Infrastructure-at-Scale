@@ -57,7 +57,7 @@ class AgentEvent:
         return cls(
             event_id=data.get("event_id", str(uuid.uuid4())),
             event_type=EventType(data.get("event_type", EventType.AGENT_COMPLETED.value)),
-            agent_name=data.get("agent_name", ""),
+            agent_name=data.get("agent_name"),
             timestamp=datetime.fromisoformat(data.get("timestamp", datetime.now(timezone.utc).isoformat())),
             data=data.get("data", {}),
             metadata=data.get("metadata", {})

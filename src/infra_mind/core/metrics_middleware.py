@@ -58,7 +58,7 @@ class MetricsMiddleware(BaseHTTPMiddleware):
                     metadata={
                         'method': request.method,
                         'path': request.url.path,
-                        'user_agent': request.headers.get('user-agent', ''),
+                        'user_agent': request.headers.get('user-agent'),
                         'ip_address': request.client.host if request.client else None
                     }
                 )

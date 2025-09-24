@@ -600,7 +600,7 @@ class LangGraphOrchestrator:
         
         return {
             "workflow_id": workflow_id,
-            "name": config.get("name", "Unknown"),
+            "name": config.get("name"),
             "status": state.get("status"),
             "progress": state.get("progress", {}),
             "completed_agents": state.get("completed_agents", []),

@@ -291,7 +291,7 @@ class WebResearchAgent(BaseAgent):
                     
                     # Track unique sources
                     for result in search_result["results"]:
-                        source = result.get("source", "unknown")
+                        source = result.get("source")
                         if source not in topic_data["sources_used"]:
                             topic_data["sources_used"].append(source)
                 
@@ -337,12 +337,12 @@ class WebResearchAgent(BaseAgent):
             focus = result.get("strategy_focus", "general")
             if focus in categorized:
                 categorized[focus].append({
-                    "title": result.get("title", ""),
-                    "url": result.get("url", ""),
-                    "snippet": result.get("snippet", ""),
-                    "source": result.get("source", ""),
+                    "title": result.get("title"),
+                    "url": result.get("url"),
+                    "snippet": result.get("snippet"),
+                    "source": result.get("source"),
                     "relevance_score": result.get("relevance_score", 0.5),
-                    "published_date": result.get("published_date", "")
+                    "published_date": result.get("published_date")
                 })
         
         # Sort each category by relevance score
@@ -370,8 +370,8 @@ class WebResearchAgent(BaseAgent):
         # Analyze titles and snippets for key patterns
         all_text = []
         for result in results:
-            title = result.get("title", "")
-            snippet = result.get("snippet", "")
+            title = result.get("title")
+            snippet = result.get("snippet")
             all_text.append(f"{title} {snippet}")
         
         combined_text = " ".join(all_text).lower()
@@ -393,7 +393,7 @@ class WebResearchAgent(BaseAgent):
             insights.append(f"Competitive analysis data available for {topic}")
         
         # Add source diversity insight
-        unique_sources = set(result.get("source", "unknown") for result in results)
+        unique_sources = set(result.get("source") for result in results)
         if len(unique_sources) > 2:
             insights.append(f"Information sourced from {len(unique_sources)} different platforms")
         
@@ -412,7 +412,7 @@ class WebResearchAgent(BaseAgent):
         growth_terms = ["growth", "increase", "expansion", "growing", "rising"]
         
         for result in results:
-            text = f"{result.get('title', '')} {result.get('snippet', '')}".lower()
+            text = f"{result.get('title')} {result.get('snippet')}".lower()
             
             # Count market mentions
             if "market" in text:
@@ -430,7 +430,7 @@ class WebResearchAgent(BaseAgent):
             
             # Look for market size information
             if re.search(r'\$\d+.*billion|\$\d+.*million|market size', text):
-                market_data["market_size_info"].append(result.get("title", ""))
+                market_data["market_size_info"].append(result.get("title"))
         
         return market_data
     
@@ -448,7 +448,7 @@ class WebResearchAgent(BaseAgent):
         integration_terms = ["integration", "api", "sdk", "connector", "plugin"]
         
         for result in results:
-            text = f"{result.get('title', '')} {result.get('snippet', '')}".lower()
+            text = f"{result.get('title')} {result.get('snippet')}".lower()
             
             # Count technical mentions
             if any(tech in text for tech in technologies):
@@ -485,7 +485,7 @@ class WebResearchAgent(BaseAgent):
         savings_terms = ["save", "discount", "cheaper", "cost-effective", "value"]
         
         for result in results:
-            text = f"{result.get('title', '')} {result.get('snippet', '')}".lower()
+            text = f"{result.get('title')} {result.get('snippet')}".lower()
             
             # Count pricing mentions
             if any(term in text for term in cost_terms):
@@ -901,17 +901,17 @@ class WebResearchAgent(BaseAgent):
                 pricing_data["search_results"][provider] = {
                     "query": query,
                     "results": search_result.get("results", []),
-                    "search_method": search_result.get("metadata", {}).get("search_method", "unknown")
+                    "search_method": search_result.get("metadata", {}).get("search_method")
                 }
                 
                 # Extract pricing insights from results
                 for result in search_result.get("results", []):
-                    snippet = result.get("snippet", "").lower()
+                    snippet = result.get("snippet").lower()
                     if any(term in snippet for term in ["$", "price", "cost", "pricing"]):
                         pricing_data["pricing_insights"].append({
                             "provider": provider,
-                            "insight": result.get("snippet", "")[:200],
-                            "source": result.get("url", "")
+                            "insight": result.get("snippet")[:200],
+                            "source": result.get("url")
                         })
                 
             except Exception as e:
@@ -949,14 +949,14 @@ class WebResearchAgent(BaseAgent):
                     
                     # Extract market insights
                     for result in search_result.get("results", []):
-                        title = result.get("title", "").lower()
-                        snippet = result.get("snippet", "").lower()
+                        title = result.get("title").lower()
+                        snippet = result.get("snippet").lower()
                         if any(term in f"{title} {snippet}" for term in ["leader", "market share", "better", "advantage"]):
                             competitive_data["market_insights"].append({
                                 "comparison": comparison_key,
-                                "insight": result.get("title", ""),
-                                "detail": result.get("snippet", "")[:150],
-                                "source": result.get("url", "")
+                                "insight": result.get("title"),
+                                "detail": result.get("snippet")[:150],
+                                "source": result.get("url")
                             })
                     
                     await asyncio.sleep(0.3)  # Rate limiting
@@ -992,14 +992,14 @@ class WebResearchAgent(BaseAgent):
                 
                 # Extract emerging trends
                 for result in search_result.get("results", []):
-                    title = result.get("title", "").lower()
-                    snippet = result.get("snippet", "").lower()
+                    title = result.get("title").lower()
+                    snippet = result.get("snippet").lower()
                     if any(term in f"{title} {snippet}" for term in ["growing", "emerging", "trend", "adoption", "increase"]):
                         trend_data["emerging_trends"].append({
                             "keyword": keyword,
-                            "trend": result.get("title", ""),
-                            "description": result.get("snippet", "")[:150],
-                            "source": result.get("url", "")
+                            "trend": result.get("title"),
+                            "description": result.get("snippet")[:150],
+                            "source": result.get("url")
                         })
                 
             except Exception as e:
@@ -1034,15 +1034,15 @@ class WebResearchAgent(BaseAgent):
                 
                 # Extract compliance updates
                 for result in search_result.get("results", []):
-                    title = result.get("title", "").lower()
-                    snippet = result.get("snippet", "").lower()
+                    title = result.get("title").lower()
+                    snippet = result.get("snippet").lower()
                     if any(term in f"{title} {snippet}" for term in ["update", "new", "requirement", "change", "compliance"]):
                         regulatory_data["compliance_updates"].append({
                             "framework": framework,
-                            "update": result.get("title", ""),
-                            "details": result.get("snippet", "")[:150],
-                            "source": result.get("url", ""),
-                            "published_date": result.get("published_date", "")
+                            "update": result.get("title"),
+                            "details": result.get("snippet")[:150],
+                            "source": result.get("url"),
+                            "published_date": result.get("published_date")
                         })
                 
             except Exception as e:
@@ -1077,14 +1077,14 @@ class WebResearchAgent(BaseAgent):
                 
                 # Extract best practices
                 for result in search_result.get("results", []):
-                    title = result.get("title", "").lower()
-                    snippet = result.get("snippet", "").lower()
+                    title = result.get("title").lower()
+                    snippet = result.get("snippet").lower()
                     if any(term in f"{title} {snippet}" for term in ["best practice", "recommendation", "guide", "pattern", "architecture"]):
                         best_practices_data["best_practices"].append({
                             "provider": provider,
-                            "practice": result.get("title", ""),
-                            "description": result.get("snippet", "")[:150],
-                            "source": result.get("url", "")
+                            "practice": result.get("title"),
+                            "description": result.get("snippet")[:150],
+                            "source": result.get("url")
                         })
                 
             except Exception as e:
@@ -1687,7 +1687,7 @@ class WebResearchAgent(BaseAgent):
             if "prices_found" in extracted_content:
                 for price in extracted_content["prices_found"]:
                     competitive_analysis["pricing_comparisons"].append({
-                        "provider": data_item.get("provider", "unknown"),
+                        "provider": data_item.get("provider"),
                         "price": price,
                         "source": data_item["source_url"]
                     })
@@ -1880,7 +1880,7 @@ class WebResearchAgent(BaseAgent):
                 if "prices_found" in extracted_content:
                     for price in extracted_content["prices_found"]:
                         web_prices.append({
-                            "provider": item.get("provider", "unknown"),
+                            "provider": item.get("provider"),
                             "amount": price.get("amount"),
                             "unit": price.get("unit"),
                             "source": item["source_url"]

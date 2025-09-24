@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import ResponsiveLayout from '../../components/ResponsiveLayout';
 import {
   Container,
   Typography,
@@ -36,7 +37,7 @@ import {
   TrendingUp,
   ThumbUp,
   ThumbDown,
-  Sentiment,
+  Face as Sentiment,
 } from '@mui/icons-material';
 import { 
   submitFeedback, 
@@ -157,7 +158,8 @@ export default function FeedbackPage() {
   }
 
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+    <ResponsiveLayout title="User Feedback">
+      <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
         <Box>
@@ -504,6 +506,7 @@ export default function FeedbackPage() {
         </TabPanel>
       </Paper>
     </Container>
+    </ResponsiveLayout>
   );
 }
 

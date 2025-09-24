@@ -111,7 +111,7 @@ class AWSClient(BaseCloudClient):
             
             # Test credentials with timeout
             identity = test_client.get_caller_identity()
-            logger.info(f"AWS credentials validated for account: {identity.get('Account', 'unknown')}")
+            logger.info(f"AWS credentials validated for account: {identity.get('Account')}")
             return True
             
         except (NoCredentialsError, ClientError, BotoCoreError) as e:
@@ -253,7 +253,7 @@ class AWSClient(BaseCloudClient):
                 await asyncio.sleep(base_delay * (2 ** attempt))
                 
             except ClientError as e:
-                error_code = e.response.get('Error', {}).get('Code', 'Unknown')
+                error_code = e.response.get('Error', {}).get('Code')
                 
                 if error_code in ['Throttling', 'ThrottlingException', 'RequestLimitExceeded']:
                     if attempt == max_retries:
@@ -459,7 +459,7 @@ class AWSClient(BaseCloudClient):
                 
                 if (attributes.get("servicecode") == "AmazonEC2" and 
                     attributes.get("productFamily") == "Storage" and
-                    "gp3" in attributes.get("volumeType", "").lower()):
+                    "gp3" in attributes.get("volumeType").lower()):
                     
                     # Extract pricing from terms (simplified)
                     terms = product.get("terms", {})
@@ -834,7 +834,7 @@ class AWSEC2Client:
                     specifications={
                         "vcpus": instance_type.get('VCpuInfo', {}).get('DefaultVCpus', 0),
                         "memory_gb": round(instance_type.get('MemoryInfo', {}).get('SizeInMiB', 0) / 1024, 1),
-                        "network_performance": instance_type.get('NetworkInfo', {}).get('NetworkPerformance', 'Unknown'),
+                        "network_performance": instance_type.get('NetworkPerformance'),
                         "instance_storage": instance_type.get('InstanceStorageInfo', {}).get('TotalSizeInGB', 0)
                     },
                     features=["ebs_optimized", "enhanced_networking", "placement_groups"]

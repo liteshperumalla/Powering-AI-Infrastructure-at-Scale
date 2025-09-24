@@ -258,10 +258,23 @@ const AssessmentsPage: React.FC = () => {
             {/* Header */}
             <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Box>
-                    <Typography variant="h4" component="h1" gutterBottom>
+                    <Typography
+                        variant="h4"
+                        component="h1"
+                        gutterBottom
+                        sx={{
+                            color: 'text.primary',
+                            fontWeight: 'bold'
+                        }}
+                    >
                         Infrastructure Assessments
                     </Typography>
-                    <Typography variant="body1" color="text.secondary">
+                    <Typography
+                        variant="body1"
+                        sx={{
+                            color: 'text.secondary'
+                        }}
+                    >
                         Manage and view your cloud infrastructure assessments
                     </Typography>
                 </Box>

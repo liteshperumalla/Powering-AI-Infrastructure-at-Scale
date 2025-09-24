@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import ResponsiveLayout from '../../components/ResponsiveLayout';
 import {
   Container,
   Typography,
@@ -159,6 +160,7 @@ export default function ExperimentsPage() {
   }
 
   return (
+    <ResponsiveLayout>
     <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
@@ -417,6 +419,7 @@ export default function ExperimentsPage() {
           </Button>
         </DialogActions>
       </Dialog>
-    </Container>
+      </Container>
+    </ResponsiveLayout>
   );
 }

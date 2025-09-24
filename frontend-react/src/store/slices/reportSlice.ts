@@ -268,7 +268,8 @@ function calculateEstimatedSavings(assessment: any): number {
         } else {
             // Fallback: base savings on company size and industry
             // Calculate savings based on actual assessment data and company characteristics
-            const baseSavings = recommendations.reduce((total, rec) => {
+            const assessmentRecommendations = assessment.recommendations || [];
+            const baseSavings = assessmentRecommendations.reduce((total: number, rec: any) => {
                 return total + (rec.cost_estimates?.roi_projection?.cost_savings_annual || 0);
             }, 0);
             savings = baseSavings > 0 ? baseSavings : 25000; // Fallback to minimum expected savings

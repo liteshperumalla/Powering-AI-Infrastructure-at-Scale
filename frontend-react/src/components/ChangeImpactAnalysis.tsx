@@ -114,9 +114,10 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
     const loadResources = async () => {
         try {
             const resourceData = await impactService.discoverResources(changeForm.target_environment);
-            setResources(resourceData);
+            setResources(Array.isArray(resourceData) ? resourceData : []);
         } catch (error) {
             console.error('Failed to load resources:', error);
+            setResources([]);
         }
     };
 

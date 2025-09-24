@@ -45,6 +45,7 @@ import {
 import { formatDistanceToNow } from 'date-fns';
 import ResponsiveLayout from '@/components/ResponsiveLayout';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import TooltipButton from '@/components/TooltipButton';
 import { useAppSelector } from '@/store/hooks';
 import Link from 'next/link';
 import { apiClient } from '@/services/api';
@@ -87,6 +88,14 @@ const CONVERSATION_CONTEXTS = [
 
 export default function ChatPage() {
     const { user, isAuthenticated, loading: authLoading } = useAppSelector(state => state.auth);
+
+    // Debug authentication state
+    console.log('🔍 Chat Page Auth State:', {
+        isAuthenticated,
+        user: user?.email || 'none',
+        authLoading,
+        userObject: user
+    });
     
     // State management
     const [conversations, setConversations] = useState<Conversation[]>([]);
@@ -425,42 +434,65 @@ export default function ChatPage() {
             setEndChatDialog(false);
             return;
         }
-        
+
         if (!isAuthenticated) {
             console.log('❌ User not authenticated, cannot end conversation');
             setError('Authentication required to end conversations');
             setEndChatDialog(false);
             return;
         }
-        
+
         try {
             console.log('🔚 Ending conversation:', currentConversation.id);
-            await apiClient.endConversation(currentConversation.id, satisfactionRating || undefined);
-            
-            // Update conversation status
-            setConversations(prev => prev.map(conv => 
-                conv.id === currentConversation.id 
-                    ? { ...conv, status: 'resolved' }
+            const result = await apiClient.endConversation(currentConversation.id, satisfactionRating || undefined);
+
+            // Update conversation status and title if auto-generated
+            setConversations(prev => prev.map(conv =>
+                conv.id === currentConversation.id
+                    ? {
+                        ...conv,
+                        status: 'resolved',
+                        title: result.title || conv.title // Update with auto-generated title
+                    }
                     : conv
             ));
-            
+
+            // Show success message with generated title if available
+            if (result.title && result.title !== currentConversation.title) {
+                console.log(`✅ Conversation ended and saved with auto-generated title: "${result.title}"`);
+                // Show a temporary success message for title generation
+                const tempMessage = `Conversation saved as: "${result.title}"`;
+                setTimeout(() => {
+                    // Could implement a toast notification here
+                    console.log('💡 Title auto-generated successfully');
+                }, 1000);
+            } else {
+                console.log('ℹ️ Conversation ended with existing title');
+            }
+
             // Clear current conversation and messages
             setCurrentConversation(null);
             setMessages([]);
-            
+
             setEndChatDialog(false);
             setSatisfactionRating(null);
+
+            // Force a small delay to ensure UI updates properly
+            setTimeout(() => {
+                console.log('✅ Conversation ended successfully - UI should now show action buttons');
+            }, 100);
+
             console.log('✅ Conversation ended successfully');
         } catch (error) {
             console.error('❌ Failed to end conversation:', error);
-            
+
             // Handle authentication errors
             if (error instanceof Error && error.message.includes('401')) {
                 setError('Authentication required to end conversations');
             } else {
                 setError('Failed to end conversation');
             }
-            
+
             setEndChatDialog(false);
         }
     };
@@ -573,19 +605,67 @@ export default function ChatPage() {
     // Sidebar content for conversation history
     const sidebarContent = (
         <Box sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom>
-                Chat History
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6">
+                    Chat History
+                </Typography>
+                {conversations.length > 0 && (
+                    <Chip
+                        label={`${conversations.length} chats`}
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                    />
+                )}
+            </Box>
+
+            {conversations.length === 0 && isAuthenticated && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                    No previous conversations yet. Start your first chat!
+                </Alert>
+            )}
+
+            {!isAuthenticated && (
+                <Alert severity="info" sx={{ mb: 2 }}>
+                    Log in to save and continue your conversations across sessions.
+                </Alert>
+            )}
             {conversations.map((conv) => (
-                <Button
-                    key={conv.id}
-                    fullWidth
-                    variant={currentConversation?.id === conv.id ? "contained" : "outlined"}
-                    onClick={() => loadConversation(conv.id)}
-                    sx={{ mb: 1, justifyContent: "flex-start" }}
-                >
-                    {conv.title}
-                </Button>
+                <Box key={conv.id} sx={{ mb: 1 }}>
+                    <Button
+                        fullWidth
+                        variant={currentConversation?.id === conv.id ? "contained" : "outlined"}
+                        onClick={() => loadConversation(conv.id)}
+                        sx={{
+                            justifyContent: "flex-start",
+                            textAlign: 'left',
+                            flexDirection: 'column',
+                            alignItems: 'flex-start',
+                            p: 2,
+                            height: 'auto',
+                            '&:hover': {
+                                bgcolor: currentConversation?.id === conv.id ? 'primary.dark' : 'action.hover'
+                            }
+                        }}
+                        startIcon={<HistoryIcon />}
+                    >
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600, textTransform: 'none' }}>
+                            {conv.title}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary" sx={{ textTransform: 'none' }}>
+                            {conv.message_count} messages • {formatDistanceToNow(new Date(conv.last_activity), { addSuffix: true })}
+                        </Typography>
+                        {conv.assessment_id && (
+                            <Chip
+                                label="Assessment"
+                                size="small"
+                                color="primary"
+                                variant="outlined"
+                                sx={{ mt: 0.5, fontSize: '0.65rem' }}
+                            />
+                        )}
+                    </Button>
+                </Box>
             ))}
         </Box>
     );
@@ -593,15 +673,16 @@ export default function ChatPage() {
     return (
         <ProtectedRoute requireAuth={false}>
             <ResponsiveLayout title="AI Assistant">
-                <Box sx={{ 
-                    display: 'flex', 
-                    height: 'calc(100vh - 80px)', 
+                <Box sx={{
+                    display: 'flex',
+                    height: 'calc(100vh - 140px)',
                     position: 'relative',
                     mt: 1,
                     borderRadius: 2,
                     overflow: 'hidden',
                     bgcolor: 'background.paper',
-                    boxShadow: 1
+                    boxShadow: 1,
+                    zIndex: 1
                 }}>
                     {/* Sidebar Drawer */}
                     <Drawer
@@ -707,7 +788,34 @@ export default function ChatPage() {
                             </Box>
                             
                             {currentConversation && (
-                                <Box>
+                                <Box sx={{ display: 'flex', gap: 1 }}>
+                                    <TooltipButton
+                                        tooltip="Generate a title based on conversation content"
+                                        variant="text"
+                                        size="small"
+                                        onClick={async () => {
+                                            try {
+                                                const result = await apiClient.generateConversationTitle(currentConversation.id);
+                                                // Update the conversation title in state
+                                                setConversations(prev => prev.map(conv =>
+                                                    conv.id === currentConversation.id
+                                                        ? { ...conv, title: result.title }
+                                                        : conv
+                                                ));
+                                                setCurrentConversation(prev =>
+                                                    prev ? { ...prev, title: result.title } : prev
+                                                );
+                                                console.log(`✅ Title generated: "${result.title}"`);
+                                            } catch (error) {
+                                                console.error('Failed to generate title:', error);
+                                                setError('Failed to generate title');
+                                            }
+                                        }}
+                                        disabled={currentConversation.status === 'resolved'}
+                                        sx={{ minWidth: 'auto', px: 1 }}
+                                    >
+                                        ✨
+                                    </TooltipButton>
                                     <Button
                                         variant="outlined"
                                         size="small"
@@ -804,12 +912,48 @@ export default function ChatPage() {
                                         ))}
                                     </Box>
 
-                                    {isAuthenticated && (
+                                    <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
+                                        {/* Show Continue Chat button if user has conversations (regardless of isAuthenticated flag) */}
+                                        {(isAuthenticated || user) && conversations.length > 0 && (
+                                            <Button
+                                                variant="outlined"
+                                                size="large"
+                                                startIcon={<HistoryIcon />}
+                                                onClick={() => loadConversation(conversations[0].id)}
+                                                sx={{
+                                                    borderRadius: 3,
+                                                    px: 4,
+                                                    py: 1.5,
+                                                    fontSize: '1.1rem',
+                                                    textTransform: 'none',
+                                                    fontWeight: 600,
+                                                    borderColor: 'primary.main',
+                                                    color: 'primary.main',
+                                                    '&:hover': {
+                                                        bgcolor: 'primary.light',
+                                                        borderColor: 'primary.dark',
+                                                    }
+                                                }}
+                                            >
+                                                Continue Last Chat
+                                            </Button>
+                                        )}
+
+                                        {/* Always show "Start Chat" button - different behavior based on auth */}
                                         <Button
                                             variant="contained"
                                             size="large"
                                             startIcon={<AddIcon />}
-                                            onClick={() => setNewChatDialog(true)}
+                                            onClick={() => {
+                                                if (isAuthenticated || user) {
+                                                    setNewChatDialog(true);
+                                                } else {
+                                                    // For non-authenticated users, just start typing
+                                                    if (textFieldRef.current) {
+                                                        textFieldRef.current.focus();
+                                                    }
+                                                }
+                                            }}
                                             sx={{
                                                 borderRadius: 3,
                                                 px: 4,
@@ -820,9 +964,9 @@ export default function ChatPage() {
                                                 boxShadow: '0 4px 20px rgba(102, 126, 234, 0.3)',
                                             }}
                                         >
-                                            Start New Conversation
+                                            {(isAuthenticated || user) ? 'Start New Conversation' : 'Start Chatting'}
                                         </Button>
-                                    )}
+                                    </Box>
                                     
                                     {!isAuthenticated && (
                                         <Typography variant="body2" color="text.secondary" sx={{ mt: 2, opacity: 0.8 }}>
@@ -1028,6 +1172,9 @@ export default function ChatPage() {
                 <Dialog open={endChatDialog} onClose={() => setEndChatDialog(false)} maxWidth="sm" fullWidth>
                     <DialogTitle>End Conversation</DialogTitle>
                     <DialogContent>
+                        <Typography variant="body1" sx={{ mb: 2 }}>
+                            This conversation will be saved to your chat history with an automatically generated title based on the discussion content.
+                        </Typography>
                         <Typography variant="body1" sx={{ mb: 3 }}>
                             How would you rate your experience with this conversation?
                         </Typography>
@@ -1042,7 +1189,7 @@ export default function ChatPage() {
                     <DialogActions>
                         <Button onClick={() => setEndChatDialog(false)}>Cancel</Button>
                         <Button onClick={endConversation} variant="contained">
-                            End Conversation
+                            End & Save Conversation
                         </Button>
                     </DialogActions>
                 </Dialog>

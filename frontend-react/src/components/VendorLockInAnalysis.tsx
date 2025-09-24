@@ -148,9 +148,10 @@ const VendorLockInAnalysis: React.FC = () => {
         lockInService.getContractAnalyses(),
       ]);
 
-      setAssessments(assessmentsData);
-      setMultiCloudStrategies(strategiesData);
-      setContractAnalyses(contractsData);
+      // Ensure all data is arrays
+      setAssessments(Array.isArray(assessmentsData) ? assessmentsData : []);
+      setMultiCloudStrategies(Array.isArray(strategiesData) ? strategiesData : []);
+      setContractAnalyses(Array.isArray(contractsData) ? contractsData : []);
 
       // Load service analyses for first assessment if available
       if (assessmentsData.length > 0) {
@@ -161,6 +162,12 @@ const VendorLockInAnalysis: React.FC = () => {
     } catch (error) {
       setError('Failed to load vendor lock-in analysis data');
       console.error('Error loading lock-in data:', error);
+      // Set fallback empty arrays
+      setAssessments([]);
+      setMultiCloudStrategies([]);
+      setContractAnalyses([]);
+      setServiceAnalyses([]);
+      setMigrationScenarios([]);
     } finally {
       setLoading(false);
     }
@@ -341,7 +348,7 @@ const VendorLockInAnalysis: React.FC = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {assessments.slice(0, 5).map((assessment) => (
+                  {Array.isArray(assessments) ? assessments.slice(0, 5).map((assessment) => (
                     <TableRow key={assessment.id}>
                       <TableCell>{assessment.assessment_name}</TableCell>
                       <TableCell>
@@ -380,7 +387,13 @@ const VendorLockInAnalysis: React.FC = () => {
                         </Tooltip>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )) : (
+                    <TableRow>
+                      <TableCell colSpan={6} align="center">
+                        <Typography color="textSecondary">No assessments available</Typography>
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -395,7 +408,7 @@ const VendorLockInAnalysis: React.FC = () => {
       <Typography variant="h6" mb={3}>Service Lock-in Analysis</Typography>
       
       <Grid container spacing={3}>
-        {serviceAnalyses.map((service) => (
+        {Array.isArray(serviceAnalyses) && serviceAnalyses.length > 0 ? serviceAnalyses.map((service) => (
           <Grid item xs={12} md={6} lg={4} key={service.service_name}>
             <Card>
               <CardContent>
@@ -481,7 +494,15 @@ const VendorLockInAnalysis: React.FC = () => {
               </CardContent>
             </Card>
           </Grid>
-        ))}
+        )) : (
+          <Grid item xs={12}>
+            <Box textAlign="center" py={3}>
+              <Typography color="textSecondary">
+                No service analyses available
+              </Typography>
+            </Box>
+          </Grid>
+        )}
       </Grid>
     </Box>
   );
@@ -500,7 +521,7 @@ const VendorLockInAnalysis: React.FC = () => {
       </Box>
       
       <Grid container spacing={3}>
-        {migrationScenarios.map((scenario) => (
+        {Array.isArray(migrationScenarios) && migrationScenarios.length > 0 ? migrationScenarios.map((scenario) => (
           <Grid item xs={12} lg={6} key={scenario.id}>
             <Card>
               <CardContent>
@@ -609,7 +630,13 @@ const VendorLockInAnalysis: React.FC = () => {
               </CardContent>
             </Card>
           </Grid>
-        ))}
+        )) : (
+          <Grid item xs={12}>
+            <Typography variant="body2" color="text.secondary" textAlign="center">
+              No migration scenarios available
+            </Typography>
+          </Grid>
+        )}
       </Grid>
     </Box>
   );
@@ -628,7 +655,7 @@ const VendorLockInAnalysis: React.FC = () => {
       </Box>
       
       <Grid container spacing={3}>
-        {multiCloudStrategies.map((strategy) => (
+        {Array.isArray(multiCloudStrategies) && multiCloudStrategies.length > 0 ? multiCloudStrategies.map((strategy) => (
           <Grid item xs={12} lg={6} key={strategy.id}>
             <Card>
               <CardContent>
@@ -725,7 +752,13 @@ const VendorLockInAnalysis: React.FC = () => {
               </CardContent>
             </Card>
           </Grid>
-        ))}
+        )) : (
+          <Grid item xs={12}>
+            <Typography variant="body2" color="text.secondary" textAlign="center">
+              No multi-cloud strategies available
+            </Typography>
+          </Grid>
+        )}
       </Grid>
     </Box>
   );
@@ -748,7 +781,7 @@ const VendorLockInAnalysis: React.FC = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {contractAnalyses.map((contract) => (
+            {Array.isArray(contractAnalyses) && contractAnalyses.length > 0 ? contractAnalyses.map((contract) => (
               <TableRow key={contract.id}>
                 <TableCell>
                   <Box display="flex" alignItems="center">
@@ -800,7 +833,15 @@ const VendorLockInAnalysis: React.FC = () => {
                   </Tooltip>
                 </TableCell>
               </TableRow>
-            ))}
+            )) : (
+              <TableRow>
+                <TableCell colSpan={6} align="center">
+                  <Typography variant="body2" color="text.secondary">
+                    No contract analyses available
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </TableContainer>

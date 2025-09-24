@@ -255,11 +255,11 @@ class ProductionDataValidator:
         quality_penalty = 0.0
         
         for i, rec in enumerate(recommendations):
-            if self._contains_mock_content(rec.get("title", "")):
+            if self._contains_mock_content(rec.get("title")):
                 errors.append(f"Recommendation {i+1} title contains mock content")
                 quality_penalty += 8
             
-            if self._contains_mock_content(rec.get("description", "")):
+            if self._contains_mock_content(rec.get("description")):
                 errors.append(f"Recommendation {i+1} description contains mock content")
                 quality_penalty += 8
             

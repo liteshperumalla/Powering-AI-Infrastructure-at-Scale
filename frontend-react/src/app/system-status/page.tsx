@@ -21,6 +21,7 @@ import {
 import ResponsiveLayout from '@/components/ResponsiveLayout';
 import ApiTester from '@/components/ApiTester';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import RoleProtectedRoute from '@/components/RoleProtectedRoute';
 import { apiClient } from '@/services/api';
 
 export default function SystemStatusPage() {
@@ -61,8 +62,12 @@ export default function SystemStatusPage() {
     }, []);
 
     return (
-        <ProtectedRoute allowedRoles={['admin']}>
-            <ResponsiveLayout title="Admin System Status">
+        <ProtectedRoute>
+            <RoleProtectedRoute
+                allowedRoles={['admin', 'manager']}
+                fallbackMessage="System Status is only available to administrators and managers."
+            >
+                <ResponsiveLayout title="Admin System Status">
                 <Container maxWidth="lg" sx={{ mt: 3 }}>
                     <Box sx={{ mb: 4 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
@@ -211,7 +216,8 @@ export default function SystemStatusPage() {
 
                     <ApiTester />
                 </Container>
-            </ResponsiveLayout>
+                </ResponsiveLayout>
+            </RoleProtectedRoute>
         </ProtectedRoute>
     );
 }

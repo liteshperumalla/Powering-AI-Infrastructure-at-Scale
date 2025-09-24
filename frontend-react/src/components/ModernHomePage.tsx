@@ -40,6 +40,7 @@ import {
 } from '@mui/icons-material';
 import ResponsiveGrid from './ResponsiveGrid';
 import ResponsiveCard from './ResponsiveCard';
+import InteractiveTutorial from './InteractiveTutorial';
 import { useRouter } from 'next/navigation';
 
 interface FeatureCardProps {
@@ -162,7 +163,8 @@ export default function ModernHomePage() {
     const router = useRouter();
 
     const [heroVisible, setHeroVisible] = useState(false);
-    
+    const [tutorialOpen, setTutorialOpen] = useState(false);
+
     useEffect(() => {
         setHeroVisible(true);
     }, []);
@@ -313,7 +315,7 @@ export default function ModernHomePage() {
                                             variant="outlined"
                                             size="large"
                                             startIcon={<PlayArrow />}
-                                            onClick={() => router.push('/auth/login')}
+                                            onClick={() => setTutorialOpen(true)}
                                             sx={{
                                                 borderRadius: 3,
                                                 px: 4,
@@ -323,7 +325,7 @@ export default function ModernHomePage() {
                                                 fontWeight: 600,
                                             }}
                                         >
-                                            View Demo
+                                            Interactive Tutorial
                                         </Button>
                                     </Stack>
                                 </Box>
@@ -483,7 +485,8 @@ export default function ModernHomePage() {
                         <Button
                             variant="outlined"
                             size="large"
-                            onClick={() => router.push('/auth/login')}
+                            startIcon={<PlayArrow />}
+                            onClick={() => setTutorialOpen(true)}
                             sx={{
                                 borderColor: 'white',
                                 color: 'white',
@@ -499,7 +502,7 @@ export default function ModernHomePage() {
                                 }
                             }}
                         >
-                            Explore Dashboard
+                            Watch Tutorial
                         </Button>
                     </Stack>
                 </Container>
@@ -531,6 +534,12 @@ export default function ModernHomePage() {
                     </Box>
                 </Container>
             </Box>
+
+            {/* Interactive Tutorial */}
+            <InteractiveTutorial
+                open={tutorialOpen}
+                onClose={() => setTutorialOpen(false)}
+            />
         </Box>
     );
 }

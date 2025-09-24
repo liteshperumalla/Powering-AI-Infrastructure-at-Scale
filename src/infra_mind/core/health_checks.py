@@ -1050,7 +1050,7 @@ class AutoRecoverySystem:
                     recovery_result['strategies_attempted'].append({
                         'strategy': strategy_name,
                         'success': result.get('success', False),
-                        'message': result.get('message', '')
+                        'message': result.get('message')
                     })
                     
                     if result.get('success', False):

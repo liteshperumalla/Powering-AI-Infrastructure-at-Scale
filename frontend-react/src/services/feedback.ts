@@ -4,6 +4,8 @@
  * Provides functions to interact with the feedback collection system
  */
 
+import React from 'react';
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
 export type FeedbackType = 'assessment_quality' | 'ui_experience' | 'performance' | 'feature_request' | 'bug_report' | 'general';
@@ -192,7 +194,7 @@ export async function submitAssessmentFeedback(
 // Helper function to get auth token
 function getAuthToken(): string {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('authToken') || '';
+    return localStorage.getItem('auth_token') || '';
   }
   return '';
 }
@@ -228,5 +230,3 @@ export function useFeedbackSubmission() {
 
   return { submit, loading, error, success, reset };
 }
-
-import React from 'react';

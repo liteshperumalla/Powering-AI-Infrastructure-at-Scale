@@ -838,7 +838,7 @@ const ComplianceAutomation: React.FC = () => {
   );
 
   return (
-    <Box sx={{ mt: 3 }}>
+    <Box>
       <Typography variant="h4" gutterBottom>
         Compliance Automation
       </Typography>

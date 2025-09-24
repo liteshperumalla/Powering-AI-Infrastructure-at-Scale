@@ -117,7 +117,7 @@ class DatabaseQueryOptimizer:
                     
                     docs_examined = profiling_data.get("totalDocsExamined", 0) if profiling_data else 0
                     docs_returned = profiling_data.get("docsReturned", 0) if profiling_data else 0
-                    index_used = bool(profiling_data.get("planSummary", "").startswith("IXSCAN")) if profiling_data else False
+                    index_used = bool(profiling_data.get("planSummary").startswith("IXSCAN")) if profiling_data else False
                     
                 except Exception as e:
                     logger.debug(f"Could not get profiling data: {e}")

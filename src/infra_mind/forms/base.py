@@ -121,7 +121,7 @@ class FormField:
                     
                     # Handle text input values
                     if self.allow_text_input and isinstance(value, dict) and "text_input" in value:
-                        text_value = value.get("text_input", "").strip()
+                        text_value = value.get("text_input").strip()
                         if not text_value:
                             raise FormValidationError(self.name, "Text input cannot be empty")
                     elif value not in valid_values:
@@ -138,7 +138,7 @@ class FormField:
                     for v in value:
                         # Handle text input values
                         if self.allow_text_input and isinstance(v, dict) and "text_input" in v:
-                            text_value = v.get("text_input", "").strip()
+                            text_value = v.get("text_input").strip()
                             if not text_value:
                                 raise FormValidationError(self.name, "Text input cannot be empty")
                             continue

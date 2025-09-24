@@ -9,7 +9,7 @@ from typing import List, Optional, Dict, Any
 from loguru import logger
 import uuid
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from bson import Decimal128
 from beanie import PydanticObjectId
@@ -28,9 +28,15 @@ from ...models.recommendation import Recommendation, ServiceRecommendation
 from ...models.report import Report, ReportSection
 from ...schemas.base import AssessmentStatus, Priority, CloudProvider, RecommendationConfidence, ReportType, ReportFormat, ReportStatus
 from .auth import get_current_user
+from ...core.smart_defaults import smart_get, SmartDefaults
 from ...models.user import User
 from ...workflows.orchestrator import agent_orchestrator, OrchestrationConfig
 from ...workflows.assessment_workflow import AssessmentWorkflow
+from ...agents.cloud_engineer_agent import CloudEngineerAgent
+from ...agents.cto_agent import CTOAgent
+from ...agents.mlops_agent import MLOpsAgent
+from ...agents.compliance_agent import ComplianceAgent
+from ...services.report_service import ReportService
 from ...agents.base import AgentRole
 from ...services.advanced_compliance_engine import AdvancedComplianceEngine, ComplianceFramework
 from ...services.predictive_cost_modeling import PredictiveCostModeling, CostScenario
@@ -395,12 +401,27 @@ async def generate_orchestrated_recommendations(assessment: Assessment, app_stat
                         )
                         service_recommendations.append(service_rec)
                 
-                # Create main recommendation
+                # Create main recommendation with unique title
+                # Generate unique title for synthesized recommendations
+                title = synthesized_rec.get("title")
+                if not title or title == "Multi-Agent Recommendation":
+                    # Extract key focus areas for unique title
+                    focus_areas = synthesized_rec.get("focus_areas", [])
+                    primary_provider = synthesized_rec.get("primary_provider", "Multi-Cloud")
+
+                    if focus_areas and len(focus_areas) > 0:
+                        primary_focus = focus_areas[0].replace("_", " ").title()
+                        title = f"{primary_provider} {primary_focus} Strategy"
+                    else:
+                        # Use timestamp for uniqueness as last resort
+                        timestamp = datetime.now().strftime("%H%M")
+                        title = f"Comprehensive Multi-Agent Analysis ({timestamp})"
+
                 recommendation = Recommendation(
                     assessment_id=str(assessment.id),
                     user_id=assessment.user_id,
                     agent_name=synthesized_rec.get("source_agent", "multi_agent_orchestrator"),
-                    title=synthesized_rec.get("title", "Multi-Agent Recommendation"),
+                    title=title,
                     summary=synthesized_rec.get("description", "Comprehensive recommendation from multiple AI agents"),
                     confidence_level=RecommendationConfidence.HIGH,
                     confidence_score=synthesized_rec.get("combined_confidence", 0.85),
@@ -796,7 +817,7 @@ async def create_simple_assessment(data: dict, current_user: User = Depends(get_
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_assessment(
-    assessment_data: dict, 
+    assessment_data: Dict[str, Any],
     request: Request,
     current_user: User = Depends(get_current_user)
 ):
@@ -807,12 +828,72 @@ async def create_assessment(
     The assessment will be in DRAFT status and ready for AI agent analysis.
     """
     try:
+        logger.info(f"Creating assessment for user {current_user.email}")
+        logger.debug(f"Received assessment data: {assessment_data}")
+
         current_time = datetime.utcnow()
-        
-        # Extract data from the frontend payload
+
+        # Validate required fields
+        if not assessment_data:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Assessment data is required"
+            )
+
+        # Extract title early for duplicate checking
         title = assessment_data.get('title', 'Infrastructure Assessment')
+
+        # Enhanced duplicate prevention: Check for recent assessments with same title for this user
+        # Include completed assessments to prevent rapid duplicates
+        thirty_minutes_ago = datetime.utcnow() - timedelta(minutes=30)
+        recent_duplicate = await Assessment.find_one({
+            "user_id": str(current_user.id),
+            "title": title,
+            "created_at": {"$gte": thirty_minutes_ago},
+            "status": {"$in": ["draft", "in_progress", "completed"]}
+        })
+
+        # Additional content-based duplicate check for same user
+        if not recent_duplicate:
+            # Check for assessments with identical business requirements within last 24 hours
+            twenty_four_hours_ago = datetime.utcnow() - timedelta(hours=24)
+            content_duplicate = await Assessment.find_one({
+                "user_id": str(current_user.id),
+                "created_at": {"$gte": twenty_four_hours_ago},
+                "business_requirements.company_size": assessment_data.get('business_requirements', {}).get('company_size'),
+                "business_requirements.industry": assessment_data.get('business_requirements', {}).get('industry'),
+                "business_requirements.budget_constraints": assessment_data.get('business_requirements', {}).get('budget_constraints'),
+                "status": {"$in": ["draft", "in_progress", "completed"]}
+            })
+            recent_duplicate = content_duplicate
+
+        if recent_duplicate:
+            logger.warning(f"Duplicate assessment prevented for user {current_user.email}, title: {title}, existing ID: {recent_duplicate.id}")
+            # Return the existing assessment instead of creating a duplicate
+            return {
+                "id": str(recent_duplicate.id),
+                "title": recent_duplicate.title,
+                "description": recent_duplicate.description,
+                "status": recent_duplicate.status,
+                "priority": recent_duplicate.priority,
+                "progress": recent_duplicate.progress,
+                "workflow_id": recent_duplicate.workflow_id,
+                "recommendations_generated": recent_duplicate.recommendations_generated,
+                "reports_generated": recent_duplicate.reports_generated,
+                "created_at": recent_duplicate.created_at,
+                "updated_at": recent_duplicate.updated_at,
+                "message": "Returning existing assessment to prevent duplicate"
+            }
+
+        # Extract data from the frontend payload (title already extracted above)
         description = assessment_data.get('description', 'AI infrastructure assessment')
         business_goal = assessment_data.get('business_goal', 'Improve infrastructure')
+
+        if not title or len(title.strip()) < 3:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Title must be at least 3 characters long"
+            )
         
         # Use enhanced business_requirements - preserve ALL fields from frontend
         frontend_business_req = assessment_data.get('business_requirements', {})
@@ -943,31 +1024,47 @@ async def create_assessment(
         if 'ci_cd_requirements' not in technical_requirements:
             technical_requirements['ci_cd_requirements'] = ["Automated deployment", "Testing pipeline"]
         
-        # Create and save Assessment document
-        assessment = Assessment(
-            user_id=str(current_user.id),
-            title=title,
-            description=description,
-            business_requirements=business_requirements,
-            technical_requirements=technical_requirements,
-            business_goal=business_goal,
-            status=AssessmentStatus.DRAFT,
-            priority=Priority.MEDIUM,
-            completion_percentage=0.0,
-            source=assessment_data.get('source', 'web_form'),
-            tags=assessment_data.get('tags', []),
-            metadata={
-                "source": assessment_data.get('source', 'web_form'), 
-                "version": "1.0", 
-                "tags": assessment_data.get('tags', [])
-            },
-            created_at=current_time,
-            updated_at=current_time
-        )
+        # Create Assessment document with proper error handling
+        try:
+            assessment = Assessment(
+                user_id=str(current_user.id),
+                title=title,
+                description=description,
+                business_requirements=business_requirements,
+                technical_requirements=technical_requirements,
+                business_goal=business_goal,
+                status=AssessmentStatus.DRAFT,
+                priority=Priority.MEDIUM,
+                completion_percentage=0.0,
+                source=assessment_data.get('source', 'web_form'),
+                tags=assessment_data.get('tags', []),
+                metadata={
+                    "source": assessment_data.get('source', 'web_form'),
+                    "version": "1.0",
+                    "tags": assessment_data.get('tags', [])
+                },
+                created_at=current_time,
+                updated_at=current_time
+            )
+        except Exception as model_error:
+            logger.error(f"Failed to create Assessment model: {model_error}")
+            logger.error(f"Business requirements: {business_requirements}")
+            logger.error(f"Technical requirements: {technical_requirements}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid assessment data: {str(model_error)}"
+            )
         
         # Save to database using insert to avoid revision tracking issues
-        await assessment.insert()
-        logger.info(f"Created assessment: {assessment.id}")
+        try:
+            await assessment.insert()
+            logger.info(f"Created assessment: {assessment.id}")
+        except Exception as db_error:
+            logger.error(f"Failed to save assessment to database: {db_error}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to save assessment: {str(db_error)}"
+            )
         
         # Clear any cached visualization data to ensure fresh dashboard display
         try:
@@ -1214,13 +1311,13 @@ async def list_assessments(
                 if hasattr(assessment, 'business_requirements') and assessment.business_requirements:
                     bus_req = assessment.business_requirements
                     if isinstance(bus_req, dict):
-                        company_size = bus_req.get("company_size", "unknown")
-                        industry = bus_req.get("industry", "unknown")
+                        company_size = smart_get(bus_req, "company_size")
+                        industry = smart_get(bus_req, "industry")
                         
                         # Handle budget constraints
                         budget_constraints = bus_req.get("budget_constraints", {})
                         if isinstance(budget_constraints, dict):
-                            budget_range = budget_constraints.get("total_budget_range", "unknown")
+                            budget_range = smart_get(budget_constraints, "total_budget_range", bus_req)
                 
                 # Safely extract technical requirements data
                 if hasattr(assessment, 'technical_requirements') and assessment.technical_requirements:
@@ -1337,7 +1434,9 @@ async def update_assessment(assessment_id: str, update_data: AssessmentUpdate):
         
         # Return updated assessment
         updated_assessment = await Assessment.get(assessment_id)
-        return AssessmentResponse(**updated_assessment.model_dump(), id=str(updated_assessment.id))
+        assessment_data = updated_assessment.model_dump()
+        assessment_data['id'] = str(updated_assessment.id)
+        return AssessmentResponse(**assessment_data)
         
     except HTTPException:
         raise
@@ -1529,11 +1628,11 @@ async def get_assessment_visualization_data(
                 "assessment_results": [],
                 "overall_score": None,
                 "recommendations_count": 0,
-                "completion_status": enhanced_data.get("completion_status", "unknown"),
+                "completion_status": smart_get(enhanced_data, "completion_status"),
                 "generated_at": datetime.utcnow().isoformat(),
                 "has_real_data": False,
                 "assessment_progress": enhanced_data.get("assessment_progress", 0),
-                "workflow_status": enhanced_data.get("workflow_status", "unknown")
+                "workflow_status": smart_get(enhanced_data, "workflow_status")
             }
         
         return {
@@ -1610,7 +1709,7 @@ async def _generate_fallback_visualization_data(assessment) -> Dict[str, Any]:
             "generated_at": datetime.utcnow().isoformat(),
             "has_real_data": len(real_recommendations) > 0,
             "assessment_progress": assessment.completion_percentage if hasattr(assessment, 'completion_percentage') else 0,
-            "workflow_status": assessment.progress.get("current_step", "unknown") if assessment.progress else "unknown"
+            "workflow_status": assessment.progress.get("current_step") if assessment.progress else "unknown"
         }
         
     except Exception as e:
@@ -1751,8 +1850,8 @@ async def generate_llm_powered_recommendations(assessment: Assessment) -> List[R
         if services:
             services_context += f"\n{category.title()} Services Available:\n"
             for service in services[:3]:  # Top 3 per category
-                services_context += f"  - {service.get('name', 'Unknown')}: {service.get('description', '')}\n"
-                services_context += f"    Provider: {service.get('provider', 'Unknown')}\n"
+                services_context += f"  - {service.get('name')}: {service.get('description')}\n"
+                services_context += f"    Provider: {service.get('provider')}\n"
                 services_context += f"    Starting Price: ${service.get('pricing', {}).get('starting_price', 0)}/{service.get('pricing', {}).get('unit', 'month')}\n"
                 services_context += f"    Features: {', '.join(service.get('features', [])[:3])}\n\n"
     
@@ -1872,7 +1971,7 @@ For each recommendation, provide a JSON object with this EXACT structure:
 
 Generate recommendations that specifically address:
 1. The workload types: {tech_reqs.get('workload_types', [])}
-2. Performance requirements: {tech_reqs.get('performance_requirements', {}).get('api_response_time_ms', 'N/A')}ms response time, {tech_reqs.get('performance_requirements', {}).get('concurrent_users', 'N/A')} users
+2. Performance requirements: {tech_reqs.get('performance_requirements', {}).get('api_response_time_ms')}ms response time, {tech_reqs.get('performance_requirements', {}).get('concurrent_users')} users
 3. Budget constraint: ${business_reqs.get('monthly_budget', 10000)}/month
 4. Scalability needs: {tech_reqs.get('scalability_requirements', {}).get('expected_data_growth_rate', 'stable growth')}
 
@@ -1999,7 +2098,7 @@ async def get_assessment_workflow_status(
         
         # Extract workflow information
         progress_data = assessment.progress or {}
-        current_step = progress_data.get("current_step", "unknown")
+        current_step = progress_data.get("current_step")
         progress_percentage = progress_data.get("progress_percentage", 0)
         
         # Determine if workflow can be advanced
@@ -2080,7 +2179,7 @@ async def advance_assessment_workflow(
             )
         
         progress_data = assessment.progress or {}
-        current_step = progress_data.get("current_step", "unknown")
+        current_step = progress_data.get("current_step")
         current_progress = progress_data.get("progress_percentage", 0)
         
         # Define step progression
@@ -2104,8 +2203,18 @@ async def advance_assessment_workflow(
             }
             assessment.update_progress(next_progress, next_step)
             
-            # Mark as completed if we've reached the end
-            if next_step == "completion":
+            # Execute actual content generation based on workflow step
+            if next_step == "analysis":
+                # Trigger agent analysis phase
+                await _execute_agent_analysis_step(assessment)
+            elif next_step == "optimization":
+                # Trigger optimization and recommendation generation
+                await _execute_optimization_step(assessment)
+            elif next_step == "report_generation":
+                # Trigger report generation
+                await _execute_report_generation_step(assessment)
+            elif next_step == "completion":
+                # Final completion step
                 assessment.status = AssessmentStatus.COMPLETED
                 assessment.completed_at = datetime.utcnow()
                 assessment.recommendations_generated = True
@@ -3009,3 +3118,180 @@ async def generate_quick_improvements(
     except Exception as e:
         logger.error(f"Error generating improvements: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+async def _execute_agent_analysis_step(assessment: Assessment):
+    """Execute the agent analysis step for the assessment workflow."""
+    try:
+        logger.info(f"Starting agent analysis for assessment {assessment.id}")
+
+        # Initialize cloud engineer agent for infrastructure analysis
+        cloud_agent = CloudEngineerAgent()
+
+        # Generate infrastructure analysis
+        analysis_result = await cloud_agent.analyze_infrastructure(
+            assessment_data={
+                "company_size": assessment.business_context.get("company_size"),
+                "current_infrastructure": assessment.current_infrastructure,
+                "business_goals": assessment.business_context.get("goals", []),
+                "budget_constraints": assessment.business_context.get("budget")
+            }
+        )
+
+        # Update assessment with analysis results
+        if not hasattr(assessment, 'analysis_results'):
+            assessment.analysis_results = {}
+
+        assessment.analysis_results.update({
+            "infrastructure_analysis": analysis_result,
+            "analysis_timestamp": datetime.utcnow(),
+            "analysis_agent": "cloud_engineer"
+        })
+
+        await assessment.save()
+        logger.info(f"Completed agent analysis for assessment {assessment.id}")
+
+    except Exception as e:
+        logger.error(f"Error in agent analysis step: {e}")
+        raise
+
+
+async def _execute_optimization_step(assessment: Assessment):
+    """Execute the optimization and recommendation generation step."""
+    try:
+        logger.info(f"Starting optimization step for assessment {assessment.id}")
+
+        # Initialize agents for optimization
+        cto_agent = CTOAgent()
+        mlops_agent = MLOpsAgent()
+
+        # Generate strategic recommendations
+        cto_recommendations = await cto_agent.generate_strategic_recommendations(
+            assessment_data={
+                "current_state": assessment.current_infrastructure,
+                "business_context": assessment.business_context,
+                "analysis_results": getattr(assessment, 'analysis_results', {})
+            }
+        )
+
+        # Generate MLOps recommendations if relevant
+        mlops_recommendations = []
+        if any(goal.get("category") == "ai_ml" for goal in assessment.business_context.get("goals", [])):
+            mlops_recommendations = await mlops_agent.generate_mlops_recommendations(
+                assessment_data={
+                    "current_infrastructure": assessment.current_infrastructure,
+                    "ml_requirements": assessment.business_context.get("ai_ml_requirements", {}),
+                    "scale_requirements": assessment.business_context.get("scale_requirements", {})
+                }
+            )
+
+        # Create recommendation documents in database
+        recommendations = []
+
+        # Process CTO recommendations
+        if cto_recommendations.get("recommendations"):
+            for rec_data in cto_recommendations["recommendations"]:
+                recommendation = Recommendation(
+                    assessment_id=str(assessment.id),
+                    title=rec_data.get("title", "Strategic Recommendation"),
+                    description=rec_data.get("description", ""),
+                    category=rec_data.get("category", "strategic"),
+                    priority=rec_data.get("priority", "medium"),
+                    estimated_cost=rec_data.get("estimated_cost", 0),
+                    estimated_savings=rec_data.get("estimated_savings", 0),
+                    implementation_timeline=rec_data.get("timeline", "3-6 months"),
+                    agent_source="cto_agent",
+                    created_at=datetime.utcnow()
+                )
+                await recommendation.insert()
+                recommendations.append(recommendation)
+
+        # Process MLOps recommendations
+        if mlops_recommendations:
+            for rec_data in mlops_recommendations.get("recommendations", []):
+                recommendation = Recommendation(
+                    assessment_id=str(assessment.id),
+                    title=rec_data.get("title", "MLOps Recommendation"),
+                    description=rec_data.get("description", ""),
+                    category="mlops",
+                    priority=rec_data.get("priority", "medium"),
+                    estimated_cost=rec_data.get("estimated_cost", 0),
+                    estimated_savings=rec_data.get("estimated_savings", 0),
+                    implementation_timeline=rec_data.get("timeline", "2-4 months"),
+                    agent_source="mlops_agent",
+                    created_at=datetime.utcnow()
+                )
+                await recommendation.insert()
+                recommendations.append(recommendation)
+
+        # Update assessment with optimization results
+        assessment.recommendations_generated = True
+        assessment.optimization_results = {
+            "total_recommendations": len(recommendations),
+            "optimization_timestamp": datetime.utcnow(),
+            "agents_used": ["cto_agent"] + (["mlops_agent"] if mlops_recommendations else [])
+        }
+
+        await assessment.save()
+        logger.info(f"Completed optimization step with {len(recommendations)} recommendations for assessment {assessment.id}")
+
+    except Exception as e:
+        logger.error(f"Error in optimization step: {e}")
+        raise
+
+
+async def _execute_report_generation_step(assessment: Assessment):
+    """Execute the report generation step."""
+    try:
+        logger.info(f"Starting report generation for assessment {assessment.id}")
+
+        # Initialize compliance agent for final report
+        compliance_agent = ComplianceAgent()
+
+        # Get all recommendations for this assessment
+        recommendations = await Recommendation.find(
+            Recommendation.assessment_id == str(assessment.id)
+        ).to_list()
+
+        # Generate comprehensive report
+        report_data = await compliance_agent.generate_assessment_report(
+            assessment_data={
+                "assessment": assessment.dict(),
+                "recommendations": [rec.dict() for rec in recommendations],
+                "analysis_results": getattr(assessment, 'analysis_results', {}),
+                "optimization_results": getattr(assessment, 'optimization_results', {})
+            }
+        )
+
+        # Create report document
+        report = Report(
+            assessment_id=str(assessment.id),
+            title=f"Infrastructure Assessment Report - {assessment.business_context.get('company_name', 'Organization')}",
+            executive_summary=report_data.get("executive_summary", ""),
+            detailed_analysis=report_data.get("detailed_analysis", {}),
+            recommendations_summary=report_data.get("recommendations_summary", {}),
+            implementation_roadmap=report_data.get("implementation_roadmap", []),
+            cost_benefit_analysis=report_data.get("cost_benefit_analysis", {}),
+            risk_assessment=report_data.get("risk_assessment", {}),
+            compliance_status=report_data.get("compliance_status", {}),
+            generated_by="compliance_agent",
+            generated_at=datetime.utcnow()
+        )
+
+        await report.insert()
+
+        # Update assessment with report completion
+        assessment.report_generated = True
+        assessment.report_id = str(report.id)
+        assessment.final_report_data = {
+            "report_generated_at": datetime.utcnow(),
+            "total_pages": report_data.get("total_pages", 0),
+            "key_metrics": report_data.get("key_metrics", {})
+        }
+
+        await assessment.save()
+        logger.info(f"Completed report generation for assessment {assessment.id}")
+
+    except Exception as e:
+        logger.error(f"Error in report generation step: {e}")
+        raise

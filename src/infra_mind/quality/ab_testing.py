@@ -277,7 +277,7 @@ class ABTestingFramework:
                     )
                     
                     if variant:
-                        strategy_name = variant["configuration"].get("strategy_name", "default")
+                        strategy_name = variant["configuration"]smart_get("strategy_name")
                         self.logger.info(f"Using strategy {strategy_name} for user {user_id}")
                         return strategy_name
                 else:
@@ -295,7 +295,7 @@ class ABTestingFramework:
                         )
                         
                         if variant:
-                            strategy_name = variant["configuration"].get("strategy_name", "default")
+                            strategy_name = variant["configuration"]smart_get("strategy_name")
                             return strategy_name
             
             # Default strategy if no experiments apply

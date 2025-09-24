@@ -223,9 +223,9 @@ async def get_recommendations(
             service_recs = []
             for service in rec.get('recommended_services', []):
                 service_recs.append(ServiceRecommendationResponse(
-                    service_name=service.get('service_name', ''),
+                    service_name=service.get('service_name'),
                     provider=service.get('provider', 'AWS'),
-                    service_category=service.get('service_category', ''),
+                    service_category=service.get('service_category'),
                     estimated_monthly_cost=service.get('estimated_monthly_cost'),
                     cost_model=service.get('cost_model'),
                     configuration=service.get('configuration', {}),

@@ -21,25 +21,38 @@ import {
     Chip,
     LinearProgress,
     Alert,
-    AppBar,
-    Toolbar,
-    IconButton,
     Dialog,
     DialogTitle,
     DialogContent,
     DialogActions,
     DialogContentText,
     CircularProgress,
+    Card,
+    CardContent,
+    Stepper,
+    Step,
+    StepLabel,
+    useTheme,
+    alpha,
+    Grid,
+    Stack,
 } from '@mui/material';
 import {
-    ArrowBack,
     Save,
     Restore,
+    CheckCircle,
+    Schedule,
+    Assignment,
+    Warning,
 } from '@mui/icons-material';
 import { useRouter, useSearchParams } from 'next/navigation';
 import ProgressIndicator from '@/components/ProgressIndicator';
 import IntelligentFormField from '@/components/IntelligentFormField';
+import { useAppDispatch } from '@/store/hooks';
+import { addNotification } from '@/store/slices/uiSlice';
 import ProgressSaver from '@/components/ProgressSaver';
+import ResponsiveLayout from '@/components/ResponsiveLayout';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import { apiClient } from '@/services/api';
 import { useAssessmentPersistence } from '@/hooks/useAssessmentPersistence';
 
@@ -285,6 +298,7 @@ const initialFormData: AssessmentFormData = {
 function AssessmentPageInner() {
     const router = useRouter();
     const searchParams = useSearchParams();
+    const dispatch = useAppDispatch();
     const draftId = searchParams.get('draft');
     
     const [activeStep, setActiveStep] = useState(0);
@@ -296,6 +310,11 @@ function AssessmentPageInner() {
     const [isLoadingDraft, setIsLoadingDraft] = useState(false);
     const [showIndustryDialog, setShowIndustryDialog] = useState(false);
     const [customIndustry, setCustomIndustry] = useState('');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [submissionCount, setSubmissionCount] = useState(0);
+    const [lastSubmissionTime, setLastSubmissionTime] = useState<number | null>(null);
+    const [existingAssessmentId, setExistingAssessmentId] = useState<string | null>(null);
+    const [showDuplicateDialog, setShowDuplicateDialog] = useState(false);
     
     // Initialize assessment persistence hook
     const {
@@ -372,6 +391,13 @@ function AssessmentPageInner() {
     const handleNext = () => {
         if (validateStep(activeStep)) {
             setActiveStep((prevActiveStep) => prevActiveStep + 1);
+        } else {
+            // Scroll to first error field
+            const firstErrorField = document.querySelector('[aria-invalid="true"]');
+            if (firstErrorField) {
+                firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                (firstErrorField as HTMLElement).focus();
+            }
         }
     };
 
@@ -464,11 +490,113 @@ function AssessmentPageInner() {
         }
 
         setErrors(newErrors);
+
+        // If there are errors, show a helpful summary
+        if (Object.keys(newErrors).length > 0) {
+            const errorCount = Object.keys(newErrors).length;
+            const fieldNames = Object.keys(newErrors).join(', ');
+
+            // Show a non-intrusive notification
+            dispatch(addNotification({
+                type: 'warning',
+                message: `Please complete ${errorCount} required field${errorCount > 1 ? 's' : ''}: ${fieldNames}`
+            }));
+        }
+
         return Object.keys(newErrors).length === 0;
     };
 
+    // Helper function to get errors for current step
+    const getCurrentStepErrors = (step: number) => {
+        const stepErrors: Record<string, string> = {};
+
+        switch (step) {
+            case 0:
+                if (errors.companyName) stepErrors.companyName = errors.companyName;
+                if (errors.industry) stepErrors.industry = errors.industry;
+                if (errors.companySize) stepErrors.companySize = errors.companySize;
+                if (errors.currentAIMaturity) stepErrors.currentAIMaturity = errors.currentAIMaturity;
+                break;
+            case 1:
+                if (errors.currentCloudProvider) stepErrors.currentCloudProvider = errors.currentCloudProvider;
+                if (errors.monthlyBudget) stepErrors.monthlyBudget = errors.monthlyBudget;
+                break;
+            case 2:
+                if (errors.applicationTypes) stepErrors.applicationTypes = errors.applicationTypes;
+                if (errors.programmingLanguages) stepErrors.programmingLanguages = errors.programmingLanguages;
+                break;
+            case 3:
+                if (errors.aiUseCases) stepErrors.aiUseCases = errors.aiUseCases;
+                if (errors.expectedDataVolume) stepErrors.expectedDataVolume = errors.expectedDataVolume;
+                break;
+            case 4:
+                if (errors.currentUserLoad) stepErrors.currentUserLoad = errors.currentUserLoad;
+                if (errors.expectedGrowthRate) stepErrors.expectedGrowthRate = errors.expectedGrowthRate;
+                break;
+            case 5:
+                if (errors.dataLocation) stepErrors.dataLocation = errors.dataLocation;
+                break;
+            case 6:
+                if (errors.budgetFlexibility) stepErrors.budgetFlexibility = errors.budgetFlexibility;
+                if (errors.totalBudgetRange) stepErrors.totalBudgetRange = errors.totalBudgetRange;
+                break;
+        }
+
+        return stepErrors;
+    };
+
+    // Error summary component for the current step
+    const ErrorSummary = ({ step }: { step: number }) => {
+        const stepErrors = getCurrentStepErrors(step);
+        const errorCount = Object.keys(stepErrors).length;
+
+        if (errorCount === 0) return null;
+
+        return (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+                <Typography variant="body2" sx={{ fontWeight: 'medium', mb: 1 }}>
+                    Please complete {errorCount} required field{errorCount > 1 ? 's' : ''}:
+                </Typography>
+                <Box component="ul" sx={{ pl: 2, m: 0 }}>
+                    {Object.entries(stepErrors).map(([field, message]) => (
+                        <li key={field}>
+                            <Typography variant="body2" color="warning.dark">
+                                {message}
+                            </Typography>
+                        </li>
+                    ))}
+                </Box>
+            </Alert>
+        );
+    };
+
     const handleSubmit = async () => {
+        // Enhanced submission prevention
+        const now = Date.now();
+        const SUBMISSION_COOLDOWN = 60000; // 1 minute cooldown
+
+        if (isSubmitting) {
+            console.log('Submission already in progress, ignoring duplicate request');
+            return;
+        }
+
+        // Check if user is submitting too frequently
+        if (lastSubmissionTime && (now - lastSubmissionTime) < SUBMISSION_COOLDOWN) {
+            alert('Please wait a moment before submitting again. Your assessment may already be processing.');
+            return;
+        }
+
+        // Check for recent submissions
+        if (submissionCount >= 3) {
+            alert('You have submitted multiple assessments recently. Please check your dashboard for existing assessments.');
+            return;
+        }
+
         if (validateStep(activeStep)) {
+            setIsSubmitting(true);
+            setSubmissionCount(prev => prev + 1);
+            setLastSubmissionTime(now);
+
             try {
                 console.log('Submitting form data:', formData);
 
@@ -623,18 +751,32 @@ function AssessmentPageInner() {
                 const createdAssessment = await apiClient.createAssessment(assessmentData);
                 console.log('Assessment created successfully:', createdAssessment);
 
+                // Check if response indicates a duplicate was found
+                if (createdAssessment && createdAssessment.id && createdAssessment.id !== createdAssessment.title) {
+                    // This might be an existing assessment
+                    setExistingAssessmentId(createdAssessment.id);
+                    setShowDuplicateDialog(true);
+                    return;
+                }
+
                 // Clear the draft since assessment was successfully submitted
                 await clearDraft(assessmentId);
 
-                // Show success message and redirect to dashboard to see the assessment
-                alert('Assessment submitted successfully! Redirecting to dashboard...');
-                router.push('/dashboard');
+                // Show enhanced success message
+                alert('🎉 Assessment submitted successfully! Your AI infrastructure analysis is now being processed. You will be redirected to view the results.');
+
+                // Redirect to the specific assessment or dashboard
+                if (createdAssessment?.id) {
+                    router.push(`/dashboard?highlight=${createdAssessment.id}`);
+                } else {
+                    router.push('/dashboard');
+                }
             } catch (error) {
                 console.error('Error submitting assessment:', error);
                 
                 // Handle authentication errors by redirecting to login
                 if (error instanceof Error && (
-                    error.message.includes('Access denied') || 
+                    error.message.includes('Access denied') ||
                     error.message.includes('403') ||
                     error.message.includes('authentication')
                 )) {
@@ -642,9 +784,32 @@ function AssessmentPageInner() {
                     router.push('/auth/login');
                     return;
                 }
-                
+
+                // Handle duplicate assessment errors
+                if (error instanceof Error && error.message.includes('Duplicate assessment')) {
+                    const match = error.message.match(/existing ID: ([a-fA-F0-9]+)/);
+                    if (match) {
+                        setExistingAssessmentId(match[1]);
+                        setShowDuplicateDialog(true);
+                        return;
+                    }
+                    alert('You already have a similar assessment. Please check your dashboard.');
+                    router.push('/dashboard');
+                    return;
+                }
+
+                // Handle rate limiting
+                if (error instanceof Error && (error.message.includes('Too Many Requests') || error.message.includes('429'))) {
+                    alert('You are submitting assessments too quickly. Please wait a moment and try again.');
+                    setSubmissionCount(prev => Math.max(0, prev - 1)); // Reduce submission count for rate limit
+                    return;
+                }
+
                 // Handle other errors
-                alert(`Failed to submit assessment: ${error instanceof Error ? error.message : 'Unknown error'}`);
+                alert(`❌ Failed to submit assessment: ${error instanceof Error ? error.message : 'Unknown error'}. Please try again or contact support if the problem persists.`);
+            } finally {
+                // Reset submission state
+                setIsSubmitting(false);
             }
         }
     };
@@ -755,12 +920,25 @@ function AssessmentPageInner() {
         }
     };
 
+    // Add caching to prevent excessive API calls
+    const [formsCache, setFormsCache] = useState<any[] | null>(null);
+    const [lastFetch, setLastFetch] = useState<number>(0);
+    const CACHE_DURATION = 10000; // 10 seconds
+
     const listSavedForms = async () => {
         try {
+            // Use cache if recent
+            const now = Date.now();
+            if (formsCache && (now - lastFetch) < CACHE_DURATION) {
+                return formsCache;
+            }
+
             // Try to get from backend first, fallback to localStorage
             try {
                 const backendForms = await apiClient.request('/forms/list-saved');
                 if (backendForms && Array.isArray(backendForms)) {
+                    setFormsCache(backendForms);
+                    setLastFetch(now);
                     return backendForms;
                 }
             } catch (apiError) {
@@ -797,6 +975,7 @@ function AssessmentPageInner() {
                         <Typography variant="h6" gutterBottom>
                             Tell us about your business
                         </Typography>
+                        <ErrorSummary step={0} />
 
                         <IntelligentFormField
                             name="companyName"
@@ -1023,6 +1202,7 @@ function AssessmentPageInner() {
                         <Typography variant="h6" gutterBottom>
                             Current Infrastructure Setup
                         </Typography>
+                        <ErrorSummary step={1} />
 
                         <FormControl error={!!errors.currentCloudProvider}>
                             <FormLabel>Current Cloud Providers (Select all that apply)</FormLabel>
@@ -1227,6 +1407,7 @@ function AssessmentPageInner() {
                         <Typography variant="h6" gutterBottom>
                             Technical Architecture Details
                         </Typography>
+                        <ErrorSummary step={2} />
 
                         <FormControl>
                             <FormLabel>Application Types (Select all that apply)</FormLabel>
@@ -1438,6 +1619,7 @@ function AssessmentPageInner() {
                         <Typography variant="h6" gutterBottom>
                             AI Requirements & Use Cases
                         </Typography>
+                        <ErrorSummary step={3} />
 
                         <FormControl error={!!errors.aiUseCases}>
                             <FormLabel>AI Use Cases (Select all that apply)</FormLabel>
@@ -1642,6 +1824,7 @@ function AssessmentPageInner() {
                         <Typography variant="h6" gutterBottom>
                             Performance & Scalability Requirements
                         </Typography>
+                        <ErrorSummary step={4} />
 
                         <TextField
                             fullWidth
@@ -1766,6 +1949,7 @@ function AssessmentPageInner() {
                         <Typography variant="h6" gutterBottom>
                             Security & Compliance Requirements
                         </Typography>
+                        <ErrorSummary step={5} />
 
                         <FormControl>
                             <FormLabel>Compliance Requirements (Select all that apply)</FormLabel>
@@ -1929,6 +2113,7 @@ function AssessmentPageInner() {
                         <Typography variant="h6" gutterBottom>
                             Budget & Timeline Planning
                         </Typography>
+                        <ErrorSummary step={6} />
 
                         <FormControl fullWidth>
                             <InputLabel>Budget Flexibility</InputLabel>
@@ -2390,122 +2575,309 @@ function AssessmentPageInner() {
         }
     };
 
+    const getStepHelp = (step: number): string => {
+        const helpTexts = [
+            "Provide basic information about your company to help us understand your business context and generate relevant recommendations.",
+            "Tell us about your current infrastructure setup. This helps us identify optimization opportunities and migration paths.",
+            "Describe your technical architecture details. This information enables us to recommend compatible technologies and patterns.",
+            "Share your AI and ML requirements. We'll use this to suggest appropriate compute resources and specialized services.",
+            "Define your performance needs and scalability requirements. This helps us recommend the right sizing and scaling strategies.",
+            "Specify your security and compliance requirements. We'll ensure our recommendations meet your regulatory and security standards.",
+            "Share your budget and timeline constraints. This allows us to prioritize recommendations based on cost-effectiveness and urgency.",
+            "Review all your inputs before submitting. You can go back to any step to make changes if needed."
+        ];
+        return helpTexts[step] || "Complete this step to continue with your assessment.";
+    };
+
     const progress = ((activeStep + 1) / steps.length) * 100;
+    const theme = useTheme();
 
     return (
         <>
-            <AppBar position="static">
-                <Toolbar>
-                    <IconButton
-                        edge="start"
-                        color="inherit"
-                        onClick={() => router.push('/')}
-                        sx={{ mr: 2 }}
-                    >
-                        <ArrowBack />
-                    </IconButton>
-                    <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-                        AI Infrastructure Assessment
-                    </Typography>
-                    
-                    {/* Save Status and Button */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mr: 2 }}>
-                        {lastSaved && (
-                            <Typography variant="caption" color="text.secondary">
-                                Saved: {lastSaved.toLocaleTimeString()}
-                            </Typography>
-                        )}
-                        
-                        {/* Restore Session Button */}
-                        {hasDraft() && !showRestoreDialog && (
-                            <Button
-                                variant="outlined"
-                                size="small"
-                                startIcon={<Restore />}
-                                onClick={() => setShowRestoreDialog(true)}
-                                color="inherit"
-                                sx={{ mr: 1 }}
-                            >
-                                Restore Session
-                            </Button>
-                        )}
-                        
-                        <Button
-                            variant="outlined"
-                            size="small"
-                            startIcon={isSaving ? <CircularProgress size={16} /> : <Save />}
-                            onClick={handleSaveDraft}
-                            disabled={isSaving}
-                            color="inherit"
-                        >
-                            {isSaving ? 'Saving...' : 'Save Draft'}
-                        </Button>
-                    </Box>
-                    
-                    <Typography variant="body2">
-                        Step {activeStep + 1} of {steps.length}
-                    </Typography>
-                </Toolbar>
-                <LinearProgress variant="determinate" value={progress} />
-            </AppBar>
+            {/* Modern Header Card */}
+            <Container maxWidth="lg" sx={{ py: 2 }}>
+                <Card
+                    sx={{
+                        mb: 3,
+                        background: `linear-gradient(135deg, ${theme.palette.primary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+                        color: 'white',
+                        position: 'relative',
+                        overflow: 'visible'
+                    }}
+                >
+                    <CardContent sx={{ pb: 2 }}>
+                        <Grid container spacing={2} alignItems="center">
+                            <Grid item xs={12} md={8}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
+                                    <Assignment sx={{ fontSize: 32 }} />
+                                    <Typography variant="h4" component="h1" fontWeight="bold">
+                                        AI Infrastructure Assessment
+                                    </Typography>
+                                </Box>
+                                <Typography variant="body1" sx={{ opacity: 0.9, mb: 2 }}>
+                                    Get personalized recommendations for scaling your AI infrastructure
+                                </Typography>
 
-            <Container maxWidth="md" sx={{ py: 4 }}>
-                <Paper sx={{ p: 4 }}>
-                    {isLoadingDraft ? (
-                        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
-                            <CircularProgress />
-                            <Typography variant="body1" sx={{ ml: 2 }}>
-                                Loading assessment...
-                            </Typography>
-                        </Box>
-                    ) : (
-                        <>
-                            <ProgressIndicator
-                        title="Assessment Progress"
-                        steps={steps.map((label, index) => ({
-                            label,
-                            status: index === activeStep ? 'active' : index < activeStep ? 'completed' : 'pending',
-                        }))}
-                        variant="stepper"
-                    />
+                                {/* Progress Bar */}
+                                <Box sx={{ mb: 2 }}>
+                                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                        <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                                            Step {activeStep + 1} of {steps.length}: {steps[activeStep]}
+                                        </Typography>
+                                        <Typography variant="body2" sx={{ opacity: 0.9 }}>
+                                            {Math.round(progress)}% Complete
+                                        </Typography>
+                                    </Box>
+                                    <LinearProgress
+                                        variant="determinate"
+                                        value={progress}
+                                        sx={{
+                                            height: 8,
+                                            borderRadius: 4,
+                                            backgroundColor: alpha(theme.palette.common.white, 0.3),
+                                            '& .MuiLinearProgress-bar': {
+                                                backgroundColor: theme.palette.common.white,
+                                            }
+                                        }}
+                                    />
+                                </Box>
 
-                    <ProgressSaver
-                        formId={formId}
-                        currentStep={activeStep}
-                        formData={formData}
-                        totalSteps={steps.length}
-                        onSave={saveProgress}
-                        onLoad={loadProgress}
-                        onDelete={deleteProgress}
-                        onListSaved={listSavedForms}
-                        autoSaveInterval={30000}
-                    />
+                                {/* Horizontal Stepper */}
+                                <Stepper
+                                    activeStep={activeStep}
+                                    alternativeLabel
+                                    sx={{
+                                        display: { xs: 'none', md: 'flex' },
+                                        '& .MuiStepLabel-label': {
+                                            color: 'white',
+                                            opacity: 0.7,
+                                            fontSize: '0.75rem',
+                                            '&.Mui-active': {
+                                                opacity: 1,
+                                                fontWeight: 'bold'
+                                            },
+                                            '&.Mui-completed': {
+                                                opacity: 0.9
+                                            }
+                                        },
+                                        '& .MuiStepConnector-line': {
+                                            borderColor: alpha(theme.palette.common.white, 0.3)
+                                        },
+                                        '& .Mui-active .MuiStepConnector-line': {
+                                            borderColor: theme.palette.common.white
+                                        },
+                                        '& .Mui-completed .MuiStepConnector-line': {
+                                            borderColor: theme.palette.common.white
+                                        }
+                                    }}
+                                >
+                                    {steps.map((label, index) => (
+                                        <Step key={label}>
+                                            <StepLabel
+                                                StepIconComponent={({ active, completed }) => (
+                                                    <Box
+                                                        sx={{
+                                                            width: 24,
+                                                            height: 24,
+                                                            borderRadius: '50%',
+                                                            backgroundColor: completed
+                                                                ? theme.palette.common.white
+                                                                : active
+                                                                    ? theme.palette.common.white
+                                                                    : alpha(theme.palette.common.white, 0.3),
+                                                            color: completed
+                                                                ? theme.palette.primary.main
+                                                                : active
+                                                                    ? theme.palette.primary.main
+                                                                    : theme.palette.common.white,
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center',
+                                                            fontSize: '0.875rem',
+                                                            fontWeight: 'bold'
+                                                        }}
+                                                    >
+                                                        {completed ? <CheckCircle sx={{ fontSize: 16 }} /> : index + 1}
+                                                    </Box>
+                                                )}
+                                            >
+                                                {label}
+                                            </StepLabel>
+                                        </Step>
+                                    ))}
+                                </Stepper>
+                            </Grid>
 
-                    {getStepContent(activeStep)}
+                            <Grid item xs={12} md={4}>
+                                <Stack direction="row" spacing={1} justifyContent={{ xs: 'center', md: 'flex-end' }}>
+                                    {/* Save Status */}
+                                    {lastSaved && (
+                                        <Chip
+                                            icon={<CheckCircle />}
+                                            label={`Saved: ${lastSaved.toLocaleTimeString()}`}
+                                            size="small"
+                                            sx={{
+                                                backgroundColor: alpha(theme.palette.common.white, 0.2),
+                                                color: 'white',
+                                                '& .MuiChip-icon': { color: 'white' }
+                                            }}
+                                        />
+                                    )}
 
-                    <Box sx={{ display: 'flex', flexDirection: 'row', pt: 4 }}>
-                        <Button
-                            color="inherit"
-                            disabled={activeStep === 0}
-                            onClick={handleBack}
-                            sx={{ mr: 1 }}
-                        >
-                            Back
-                        </Button>
-                        <Box sx={{ flex: '1 1 auto' }} />
-                        {activeStep === steps.length - 1 ? (
-                            <Button onClick={handleSubmit} variant="contained">
-                                Submit Assessment
-                            </Button>
-                        ) : (
-                            <Button onClick={handleNext} variant="contained">
-                                Next
-                            </Button>
-                        )}
-                    </Box>
-                        </>
-                    )}
-                </Paper>
+                                    {/* Restore Session Button */}
+                                    {hasDraft() && !showRestoreDialog && (
+                                        <Button
+                                            variant="outlined"
+                                            size="small"
+                                            startIcon={<Restore />}
+                                            onClick={() => setShowRestoreDialog(true)}
+                                            sx={{
+                                                color: 'white',
+                                                borderColor: alpha(theme.palette.common.white, 0.5),
+                                                '&:hover': {
+                                                    borderColor: theme.palette.common.white,
+                                                    backgroundColor: alpha(theme.palette.common.white, 0.1)
+                                                }
+                                            }}
+                                        >
+                                            Restore Session
+                                        </Button>
+                                    )}
+
+                                    <Button
+                                        variant="outlined"
+                                        size="small"
+                                        startIcon={isSaving ? <CircularProgress size={16} color="inherit" /> : <Save />}
+                                        onClick={handleSaveDraft}
+                                        disabled={isSaving}
+                                        sx={{
+                                            color: 'white',
+                                            borderColor: alpha(theme.palette.common.white, 0.5),
+                                            '&:hover': {
+                                                borderColor: theme.palette.common.white,
+                                                backgroundColor: alpha(theme.palette.common.white, 0.1)
+                                            }
+                                        }}
+                                    >
+                                        {isSaving ? 'Saving...' : 'Save Draft'}
+                                    </Button>
+                                </Stack>
+                            </Grid>
+                        </Grid>
+                    </CardContent>
+                </Card>
+            </Container>
+
+            <Container maxWidth="lg" sx={{ pb: 4 }}>
+                {isLoadingDraft ? (
+                    <Card>
+                        <CardContent>
+                            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', py: 8 }}>
+                                <CircularProgress />
+                                <Typography variant="body1" sx={{ ml: 2 }}>
+                                    Loading assessment...
+                                </Typography>
+                            </Box>
+                        </CardContent>
+                    </Card>
+                ) : (
+                    <Grid container spacing={3}>
+                        {/* Main Content */}
+                        <Grid item xs={12} md={8}>
+                            <Card sx={{ minHeight: 600 }}>
+                                <CardContent sx={{ p: 4 }}>
+                                    <ProgressSaver
+                                        formId={formId}
+                                        currentStep={activeStep}
+                                        formData={formData}
+                                        totalSteps={steps.length}
+                                        onSave={saveProgress}
+                                        onLoad={loadProgress}
+                                        onDelete={deleteProgress}
+                                        onListSaved={listSavedForms}
+                                        autoSaveInterval={30000}
+                                    />
+
+                                    {getStepContent(activeStep)}
+
+                                    <Box sx={{ display: 'flex', flexDirection: 'row', pt: 4, gap: 2 }}>
+                                        <Button
+                                            variant="outlined"
+                                            disabled={activeStep === 0}
+                                            onClick={handleBack}
+                                            size="large"
+                                        >
+                                            Back
+                                        </Button>
+                                        <Box sx={{ flex: '1 1 auto' }} />
+                                        {activeStep === steps.length - 1 ? (
+                                            <Button
+                                                onClick={handleSubmit}
+                                                variant="contained"
+                                                size="large"
+                                                sx={{ minWidth: 140 }}
+                                                disabled={isSubmitting}
+                                                startIcon={isSubmitting ? <CircularProgress size={20} color="inherit" /> : undefined}
+                                            >
+                                                {isSubmitting ? 'Submitting...' : 'Submit Assessment'}
+                                            </Button>
+                                        ) : (
+                                            <Button
+                                                onClick={handleNext}
+                                                variant="contained"
+                                                size="large"
+                                                sx={{ minWidth: 100 }}
+                                            >
+                                                Next
+                                            </Button>
+                                        )}
+                                    </Box>
+                                </CardContent>
+                            </Card>
+                        </Grid>
+
+                        {/* Sidebar with Progress and Help */}
+                        <Grid item xs={12} md={4}>
+                            <Stack spacing={3}>
+                                {/* Progress Card */}
+                                <Card>
+                                    <CardContent>
+                                        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                            <Schedule color="primary" />
+                                            Progress Overview
+                                        </Typography>
+                                        <ProgressIndicator
+                                            title=""
+                                            steps={steps.map((label, index) => ({
+                                                label,
+                                                status: index === activeStep ? 'active' : index < activeStep ? 'completed' : 'pending',
+                                            }))}
+                                            variant="vertical"
+                                            showPercentage={false}
+                                        />
+                                    </CardContent>
+                                </Card>
+
+                                {/* Help Card */}
+                                <Card>
+                                    <CardContent>
+                                        <Typography variant="h6" gutterBottom color="primary">
+                                            💡 Tips & Guidance
+                                        </Typography>
+                                        <Typography variant="body2" color="text.secondary" paragraph>
+                                            {getStepHelp(activeStep)}
+                                        </Typography>
+                                        <Alert severity="info" sx={{ mt: 2 }}>
+                                            <Typography variant="body2">
+                                                Smart suggestions will appear as you type to help you fill out forms faster.
+                                            </Typography>
+                                        </Alert>
+                                    </CardContent>
+                                </Card>
+                            </Stack>
+                        </Grid>
+                    </Grid>
+                )}
             </Container>
 
             {/* Custom Industry Dialog */}
@@ -2596,14 +2968,76 @@ function AssessmentPageInner() {
                     </Button>
                 </DialogActions>
             </Dialog>
+
+            {/* Duplicate Assessment Dialog */}
+            <Dialog
+                open={showDuplicateDialog}
+                onClose={() => setShowDuplicateDialog(false)}
+                maxWidth="sm"
+                fullWidth
+            >
+                <DialogTitle>
+                    <Box display="flex" alignItems="center" gap={2}>
+                        <Warning color="warning" />
+                        Similar Assessment Found
+                    </Box>
+                </DialogTitle>
+                <DialogContent>
+                    <DialogContentText sx={{ mb: 2 }}>
+                        We found an existing assessment with similar information that you submitted recently.
+                        Would you like to view the existing assessment instead of creating a duplicate?
+                    </DialogContentText>
+                    <Box sx={{ mt: 2 }}>
+                        <Typography variant="body2" color="text.secondary">
+                            Creating duplicate assessments with identical information uses unnecessary resources.
+                            We recommend viewing your existing assessment results.
+                        </Typography>
+                    </Box>
+                </DialogContent>
+                <DialogActions>
+                    <Button
+                        onClick={() => setShowDuplicateDialog(false)}
+                        color="secondary"
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={() => {
+                            setShowDuplicateDialog(false);
+                            router.push('/dashboard');
+                        }}
+                        color="primary"
+                    >
+                        View Dashboard
+                    </Button>
+                    {existingAssessmentId && (
+                        <Button
+                            onClick={() => {
+                                setShowDuplicateDialog(false);
+                                router.push(`/dashboard?highlight=${existingAssessmentId}`);
+                            }}
+                            variant="contained"
+                            color="primary"
+                        >
+                            View Existing Assessment
+                        </Button>
+                    )}
+                </DialogActions>
+            </Dialog>
         </>
     );
 }
 
-export default function AssessmentPage() {
+function AssessmentPageWithLayout() {
     return (
-        <Suspense fallback={<div>Loading...</div>}>
-            <AssessmentPageInner />
-        </Suspense>
+        <ProtectedRoute>
+            <ResponsiveLayout title="AI Infrastructure Assessment">
+                <Suspense fallback={<div>Loading...</div>}>
+                    <AssessmentPageInner />
+                </Suspense>
+            </ResponsiveLayout>
+        </ProtectedRoute>
     );
 }
+
+export default AssessmentPageWithLayout;

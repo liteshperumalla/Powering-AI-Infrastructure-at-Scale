@@ -71,7 +71,7 @@ import {
   Upload,
 } from '@mui/icons-material';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as ChartTooltip, BarChart, Bar, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
-import { getRollbackAutomationService, RollbackPlan, DeploymentInfo, RollbackExecution, HealthCheck, AutoTrigger, ValidationProcedure, DRPlan, RollbackMetrics, HealthMetric, RollbackTemplate } from '../services/rollbackAutomation';
+import { getRollbackService, RollbackPlan, DeploymentInfo, RollbackExecution, HealthCheck, AutoTrigger, ValidationProcedure, DRPlan, RollbackMetrics, HealthMetric, RollbackTemplate } from '../services/rollbackAutomation';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -100,7 +100,7 @@ const RollbackAutomation: React.FC = () => {
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [rollbackService] = useState(() => getRollbackAutomationService());
+  const [rollbackService] = useState(() => getRollbackService());
 
   // State for different sections
   const [deployments, setDeployments] = useState<DeploymentInfo[]>([]);
@@ -153,16 +153,25 @@ const RollbackAutomation: React.FC = () => {
         rollbackService.getMetrics('7d'),
       ]);
 
-      setDeployments(deploymentsData);
-      setRollbackPlans(plansData);
-      setExecutions(executionsData);
-      setHealthChecks(healthData);
-      setAutoTriggers(triggersData);
-      setTemplates(templatesData);
-      setMetrics(metricsData);
+      // Ensure all data is in array format
+      setDeployments(Array.isArray(deploymentsData) ? deploymentsData : []);
+      setRollbackPlans(Array.isArray(plansData) ? plansData : []);
+      setExecutions(Array.isArray(executionsData) ? executionsData : []);
+      setHealthChecks(Array.isArray(healthData) ? healthData : []);
+      setAutoTriggers(Array.isArray(triggersData) ? triggersData : []);
+      setTemplates(Array.isArray(templatesData) ? templatesData : []);
+      setMetrics(metricsData || {});
     } catch (error) {
       setError('Failed to load rollback data');
       console.error('Error loading rollback data:', error);
+      // Set empty arrays as fallback
+      setDeployments([]);
+      setRollbackPlans([]);
+      setExecutions([]);
+      setHealthChecks([]);
+      setAutoTriggers([]);
+      setTemplates([]);
+      setMetrics({});
     } finally {
       setLoading(false);
     }
@@ -235,7 +244,7 @@ const RollbackAutomation: React.FC = () => {
         </Box>
       </Grid>
       
-      {deployments.map((deployment) => (
+      {Array.isArray(deployments) ? deployments.map((deployment) => (
         <Grid item xs={12} md={6} lg={4} key={deployment.id}>
           <Card>
             <CardContent>
@@ -276,7 +285,11 @@ const RollbackAutomation: React.FC = () => {
             </CardContent>
           </Card>
         </Grid>
-      ))}
+      )) : (
+        <Grid item xs={12}>
+          <Alert severity="info">No deployments available</Alert>
+        </Grid>
+      )}
     </Grid>
   );
 
@@ -306,7 +319,7 @@ const RollbackAutomation: React.FC = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {rollbackPlans.map((plan) => (
+            {Array.isArray(rollbackPlans) ? rollbackPlans.map((plan) => (
               <TableRow key={plan.id}>
                 <TableCell>{plan.name}</TableCell>
                 <TableCell>{plan.deployment_id}</TableCell>
@@ -345,7 +358,13 @@ const RollbackAutomation: React.FC = () => {
                   </Tooltip>
                 </TableCell>
               </TableRow>
-            ))}
+            )) : (
+              <TableRow>
+                <TableCell colSpan={6} align="center">
+                  <Alert severity="info">No rollback plans available</Alert>
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </TableContainer>
@@ -356,7 +375,7 @@ const RollbackAutomation: React.FC = () => {
     <Box>
       <Typography variant="h6" mb={3}>Execution History</Typography>
       
-      {executions.map((execution) => (
+      {Array.isArray(executions) ? executions.map((execution) => (
         <Card key={execution.id} sx={{ mb: 2 }}>
           <CardContent>
             <Box display="flex" justifyContent="between" alignItems="center" mb={2}>
@@ -397,7 +416,7 @@ const RollbackAutomation: React.FC = () => {
               </AccordionSummary>
               <AccordionDetails>
                 <Stepper orientation="vertical" activeStep={-1}>
-                  {execution.execution_steps.map((step, index) => (
+                  {Array.isArray(execution.execution_steps) ? execution.execution_steps.map((step, index) => (
                     <Step key={index} completed={step.status === 'completed'}>
                       <StepLabel 
                         error={step.status === 'failed'}
@@ -416,13 +435,17 @@ const RollbackAutomation: React.FC = () => {
                         </Typography>
                       )}
                     </Step>
-                  ))}
+                  )) : (
+                    <Typography color="textSecondary">No execution steps available</Typography>
+                  )}
                 </Stepper>
               </AccordionDetails>
             </Accordion>
           </CardContent>
         </Card>
-      ))}
+      )) : (
+        <Alert severity="info">No execution history available</Alert>
+      )}
     </Box>
   );
 
@@ -452,7 +475,7 @@ const RollbackAutomation: React.FC = () => {
           <CardContent>
             <Typography variant="h6" mb={2}>Health Metrics</Typography>
             <List>
-              {healthChecks.slice(0, 5).map((check, index) => (
+              {Array.isArray(healthChecks) ? healthChecks.slice(0, 5).map((check, index) => (
                 <ListItem key={index}>
                   <ListItemIcon>
                     {check.status === 'healthy' ? <CheckCircle color="success" /> :
@@ -464,7 +487,11 @@ const RollbackAutomation: React.FC = () => {
                     secondary={`Score: ${check.health_score}/100`}
                   />
                 </ListItem>
-              ))}
+              )) : (
+                <ListItem>
+                  <ListItemText primary="No health checks available" />
+                </ListItem>
+              )}
             </List>
           </CardContent>
         </Card>
@@ -486,7 +513,7 @@ const RollbackAutomation: React.FC = () => {
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {autoTriggers.map((trigger) => (
+                  {Array.isArray(autoTriggers) ? autoTriggers.map((trigger) => (
                     <TableRow key={trigger.id}>
                       <TableCell>{trigger.name}</TableCell>
                       <TableCell>
@@ -513,7 +540,13 @@ const RollbackAutomation: React.FC = () => {
                         </IconButton>
                       </TableCell>
                     </TableRow>
-                  ))}
+                  )) : (
+                    <TableRow>
+                      <TableCell colSpan={5} align="center">
+                        <Alert severity="info">No auto-trigger rules configured</Alert>
+                      </TableCell>
+                    </TableRow>
+                  )}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -535,7 +568,7 @@ const RollbackAutomation: React.FC = () => {
                   <Typography variant="h6">Success Rate</Typography>
                 </Box>
                 <Typography variant="h4" color="success.main">
-                  {metrics.success_rate.toFixed(1)}%
+                  {metrics.success_rate ? metrics.success_rate.toFixed(1) : '0.0'}%
                 </Typography>
               </CardContent>
             </Card>
@@ -549,7 +582,7 @@ const RollbackAutomation: React.FC = () => {
                   <Typography variant="h6">Avg Duration</Typography>
                 </Box>
                 <Typography variant="h4">
-                  {metrics.average_duration}
+                  {metrics.average_duration || '0 min'}
                 </Typography>
               </CardContent>
             </Card>
@@ -563,7 +596,7 @@ const RollbackAutomation: React.FC = () => {
                   <Typography variant="h6">Total Executions</Typography>
                 </Box>
                 <Typography variant="h4">
-                  {metrics.total_executions}
+                  {metrics.total_executions || 0}
                 </Typography>
               </CardContent>
             </Card>
@@ -577,7 +610,7 @@ const RollbackAutomation: React.FC = () => {
                   <Typography variant="h6">Failed Executions</Typography>
                 </Box>
                 <Typography variant="h4" color="error.main">
-                  {metrics.failed_executions}
+                  {metrics.failed_executions || 0}
                 </Typography>
               </CardContent>
             </Card>
@@ -587,7 +620,7 @@ const RollbackAutomation: React.FC = () => {
             <Card>
               <CardContent>
                 <Typography variant="h6" mb={2}>Rollback Trends</Typography>
-                {metrics.execution_trends.length > 0 && (
+                {metrics.execution_trends && metrics.execution_trends.length > 0 && (
                   <ResponsiveContainer width="100%" height={400}>
                     <AreaChart data={metrics.execution_trends}>
                       <CartesianGrid strokeDasharray="3 3" />
@@ -607,7 +640,7 @@ const RollbackAutomation: React.FC = () => {
             <Card>
               <CardContent>
                 <Typography variant="h6" mb={2}>Rollback by Strategy</Typography>
-                {metrics.strategy_distribution.length > 0 && (
+                {metrics.strategy_distribution && metrics.strategy_distribution.length > 0 && (
                   <ResponsiveContainer width="100%" height={400}>
                     <PieChart>
                       <Pie
@@ -620,9 +653,9 @@ const RollbackAutomation: React.FC = () => {
                         fill="#8884d8"
                         dataKey="count"
                       >
-                        {metrics.strategy_distribution.map((entry, index) => (
+                        {Array.isArray(metrics?.strategy_distribution) ? metrics.strategy_distribution.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={`hsl(${index * 45}, 70%, 50%)`} />
-                        ))}
+                        )) : null}
                       </Pie>
                       <ChartTooltip />
                     </PieChart>
@@ -701,11 +734,13 @@ const RollbackAutomation: React.FC = () => {
                   value={newPlanData.deployment_id}
                   onChange={(e) => setNewPlanData({ ...newPlanData, deployment_id: e.target.value })}
                 >
-                  {deployments.map((deployment) => (
+                  {Array.isArray(deployments) ? deployments.map((deployment) => (
                     <MenuItem key={deployment.id} value={deployment.id}>
                       {deployment.name} ({deployment.environment})
                     </MenuItem>
-                  ))}
+                  )) : (
+                    <MenuItem value="">No deployments available</MenuItem>
+                  )}
                 </Select>
               </FormControl>
             </Grid>
@@ -716,11 +751,13 @@ const RollbackAutomation: React.FC = () => {
                   value={newPlanData.rollback_strategy}
                   onChange={(e) => setNewPlanData({ ...newPlanData, rollback_strategy: e.target.value })}
                 >
-                  {rollbackStrategies.map((strategy) => (
+                  {Array.isArray(rollbackStrategies) ? rollbackStrategies.map((strategy) => (
                     <MenuItem key={strategy} value={strategy}>
                       {strategy.replace('_', ' ').toUpperCase()}
                     </MenuItem>
-                  ))}
+                  )) : (
+                    <MenuItem value="">No strategies available</MenuItem>
+                  )}
                 </Select>
               </FormControl>
             </Grid>

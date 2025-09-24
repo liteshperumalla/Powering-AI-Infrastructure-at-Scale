@@ -222,8 +222,8 @@ class ComplianceAgent(BaseAgent):
         regulation_reasons = {}
         
         # Analyze business context to determine applicable regulations
-        industry = business_req.get("industry", "").lower()
-        company_location = business_req.get("company_location", "").lower()
+        industry = business_req.get("industry").lower()
+        company_location = business_req.get("company_location").lower()
         data_types = business_req.get("data_types", [])
         target_markets = business_req.get("target_markets", [])
         
@@ -321,7 +321,7 @@ class ComplianceAgent(BaseAgent):
         for regulation in applicable_regulations.get("applicable_regulations", []):
             if regulation in self.regulatory_frameworks:
                 framework = self.regulatory_frameworks[regulation]
-                residency_req = framework.get("data_residency", "")
+                residency_req = framework.get("data_residency")
                 
                 residency_requirements[regulation] = residency_req
                 
@@ -405,7 +405,7 @@ class ComplianceAgent(BaseAgent):
                     "current_score": reg_score,
                     "gap_severity": "high" if reg_score < 0.4 else "medium",
                     "required_improvements": self._get_regulation_requirements(regulation),
-                    "potential_penalties": self.regulatory_frameworks.get(regulation, {}).get("penalties", "Unknown")
+                    "potential_penalties": self.regulatory_frameworks.get(regulation, {}).get("penalties")
                 }
                 gaps.append(gap)
                 
@@ -965,8 +965,8 @@ class ComplianceAgent(BaseAgent):
             if updates:
                 context_parts.append(f"{category.replace('_', ' ').title()}:")
                 for update in updates[:3]:  # Limit to top 3 per category
-                    title = update.get("title", "")
-                    snippet = update.get("snippet", "")
+                    title = update.get("title")
+                    snippet = update.get("snippet")
                     context_parts.append(f"- {title}: {snippet[:200]}...")
         
         return "\n".join(context_parts)
@@ -982,7 +982,7 @@ class ComplianceAgent(BaseAgent):
         # Extract key topics from titles
         for updates in regulatory_updates.values():
             for update in updates:
-                title = update.get("title", "")
+                title = update.get("title")
                 if title:
                     summary["key_topics"].append(title)
         
@@ -1094,7 +1094,7 @@ class ComplianceAgent(BaseAgent):
                 "implementation_timeline": analysis_result.get("implementation_timeline", {}),
                 "regulation_details": base_analysis["regulation_details"],
                 "applicability_reasons": base_analysis["applicability_reasons"],
-                "llm_analysis": analysis_result.get("analysis", ""),
+                "llm_analysis": analysis_result.get("analysis"),
                 "regulatory_update_summary": self._summarize_regulatory_updates(regulatory_updates)
             }
             
@@ -1176,7 +1176,7 @@ class ComplianceAgent(BaseAgent):
                 "action_items": llm_analysis.get("action_items", {}),
                 "overall_compliance_score": self._calculate_overall_compliance_score(llm_analysis.get("regulation_scores", {})),
                 "assessment_timestamp": datetime.now(timezone.utc).isoformat(),
-                "llm_insights": llm_analysis.get("analysis", "")
+                "llm_insights": llm_analysis.get("analysis")
             }
             
             return enhanced_assessment
@@ -1214,7 +1214,7 @@ class ComplianceAgent(BaseAgent):
             """
             
             for result in security_research.get("results", [])[:3]:
-                security_context += f"- {result.get('title', '')}: {result.get('snippet', '')[:200]}...\n"
+                security_context += f"- {result.get('title')}: {result.get('snippet')[:200]}...\n"
             
             security_prompt = f"""
             Assess security controls against current industry benchmarks and standards:
@@ -1257,7 +1257,7 @@ class ComplianceAgent(BaseAgent):
                 "compliance_timeline": analysis_result.get("compliance_timeline", {}),
                 "security_research_data": security_research.get("results", []),
                 "assessment_timestamp": datetime.now(timezone.utc).isoformat(),
-                "benchmarking_insights": analysis_result.get("analysis", "")
+                "benchmarking_insights": analysis_result.get("analysis")
             }
             
         except Exception as e:
@@ -1336,7 +1336,7 @@ class ComplianceAgent(BaseAgent):
                 "business_impact": gap_analysis.get("business_impact", {}),
                 "implementation_plan": gap_analysis.get("implementation_plan", {}),
                 "gap_analysis_timestamp": datetime.now(timezone.utc).isoformat(),
-                "strategic_insights": gap_analysis.get("analysis", "")
+                "strategic_insights": gap_analysis.get("analysis")
             }
             
         except Exception as e:
@@ -1389,7 +1389,7 @@ class ComplianceAgent(BaseAgent):
             """
             
             for result in solutions_research.get("results", [])[:3]:
-                recommendations_prompt += f"- {result.get('title', '')}: {result.get('snippet', '')[:200]}...\n"
+                recommendations_prompt += f"- {result.get('title')}: {result.get('snippet')[:200]}...\n"
             
             recommendations_prompt += f"""
             
@@ -1537,10 +1537,10 @@ class ComplianceAgent(BaseAgent):
             
             # Organize recommendations by timeline
             timeline_organization = {
-                "0-30_days": [r for r in recommendations if "0-30 days" in r.get("timeline", "")],
-                "1-3_months": [r for r in recommendations if "1-3 months" in r.get("timeline", "")],
-                "3-6_months": [r for r in recommendations if "3-6 months" in r.get("timeline", "")],
-                "6-12_months": [r for r in recommendations if "6-12 months" in r.get("timeline", "")]
+                "0-30_days": [r for r in recommendations if "0-30 days" in r.get("timeline")],
+                "1-3_months": [r for r in recommendations if "1-3 months" in r.get("timeline")],
+                "3-6_months": [r for r in recommendations if "3-6 months" in r.get("timeline")],
+                "6-12_months": [r for r in recommendations if "6-12 months" in r.get("timeline")]
             }
             
             return {
@@ -1556,7 +1556,7 @@ class ComplianceAgent(BaseAgent):
                 "total_recommendations": len(recommendations),
                 "estimated_completion": "12 months",
                 "roadmap_created": datetime.now(timezone.utc).isoformat(),
-                "strategic_insights": roadmap_data.get("analysis", "")
+                "strategic_insights": roadmap_data.get("analysis")
             }
             
         except Exception as e:

@@ -479,10 +479,10 @@ class ChatbotAgent(BaseAgent):
         if self.user_info:
             user_context = f"""
             User Information:
-            - Name: {self.user_info.get('full_name', 'Unknown')}
+            - Name: {self.user_info.get('full_name')}
             - Company: {self.user_info.get('company_name', 'Not specified')}
             - Role: {self.user_info.get('job_title', 'Not specified')}
-            - Experience Level: {self.user_info.get('experience_level', 'Unknown')}
+            - Experience Level: {self.user_info.get('experience_level')}
             """
 
         # Add report/assessment context if available
@@ -492,19 +492,19 @@ class ChatbotAgent(BaseAgent):
                 report_data = additional_context["report_data"]
                 domain_context += f"""
                 Related Report Information:
-                - Title: {report_data.get('title', 'N/A')}
+                - Title: {report_data.get('title')}
                 - Key Findings: {', '.join(report_data.get('key_findings', [])[:3])}
                 - Top Recommendations: {', '.join(report_data.get('recommendations', [])[:2])}
-                - Compliance Score: {report_data.get('compliance_score', 'N/A')}
-                - Estimated Savings: ${report_data.get('estimated_savings', 'N/A')}
+                - Compliance Score: {report_data.get('compliance_score')}
+                - Estimated Savings: ${report_data.get('estimated_savings')}
                 """
             
             if additional_context.get("assessment_data"):
                 assessment_data = additional_context["assessment_data"]
                 domain_context += f"""
                 Related Assessment Information:
-                - Title: {assessment_data.get('title', 'N/A')}
-                - Status: {assessment_data.get('status', 'N/A')}
+                - Title: {assessment_data.get('title')}
+                - Status: {assessment_data.get('status')}
                 - Business Goals: {', '.join(assessment_data.get('business_goals', [])[:3])}
                 - Cloud Providers: {', '.join(assessment_data.get('cloud_providers', []))}
                 """
@@ -643,7 +643,7 @@ class ChatbotAgent(BaseAgent):
             """
         }
         
-        context_addition = context_prompts.get(context, "")
+        context_addition = context_prompts.get(context)
         
         return f"{base_prompt}\n\n{context_addition}"
     
@@ -880,8 +880,8 @@ class ChatbotAgent(BaseAgent):
             description += "Recent Conversation History:\n"
             
             for msg in self.conversation_history[-6:]:  # Last 3 turns
-                role = msg.get("role", "unknown").title()
-                content = msg.get("content", "")
+                role = msg.get("role").title()
+                content = msg.get("content")
                 description += f"{role}: {content}\n"
             
             # Determine category based on context
@@ -1270,8 +1270,8 @@ class ChatbotAgent(BaseAgent):
             # Prepare search results context
             results_context = ""
             for i, result in enumerate(search_results[:3]):
-                title = result.get("title", "")
-                snippet = result.get("snippet", "")
+                title = result.get("title")
+                snippet = result.get("snippet")
                 results_context += f"{i+1}. {title}: {snippet}\n"
             
             summary_prompt = f"""

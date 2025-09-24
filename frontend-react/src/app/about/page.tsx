@@ -28,32 +28,50 @@ export default function About() {
   const router = useRouter();
 
   return (
-    <ResponsiveLayout title="About Infra Mind">
+    <ResponsiveLayout title="About Infra Mind" fullWidth>
 
       {/* Hero Section */}
       <Box
         sx={{
-          background: theme.palette.mode === 'dark' 
-            ? 'linear-gradient(135deg, #1565c0 0%, #1976d2 100%)'
-            : 'linear-gradient(135deg, #1976d2 0%, #42a5f5 100%)',
-          color: 'white',
-          py: { xs: 6, md: 8 },
+          background: `linear-gradient(135deg, ${theme.palette.primary.main}10, ${theme.palette.secondary.main}10)`,
+          minHeight: { xs: '60vh', md: '70vh' },
+          display: 'flex',
+          alignItems: 'center',
+          position: 'relative',
+          '&::before': {
+            content: '""',
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'radial-gradient(circle at 30% 40%, rgba(59, 130, 246, 0.1) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(139, 92, 246, 0.1) 0%, transparent 50%)',
+            pointerEvents: 'none',
+          }
         }}
       >
-        <Container maxWidth="lg">
+        <Container maxWidth="lg" sx={{ position: 'relative', zIndex: 1 }}>
           <Box sx={{ textAlign: 'center' }}>
             <Typography
               variant="h2"
               component="h1"
+              fontWeight={700}
               gutterBottom
-              sx={{ fontWeight: 'bold', mb: 2 }}
+              sx={{ 
+                background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                backgroundClip: 'text',
+                WebkitBackgroundClip: 'text',
+                WebkitTextFillColor: 'transparent',
+                mb: 3,
+              }}
             >
               About Infra Mind
             </Typography>
             <Typography
               variant="h6"
               component="p"
-              sx={{ opacity: 0.9, maxWidth: 800, mx: 'auto' }}
+              color="text.secondary"
+              sx={{ maxWidth: 800, mx: 'auto' }}
             >
               Empowering businesses to strategically plan, simulate, and scale their AI infrastructure with confidence through intelligent AI-powered advisory services.
             </Typography>
@@ -69,7 +87,7 @@ export default function About() {
               Our Mission
             </Typography>
             <Typography variant="body1" paragraph sx={{ fontSize: '1.1rem', lineHeight: 1.7 }}>
-              We believe that AI infrastructure shouldn't be a barrier to innovation. Our mission is to democratize access to enterprise-grade AI infrastructure planning and scaling through intelligent, automated advisory services.
+              We believe that AI infrastructure shouldn&apos;t be a barrier to innovation. Our mission is to democratize access to enterprise-grade AI infrastructure planning and scaling through intelligent, automated advisory services.
             </Typography>
             <Typography variant="body1" paragraph sx={{ fontSize: '1.1rem', lineHeight: 1.7 }}>
               By leveraging advanced AI agents and multi-cloud expertise, we help organizations make informed decisions about their infrastructure investments, ensuring they can scale efficiently while maintaining security and compliance.
@@ -113,39 +131,108 @@ export default function About() {
         </Typography>
         <Grid container spacing={4}>
           <Grid item xs={12} md={4}>
-            <Card sx={{ height: '100%', textAlign: 'center', p: 3 }}>
-              <CardContent>
-                <Analytics sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
-                <Typography variant="h5" component="h3" gutterBottom>
+            <Card sx={{ 
+              height: '100%', 
+              textAlign: 'center', 
+              p: 3,
+              transition: 'all 0.3s ease-in-out',
+              '&:hover': {
+                transform: 'translateY(-8px)',
+                boxShadow: 4,
+              }
+            }}>
+              <CardContent sx={{ flex: 1 }}>
+                <Box
+                  sx={{
+                    width: 64,
+                    height: 64,
+                    bgcolor: theme.palette.primary.main,
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    mx: 'auto',
+                    mb: 2,
+                  }}
+                >
+                  <Analytics sx={{ fontSize: 32, color: 'white' }} />
+                </Box>
+                <Typography variant="h5" component="h3" gutterBottom fontWeight={600}>
                   Infrastructure Assessment
                 </Typography>
-                <Typography variant="body1">
+                <Typography variant="body1" color="text.secondary">
                   Comprehensive 8-step assessment process that captures your business requirements, technical architecture, and scaling needs to provide personalized recommendations.
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
           <Grid item xs={12} md={4}>
-            <Card sx={{ height: '100%', textAlign: 'center', p: 3 }}>
-              <CardContent>
-                <Security sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
-                <Typography variant="h5" component="h3" gutterBottom>
+            <Card sx={{ 
+              height: '100%', 
+              textAlign: 'center', 
+              p: 3,
+              transition: 'all 0.3s ease-in-out',
+              '&:hover': {
+                transform: 'translateY(-8px)',
+                boxShadow: 4,
+              }
+            }}>
+              <CardContent sx={{ flex: 1 }}>
+                <Box
+                  sx={{
+                    width: 64,
+                    height: 64,
+                    bgcolor: theme.palette.success.main,
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    mx: 'auto',
+                    mb: 2,
+                  }}
+                >
+                  <Security sx={{ fontSize: 32, color: 'white' }} />
+                </Box>
+                <Typography variant="h5" component="h3" gutterBottom fontWeight={600}>
                   Compliance & Security
                 </Typography>
-                <Typography variant="body1">
+                <Typography variant="body1" color="text.secondary">
                   Built-in compliance mapping for GDPR, HIPAA, CCPA, and other regulations with automated security best practices and vulnerability assessments.
                 </Typography>
               </CardContent>
             </Card>
           </Grid>
           <Grid item xs={12} md={4}>
-            <Card sx={{ height: '100%', textAlign: 'center', p: 3 }}>
-              <CardContent>
-                <TrendingUp sx={{ fontSize: 60, color: 'primary.main', mb: 2 }} />
-                <Typography variant="h5" component="h3" gutterBottom>
+            <Card sx={{ 
+              height: '100%', 
+              textAlign: 'center', 
+              p: 3,
+              transition: 'all 0.3s ease-in-out',
+              '&:hover': {
+                transform: 'translateY(-8px)',
+                boxShadow: 4,
+              }
+            }}>
+              <CardContent sx={{ flex: 1 }}>
+                <Box
+                  sx={{
+                    width: 64,
+                    height: 64,
+                    bgcolor: theme.palette.secondary.main,
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    mx: 'auto',
+                    mb: 2,
+                  }}
+                >
+                  <TrendingUp sx={{ fontSize: 32, color: 'white' }} />
+                </Box>
+                <Typography variant="h5" component="h3" gutterBottom fontWeight={600}>
                   Cost Optimization
                 </Typography>
-                <Typography variant="body1">
+                <Typography variant="body1" color="text.secondary">
                   Real-time pricing analysis across multiple cloud providers with detailed cost projections and ROI modeling for informed decision making.
                 </Typography>
               </CardContent>
@@ -198,30 +285,70 @@ export default function About() {
                 gap: 2,
               }}
             >
-              <Card sx={{ p: 2, textAlign: 'center' }}>
-                <People sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-                <Typography variant="h6">Multi-Cloud</Typography>
+              <Card sx={{ 
+                p: 2, 
+                textAlign: 'center',
+                transition: 'all 0.3s ease-in-out',
+                '&:hover': {
+                  transform: 'scale(1.05)',
+                  boxShadow: 3,
+                }
+              }}>
+                <Box sx={{ color: theme.palette.primary.main, mb: 1 }}>
+                  <People sx={{ fontSize: 40 }} />
+                </Box>
+                <Typography variant="h6" fontWeight={600}>Multi-Cloud</Typography>
                 <Typography variant="body2" color="text.secondary">
                   AWS, Azure, GCP, Alibaba, IBM
                 </Typography>
               </Card>
-              <Card sx={{ p: 2, textAlign: 'center' }}>
-                <Speed sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-                <Typography variant="h6">Real-Time</Typography>
+              <Card sx={{ 
+                p: 2, 
+                textAlign: 'center',
+                transition: 'all 0.3s ease-in-out',
+                '&:hover': {
+                  transform: 'scale(1.05)',
+                  boxShadow: 3,
+                }
+              }}>
+                <Box sx={{ color: theme.palette.warning.main, mb: 1 }}>
+                  <Speed sx={{ fontSize: 40 }} />
+                </Box>
+                <Typography variant="h6" fontWeight={600}>Real-Time</Typography>
                 <Typography variant="body2" color="text.secondary">
                   Live pricing & analysis
                 </Typography>
               </Card>
-              <Card sx={{ p: 2, textAlign: 'center' }}>
-                <Security sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-                <Typography variant="h6">Secure</Typography>
+              <Card sx={{ 
+                p: 2, 
+                textAlign: 'center',
+                transition: 'all 0.3s ease-in-out',
+                '&:hover': {
+                  transform: 'scale(1.05)',
+                  boxShadow: 3,
+                }
+              }}>
+                <Box sx={{ color: theme.palette.success.main, mb: 1 }}>
+                  <Security sx={{ fontSize: 40 }} />
+                </Box>
+                <Typography variant="h6" fontWeight={600}>Secure</Typography>
                 <Typography variant="body2" color="text.secondary">
                   Enterprise-grade security
                 </Typography>
               </Card>
-              <Card sx={{ p: 2, textAlign: 'center' }}>
-                <Analytics sx={{ fontSize: 40, color: 'primary.main', mb: 1 }} />
-                <Typography variant="h6">Intelligent</Typography>
+              <Card sx={{ 
+                p: 2, 
+                textAlign: 'center',
+                transition: 'all 0.3s ease-in-out',
+                '&:hover': {
+                  transform: 'scale(1.05)',
+                  boxShadow: 3,
+                }
+              }}>
+                <Box sx={{ color: theme.palette.secondary.main, mb: 1 }}>
+                  <Analytics sx={{ fontSize: 40 }} />
+                </Box>
+                <Typography variant="h6" fontWeight={600}>Intelligent</Typography>
                 <Typography variant="body2" color="text.secondary">
                   AI-powered insights
                 </Typography>
@@ -252,7 +379,14 @@ export default function About() {
               variant="contained"
               size="large"
               onClick={() => router.push('/assessments')}
-              sx={{ px: 4, py: 1.5 }}
+              sx={{
+                borderRadius: 3,
+                px: 4,
+                py: 1.5,
+                fontSize: '1.1rem',
+                textTransform: 'none',
+                fontWeight: 600,
+              }}
             >
               Start Assessment
             </Button>
@@ -260,7 +394,14 @@ export default function About() {
               variant="outlined"
               size="large"
               onClick={() => router.push('/auth/login')}
-              sx={{ px: 4, py: 1.5 }}
+              sx={{
+                borderRadius: 3,
+                px: 4,
+                py: 1.5,
+                fontSize: '1.1rem',
+                textTransform: 'none',
+                fontWeight: 600,
+              }}
             >
               Sign In
             </Button>

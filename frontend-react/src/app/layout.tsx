@@ -5,6 +5,7 @@ import ThemeProvider from "@/components/ThemeProvider";
 import ReduxProvider from "@/components/ReduxProvider";
 import AuthInitializer from "@/components/AuthInitializer";
 import ErrorBoundary from "@/components/ErrorBoundary";
+import GoogleOAuthProvider from "@/components/GoogleOAuthProvider";
 
 const roboto = Roboto({
   weight: ['300', '400', '500', '700'],
@@ -26,12 +27,14 @@ export default function RootLayout({
     <html lang="en" data-scroll-behavior="smooth">
       <body className={roboto.className}>
         <ReduxProvider>
-          <ThemeProvider>
-            <ErrorBoundary>
-              <AuthInitializer />
-              {children}
-            </ErrorBoundary>
-          </ThemeProvider>
+          <GoogleOAuthProvider>
+            <ThemeProvider>
+              <ErrorBoundary>
+                <AuthInitializer />
+                {children}
+              </ErrorBoundary>
+            </ThemeProvider>
+          </GoogleOAuthProvider>
         </ReduxProvider>
       </body>
     </html>

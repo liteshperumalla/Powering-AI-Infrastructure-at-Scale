@@ -6,7 +6,7 @@ infrastructure recommendations. They're designed to be user-friendly
 while providing rich data for AI agents.
 """
 
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 from pydantic import Field, field_validator, model_validator
 from decimal import Decimal
 
@@ -257,7 +257,7 @@ class BusinessRequirements(BaseSchema):
     )
     
     # Team and Capabilities
-    team_structure: TeamStructure = Field(
+    team_structure: Union[str, TeamStructure] = Field(
         description="Team size and technical capabilities"
     )
     
@@ -307,6 +307,28 @@ class BusinessRequirements(BaseSchema):
         max_length=2000,
         description="Any additional context or requirements"
     )
+
+    @field_validator('team_structure')
+    @classmethod
+    def convert_legacy_team_structure_main(cls, v):
+        """Convert legacy string team_structure to TeamStructure object."""
+        if isinstance(v, str):
+            # Convert legacy string values to TeamStructure object
+            size_mapping = {
+                'small': {'total_developers': 3, 'senior_developers': 1, 'devops_engineers': 0, 'data_engineers': 0},
+                'medium': {'total_developers': 8, 'senior_developers': 3, 'devops_engineers': 1, 'data_engineers': 1},
+                'large': {'total_developers': 20, 'senior_developers': 8, 'devops_engineers': 3, 'data_engineers': 2},
+                'startup': {'total_developers': 5, 'senior_developers': 2, 'devops_engineers': 1, 'data_engineers': 1}
+            }
+
+            base_values = size_mapping.get(v, size_mapping['medium'])
+            return TeamStructure(
+                cloud_expertise_level=3,
+                kubernetes_expertise=2,
+                database_expertise=3,
+                **base_values
+            )
+        return v
     
     @field_validator('business_goals')
     @classmethod
@@ -337,7 +359,7 @@ class BusinessRequirementsUpdate(BaseSchema):
     business_goals: Optional[List[BusinessGoal]] = None
     growth_projection: Optional[GrowthProjection] = None
     budget_constraints: Optional[BudgetConstraints] = None
-    team_structure: Optional[TeamStructure] = None
+    team_structure: Optional[Union[str, TeamStructure]] = None
     compliance_requirements: Optional[List[ComplianceRequirement]] = None
     data_residency_requirements: Optional[List[str]] = None
     project_timeline_months: Optional[int] = Field(default=None, ge=1, le=36)
@@ -347,6 +369,28 @@ class BusinessRequirementsUpdate(BaseSchema):
     cloud_provider_preference: Optional[str] = None
     multi_cloud_acceptable: Optional[bool] = None
     additional_notes: Optional[str] = Field(default=None, max_length=2000)
+
+    @field_validator('team_structure')
+    @classmethod
+    def convert_legacy_team_structure(cls, v):
+        """Convert legacy string team_structure to TeamStructure object."""
+        if isinstance(v, str):
+            # Convert legacy string values to TeamStructure object
+            size_mapping = {
+                'small': {'total_developers': 3, 'senior_developers': 1, 'devops_engineers': 0, 'data_engineers': 0},
+                'medium': {'total_developers': 8, 'senior_developers': 3, 'devops_engineers': 1, 'data_engineers': 1},
+                'large': {'total_developers': 20, 'senior_developers': 8, 'devops_engineers': 3, 'data_engineers': 2},
+                'startup': {'total_developers': 5, 'senior_developers': 2, 'devops_engineers': 1, 'data_engineers': 1}
+            }
+
+            base_values = size_mapping.get(v, size_mapping['medium'])
+            return TeamStructure(
+                cloud_expertise_level=3,
+                kubernetes_expertise=2,
+                database_expertise=3,
+                **base_values
+            )
+        return v
 
 
 class BusinessRequirementsResponse(BusinessRequirements):

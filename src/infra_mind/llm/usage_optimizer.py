@@ -619,7 +619,7 @@ class LLMUsageOptimizer:
                     continue
                 
                 # Get original request from cache entry
-                cached_prompt = cache_entry.response.metadata.get("original_prompt", "")
+                cached_prompt = cache_entry.response.metadata.get("original_prompt")
                 cached_words = set((cached_prompt or "").lower().split())
                 
                 # Calculate Jaccard similarity

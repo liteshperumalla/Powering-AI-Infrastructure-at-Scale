@@ -730,7 +730,7 @@ Before providing your final response, please think through this step-by-step:
 Work through each step methodically, then provide your comprehensive response.
 """
         
-        enhanced["user_prompt"] = enhanced.get("user_prompt", "") + cot_instruction
+        enhanced["user_prompt"] = enhanced.get("user_prompt") + cot_instruction
         
         return enhanced
     

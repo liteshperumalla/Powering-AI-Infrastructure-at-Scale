@@ -988,12 +988,19 @@ class ReportGeneratorAgent(BaseAgent):
         # Create a mock Recommendation object with the data
         rec = type('Recommendation', (), {})()
         rec.id = data.get("id", str(uuid.uuid4()))
-        rec.title = data.get("title", "Recommendation")
-        rec.description = data.get("description", "")
+        # Generate unique title instead of generic fallback
+        title = data.get("title")
+        if not title or title == "Recommendation":
+            category = data.get("category", "general").title()
+            priority = data.get("priority", "medium").title()
+            timestamp = datetime.now().strftime("%H%M")
+            title = f"{category} {priority} Priority Finding ({timestamp})"
+        rec.title = title
+        rec.description = data.get("description")
         rec.category = data.get("category", "general")
         rec.priority = data.get("priority", "medium")
         rec.estimated_cost = data.get("estimated_cost", 0)
-        rec.implementation_time = data.get("implementation_time", "unknown")
+        rec.implementation_time = data.get("implementation_time")
         rec.benefits = data.get("benefits", [])
         rec.risks = data.get("risks", [])
         return rec
@@ -1144,7 +1151,7 @@ class ReportGeneratorAgent(BaseAgent):
         # Extract topics from business requirements
         business_req = getattr(assessment, 'business_requirements', {})
         if business_req:
-            industry = business_req.get("industry", "")
+            industry = business_req.get("industry")
             if industry:
                 topics.add(f"{industry} cloud infrastructure")
             

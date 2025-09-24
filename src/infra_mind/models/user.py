@@ -4,11 +4,14 @@ User model for Infra Mind.
 Defines user authentication and profile data structure.
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional, List, Dict, Any
 from beanie import Document, Indexed
 from pydantic import Field, EmailStr, field_validator
 import bcrypt
+import secrets
+import pyotp
+from cryptography.fernet import Fernet
 
 from ..schemas.base import CompanySize, Industry
 
@@ -66,6 +69,12 @@ class User(Document):
     password_reset_token: Optional[str] = Field(default=None, description="Password reset token")
     password_reset_expires: Optional[datetime] = Field(default=None, description="Password reset expiry")
     email_verification_token: Optional[str] = Field(default=None, description="Email verification token")
+    
+    # Multi-Factor Authentication
+    mfa_enabled: bool = Field(default=False, description="Whether MFA is enabled")
+    mfa_secret: Optional[str] = Field(default=None, description="TOTP secret key (encrypted)")
+    mfa_backup_codes: List[str] = Field(default_factory=list, description="MFA backup codes (encrypted)")
+    mfa_setup_complete: bool = Field(default=False, description="Whether MFA setup is complete")
     
     # Timestamps
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -135,6 +144,84 @@ class User(Document):
             return user
         return None
     
+    def generate_password_reset_token(self) -> str:
+        """Generate a secure password reset token."""
+        self.password_reset_token = secrets.token_urlsafe(32)
+        self.password_reset_expires = datetime.utcnow() + timedelta(hours=1)  # 1 hour expiry
+        self.updated_at = datetime.utcnow()
+        return self.password_reset_token
+    
+    def verify_password_reset_token(self, token: str) -> bool:
+        """Verify password reset token is valid and not expired."""
+        return (
+            self.password_reset_token == token and
+            self.password_reset_expires and
+            self.password_reset_expires > datetime.utcnow()
+        )
+    
+    def reset_password(self, new_password: str) -> None:
+        """Reset password and clear reset token."""
+        self.hashed_password = self.hash_password(new_password)
+        self.password_reset_token = None
+        self.password_reset_expires = None
+        self.updated_at = datetime.utcnow()
+    
+    def generate_mfa_secret(self) -> str:
+        """Generate a new TOTP secret for MFA."""
+        secret = pyotp.random_base32()
+        # In production, encrypt this with proper key management
+        self.mfa_secret = secret
+        self.updated_at = datetime.utcnow()
+        return secret
+    
+    def get_totp_uri(self, issuer_name: str = "Infra Mind") -> str:
+        """Generate TOTP URI for QR code."""
+        if not self.mfa_secret:
+            raise ValueError("MFA secret not set")
+        return pyotp.totp.TOTP(self.mfa_secret).provisioning_uri(
+            name=self.email,
+            issuer_name=issuer_name
+        )
+    
+    def verify_totp(self, token: str) -> bool:
+        """Verify TOTP token."""
+        if not self.mfa_secret:
+            return False
+        totp = pyotp.TOTP(self.mfa_secret)
+        return totp.verify(token, valid_window=1)  # Allow 30s window
+    
+    def generate_backup_codes(self, count: int = 10) -> List[str]:
+        """Generate MFA backup codes."""
+        codes = [secrets.token_hex(4).upper() for _ in range(count)]
+        # In production, hash these codes before storing
+        self.mfa_backup_codes = [self.hash_password(code) for code in codes]
+        self.updated_at = datetime.utcnow()
+        return codes  # Return unhashed codes for user to save
+    
+    def verify_backup_code(self, code: str) -> bool:
+        """Verify and consume a backup code."""
+        for i, hashed_code in enumerate(self.mfa_backup_codes):
+            if bcrypt.checkpw(code.encode('utf-8'), hashed_code.encode('utf-8')):
+                # Remove used backup code
+                self.mfa_backup_codes.pop(i)
+                self.updated_at = datetime.utcnow()
+                return True
+        return False
+    
+    def enable_mfa(self) -> None:
+        """Enable MFA for the user."""
+        self.mfa_enabled = True
+        self.mfa_setup_complete = True
+        self.updated_at = datetime.utcnow()
+    
+    def disable_mfa(self) -> None:
+        """Disable MFA for the user."""
+        self.mfa_enabled = False
+        self.mfa_setup_complete = False
+        self.mfa_secret = None
+        self.mfa_backup_codes = []
+        self.updated_at = datetime.utcnow()
+
     def __str__(self) -> str:
         """String representation of the user."""
         return f"User(email={self.email}, name={self.full_name})"

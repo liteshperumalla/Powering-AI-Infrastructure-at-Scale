@@ -1112,10 +1112,10 @@ class AzurePricingClient:
         processed = {}
         
         for item in items:
-            sku_name = item.get("skuName", "")
-            product_name = item.get("productName", "")
+            sku_name = item.get("skuName")
+            product_name = item.get("productName")
             retail_price = item.get("retailPrice", 0)
-            unit_of_measure = item.get("unitOfMeasure", "")
+            unit_of_measure = item.get("unitOfMeasure")
             
             # Skip if no price or invalid data
             if not retail_price or not sku_name:
@@ -2320,7 +2320,7 @@ class AzureResourceManagerClient:
             
             # Process resource groups into services
             for rg in resource_groups:
-                if region.lower() in rg.get("location", "").lower():
+                if region.lower() in rg.get("location").lower():
                     service = CloudService(
                         provider=CloudProvider.AZURE,
                         service_name=f"Resource Group: {rg['name']}",
@@ -2353,7 +2353,7 @@ class AzureResourceManagerClient:
                 hourly_price=0.0,
                 specifications={
                     "api_version": "2021-04-01",
-                    "resource_groups_count": len([rg for rg in resource_groups if region.lower() in rg.get("location", "").lower()]),
+                    "resource_groups_count": len([rg for rg in resource_groups if region.lower() in rg.get("location").lower()]),
                     "supported_operations": ["create", "read", "update", "delete", "list"]
                 },
                 features=["unified_management", "rbac", "templates", "policies", "locks", "tags"]
@@ -2819,7 +2819,7 @@ class AzureAKSClient:
         
         # Process existing clusters
         for cluster in clusters:
-            cluster_name = cluster.get("name", "unknown")
+            cluster_name = cluster.get("name")
             cluster_location = cluster.get("location", region)
             cluster_props = cluster.get("properties", {})
             
@@ -2848,7 +2848,7 @@ class AzureAKSClient:
         
         # Add available VM sizes for node pools
         for vm_size in vm_sizes[:10]:  # Limit to first 10 for performance
-            vm_name = vm_size.get("name", "unknown")
+            vm_name = vm_size.get("name")
             
             node_pool_service = CloudService(
                 provider=CloudProvider.AZURE,
@@ -3211,7 +3211,7 @@ class AzureMachineLearningClient:
                 compute_instances = []
                 for workspace in workspaces:
                     workspace_name = workspace.get("name")
-                    resource_group = workspace.get("id", "").split("/")[4] if "/" in workspace.get("id", "") else "default"
+                    resource_group = workspace.get("id").split("/")[4] if "/" in workspace.get("id") else "default"
                     
                     compute_endpoint = f"/subscriptions/{self.subscription_id}/resourceGroups/{resource_group}/providers/Microsoft.MachineLearningServices/workspaces/{workspace_name}/computes"
                     compute_params = {"api-version": "2023-10-01"}
@@ -3244,7 +3244,7 @@ class AzureMachineLearningClient:
         
         # Process existing workspaces
         for workspace in workspaces:
-            workspace_name = workspace.get("name", "unknown")
+            workspace_name = workspace.get("name")
             workspace_location = workspace.get("location", region)
             workspace_props = workspace.get("properties", {})
             
@@ -3273,12 +3273,12 @@ class AzureMachineLearningClient:
         
         # Process existing compute instances
         for compute in compute_instances:
-            compute_name = compute.get("name", "unknown")
+            compute_name = compute.get("name")
             compute_props = compute.get("properties", {})
-            compute_type = compute_props.get("computeType", "unknown")
+            compute_type = compute_props.get("computeType")
             
             if compute_type == "ComputeInstance":
-                vm_size = compute_props.get("properties", {}).get("vmSize", "unknown")
+                vm_size = compute_props.get("vmSize")
                 
                 compute_service = CloudService(
                     provider=CloudProvider.AZURE,
@@ -4390,7 +4390,7 @@ class AzureCostManagementClient:
         }
         
         for budget in budgets:
-            budget_name = budget.get("name", "unknown")
+            budget_name = budget.get("name")
             budget_props = budget.get("properties", {})
             
             budget_amount = budget_props.get("amount", 0)
@@ -4551,7 +4551,7 @@ class AzureCostManagementClient:
                 processed_recommendations["categories"]["storage_optimization"] += 1
             
             recommendation_info = {
-                "id": rec.get("id", "unknown"),
+                "id": rec.get("id"),
                 "title": title,
                 "description": description,
                 "category": category,

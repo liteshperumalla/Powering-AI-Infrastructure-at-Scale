@@ -48,6 +48,7 @@ import {
     Business,
     AttachMoney,
     Gavel,
+    School,
     Lock,
     Report,
     MonitorHeart,
@@ -59,6 +60,7 @@ import {
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import EnhancedNotificationSystem from './EnhancedNotificationSystem';
+import RoleBasedNavigation from './RoleBasedNavigation';
 
 interface NavItem {
     path: string;
@@ -71,31 +73,35 @@ interface NavItem {
 const publicNavigationItems: NavItem[] = [
     // Home removed - logo now serves as home button
     // About moved to right side of navbar
+    { path: '/tutorial', label: 'Tutorial', icon: <School /> },
 ];
 
-// Private navigation items (require authentication)
-const privateNavigationItems: NavItem[] = [
+// Primary navigation items (most commonly used)
+const primaryNavigationItems: NavItem[] = [
     { path: '/dashboard', label: 'Dashboard', icon: <Dashboard /> },
     { path: '/assessments', label: 'Assessments', icon: <Assessment /> },
-    { path: '/analytics', label: 'Advanced Analytics', icon: <Analytics /> },
+    { path: '/analytics', label: 'Analytics', icon: <Analytics /> },
     { path: '/recommendations', label: 'Recommendations', icon: <TrendingUp /> },
     { path: '/chat', label: 'AI Assistant', icon: <Chat /> },
+    { path: '/cloud-services', label: 'Cloud Services', icon: <CloudQueue /> },
+    { path: '/about', label: 'About', icon: <Info /> },
+];
+
+// Secondary navigation items (lazy loaded) - excluding Settings, Profile, System Status, and Security for users
+const getSecondaryNavigationItems = (): NavItem[] => [
     { path: '/performance', label: 'Performance', icon: <Speed /> },
-    { path: '/security', label: 'Security', icon: <Security /> },
-    { path: '/gitops', label: 'GitOps', icon: <DeviceHub /> },
-    { path: '/experiments', label: 'A/B Testing', icon: <Science /> },
-    { path: '/feedback', label: 'Feedback', icon: <Feedback /> },
-    { path: '/quality', label: 'Quality Assurance', icon: <VerifiedUser /> },
-    { path: '/approvals', label: 'Approvals', icon: <Approval /> },
-    { path: '/impact-analysis', label: 'Impact Analysis', icon: <AccountTree /> },
-    { path: '/rollback', label: 'Rollback', icon: <History /> },
-    { path: '/executive-dashboard', label: 'Executive Dashboard', icon: <Business /> },
-    { path: '/budget-forecasting', label: 'Budget Forecasting', icon: <AttachMoney /> },
-    { path: '/vendor-lockin', label: 'Vendor Lock-in', icon: <Lock /> },
     { path: '/compliance', label: 'Compliance', icon: <Gavel /> },
     { path: '/reports', label: 'Reports', icon: <Report /> },
-    { path: '/system-status', label: 'System Status', icon: <MonitorHeart /> },
-    { path: '/settings', label: 'Settings', icon: <Settings /> },
+    { path: '/experiments', label: 'Experiments', icon: <Science /> },
+    { path: '/feedback', label: 'Feedback', icon: <Feedback /> },
+    { path: '/quality', label: 'Quality', icon: <VerifiedUser /> },
+    { path: '/approvals', label: 'Approvals', icon: <Approval /> },
+    { path: '/budget-forecasting', label: 'Budget Forecasting', icon: <AttachMoney /> },
+    { path: '/executive-dashboard', label: 'Executive Dashboard', icon: <Business /> },
+    { path: '/gitops', label: 'GitOps', icon: <DeviceHub /> },
+    { path: '/impact-analysis', label: 'Impact Analysis', icon: <AccountTree /> },
+    { path: '/rollback', label: 'Rollback', icon: <History /> },
+    { path: '/vendor-lockin', label: 'Vendor Lock-in', icon: <Lock /> },
 ];
 
 interface ModernNavbarProps {
@@ -111,25 +117,39 @@ interface ModernNavbarProps {
     };
 }
 
-export default function ModernNavbar({ 
-    onThemeToggle, 
-    isDarkMode = false, 
+const ModernNavbar = React.memo(function ModernNavbar({
+    onThemeToggle,
+    isDarkMode = false,
     userName = 'User',
     userAvatar,
     isAuthenticated = false,
     syncStatus
 }: ModernNavbarProps) {
     const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false);
+    const [moreMenuAnchor, setMoreMenuAnchor] = useState<null | HTMLElement>(null);
     const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null);
-    
-    // Get appropriate navigation items based on authentication
-    const getNavigationItems = () => {
-        return isAuthenticated ? [...publicNavigationItems, ...privateNavigationItems] : publicNavigationItems;
-    };
-    
-    const navigationItems = getNavigationItems();
+    const [showSecondaryItems, setShowSecondaryItems] = useState(false);
     const [notificationMenuAnchor, setNotificationMenuAnchor] = useState<null | HTMLElement>(null);
     const [notificationCount, setNotificationCount] = useState(3);
+    
+    // Memoize navigation items to prevent re-renders
+    const navigationItems = React.useMemo(() => {
+        if (!isAuthenticated) return publicNavigationItems;
+        
+        const primaryItems = [...publicNavigationItems, ...primaryNavigationItems];
+        if (showSecondaryItems) {
+            return [...primaryItems, ...getSecondaryNavigationItems()];
+        }
+        return primaryItems;
+    }, [isAuthenticated, showSecondaryItems]);
+
+    // Lazy load secondary navigation items when drawer is opened
+    useEffect(() => {
+        if (mobileDrawerOpen && isAuthenticated && !showSecondaryItems) {
+            const timer = setTimeout(() => setShowSecondaryItems(true), 100);
+            return () => clearTimeout(timer);
+        }
+    }, [mobileDrawerOpen, isAuthenticated, showSecondaryItems]);
     
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -162,6 +182,14 @@ export default function ModernNavbar({
         setNotificationMenuAnchor(null);
     };
 
+    const handleMoreMenuOpen = (event: React.MouseEvent<HTMLElement>) => {
+        setMoreMenuAnchor(event.currentTarget);
+    };
+
+    const handleMoreMenuClose = () => {
+        setMoreMenuAnchor(null);
+    };
+
     const isActiveRoute = (path: string) => {
         return pathname === path;
     };
@@ -186,53 +214,7 @@ export default function ModernNavbar({
                     <Close />
                 </IconButton>
             </Box>
-            <List role="navigation" aria-label="Main navigation menu">
-                {navigationItems.map((item) => (
-                    <ListItem 
-                        key={item.path}
-                        component={Link}
-                        href={item.path}
-                        aria-current={isActiveRoute(item.path) ? 'page' : undefined}
-                        aria-label={`Navigate to ${item.label}`}
-                        sx={{
-                            backgroundColor: isActiveRoute(item.path) 
-                                ? theme.palette.primary.main + '20' 
-                                : 'transparent',
-                            color: isActiveRoute(item.path) 
-                                ? theme.palette.primary.main 
-                                : 'inherit',
-                            borderRadius: 1,
-                            mx: 1,
-                            mb: 0.5,
-                            '&:hover': {
-                                backgroundColor: theme.palette.primary.main + '10',
-                            }
-                        }}
-                    >
-                        <ListItemIcon sx={{ 
-                            color: isActiveRoute(item.path) 
-                                ? theme.palette.primary.main 
-                                : 'inherit',
-                            minWidth: 40
-                        }}>
-                            {item.badge ? (
-                                <Badge badgeContent={item.badge} color="secondary">
-                                    {item.icon}
-                                </Badge>
-                            ) : item.icon}
-                        </ListItemIcon>
-                        <ListItemText 
-                            primary={item.label}
-                            primaryTypographyProps={{
-                                fontWeight: isActiveRoute(item.path) ? 600 : 400
-                            }}
-                        />
-                        {isActiveRoute(item.path) && (
-                            <Chip size="small" label="Active" color="primary" />
-                        )}
-                    </ListItem>
-                ))}
-            </List>
+            <RoleBasedNavigation onItemClick={() => setMobileDrawerOpen(false)} />
             <Divider sx={{ my: 2 }} />
             <Box sx={{ p: 2 }}>
                 <FormControlLabel
@@ -252,17 +234,18 @@ export default function ModernNavbar({
 
     return (
         <>
-            <AppBar 
-                position="sticky" 
+            <AppBar
+                position="sticky"
                 elevation={1}
-                sx={{ 
+                sx={{
                     backgroundColor: theme.palette.background.paper,
                     borderBottom: 1,
                     borderColor: 'divider',
                     backdropFilter: 'blur(8px)',
-                    backgroundColor: theme.palette.mode === 'dark' 
-                        ? 'rgba(18, 18, 18, 0.8)' 
-                        : 'rgba(255, 255, 255, 0.8)',
+                    backgroundColor: theme.palette.mode === 'dark'
+                        ? 'rgba(18, 18, 18, 0.95)'
+                        : 'rgba(255, 255, 255, 0.95)',
+                    zIndex: theme.zIndex.appBar + 1,
                 }}
             >
                 <Toolbar sx={{ justifyContent: 'space-between' }}>
@@ -304,7 +287,7 @@ export default function ModernNavbar({
                         {/* Desktop Navigation */}
                         {!isMobile && (
                             <Box sx={{ ml: 4, display: 'flex', gap: 1 }}>
-                                {navigationItems.slice(0, 6).map((item) => (
+                                {primaryNavigationItems.slice(0, 5).map((item) => (
                                     <Button
                                         key={item.path}
                                         component={Link}
@@ -319,6 +302,7 @@ export default function ModernNavbar({
                                             px: 2,
                                             py: 0.5,
                                             borderRadius: 2,
+                                            transition: 'all 0.2s ease-in-out',
                                             '& .MuiButton-startIcon': {
                                                 marginLeft: 0,
                                                 marginRight: 1,
@@ -332,6 +316,22 @@ export default function ModernNavbar({
                                         ) : item.label}
                                     </Button>
                                 ))}
+                                {isAuthenticated && (
+                                    <Button
+                                        variant="outlined"
+                                        size="small"
+                                        onClick={handleMoreMenuOpen}
+                                        sx={{
+                                            minWidth: 'auto',
+                                            textTransform: 'none',
+                                            px: 1,
+                                            py: 0.5,
+                                            borderRadius: 2,
+                                        }}
+                                    >
+                                        More
+                                    </Button>
+                                )}
                             </Box>
                         )}
                     </Box>
@@ -375,8 +375,8 @@ export default function ModernNavbar({
 
                         {isAuthenticated ? (
                             <>
-                                {/* Enhanced Notifications */}
-                                <EnhancedNotificationSystem />
+                                {/* Enhanced Notifications - Lazy loaded */}
+                                {showSecondaryItems && <EnhancedNotificationSystem />}
 
                                 {/* User Profile */}
                                 <IconButton
@@ -386,12 +386,19 @@ export default function ModernNavbar({
                                     aria-expanded={Boolean(userMenuAnchor)}
                                     sx={{ p: 0.5 }}
                                 >
-                                    <Avatar 
+                                    <Avatar
                                         src={userAvatar}
                                         alt={`${userName} profile picture`}
-                                        sx={{ width: 32, height: 32 }}
+                                        sx={{
+                                            width: 32,
+                                            height: 32,
+                                            bgcolor: 'primary.main',
+                                            color: 'primary.contrastText',
+                                            fontSize: '0.875rem',
+                                            fontWeight: 'bold'
+                                        }}
                                     >
-                                        {userName[0]?.toUpperCase()}
+                                        {userName && userName !== 'User' ? userName.split(' ').map(name => name[0]).join('').slice(0, 2).toUpperCase() : <AccountCircle />}
                                     </Avatar>
                                 </IconButton>
                             </>
@@ -512,6 +519,77 @@ export default function ModernNavbar({
             </Menu>
             )}
 
+            {/* More Menu - Shows additional navigation items in horizontal layout */}
+            {isAuthenticated && (
+                <Menu
+                    anchorEl={moreMenuAnchor}
+                    open={Boolean(moreMenuAnchor)}
+                    onClose={handleMoreMenuClose}
+                    anchorOrigin={{
+                        vertical: 'bottom',
+                        horizontal: 'left',
+                    }}
+                    transformOrigin={{
+                        vertical: 'top',
+                        horizontal: 'left',
+                    }}
+                    PaperProps={{
+                        sx: {
+                            minWidth: 600,
+                            maxWidth: 800,
+                            borderRadius: 2,
+                            mt: 1,
+                        }
+                    }}
+                >
+                    <Box sx={{ p: 2 }}>
+                        <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 2, fontWeight: 600 }}>
+                            Additional Features
+                        </Typography>
+                        <Box
+                            sx={{
+                                display: 'grid',
+                                gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                                gap: 1,
+                                maxHeight: 400,
+                                overflowY: 'auto'
+                            }}
+                        >
+                            {getSecondaryNavigationItems().map((item) => (
+                                <Button
+                                    key={item.path}
+                                    onClick={() => {
+                                        handleMoreMenuClose();
+                                        router.push(item.path);
+                                    }}
+                                    startIcon={item.icon}
+                                    variant="text"
+                                    size="small"
+                                    sx={{
+                                        justifyContent: 'flex-start',
+                                        textTransform: 'none',
+                                        px: 2,
+                                        py: 1,
+                                        borderRadius: 2,
+                                        color: 'text.primary',
+                                        '&:hover': {
+                                            bgcolor: 'action.hover',
+                                            color: 'primary.main'
+                                        },
+                                        '& .MuiButton-startIcon': {
+                                            marginLeft: 0,
+                                            marginRight: 0.5,
+                                        }
+                                    }}
+                                >
+                                    {item.label}
+                                </Button>
+                            ))}
+                        </Box>
+                    </Box>
+                </Menu>
+            )}
+
             {/* Notification Menu */}
             <Menu
                 anchorEl={notificationMenuAnchor}
@@ -535,31 +613,33 @@ export default function ModernNavbar({
                     </Typography>
                 </Box>
                 <MenuItem>
-                    <ListItemText 
+                    <ListItemText
                         primary="Assessment Complete"
                         secondary="Novatech assessment finished processing"
                     />
                 </MenuItem>
                 <MenuItem>
-                    <ListItemText 
+                    <ListItemText
                         primary="New Recommendations"
                         secondary="3 new optimization recommendations available"
                     />
                 </MenuItem>
                 <MenuItem>
-                    <ListItemText 
+                    <ListItemText
                         primary="System Update"
                         secondary="AI models have been updated with latest features"
                     />
                 </MenuItem>
                 <Divider />
                 <MenuItem onClick={handleNotificationMenuClose}>
-                    <ListItemText 
-                        primary="View All Notifications" 
+                    <ListItemText
+                        primary="View All Notifications"
                         sx={{ textAlign: 'center' }}
                     />
                 </MenuItem>
             </Menu>
         </>
     );
-}
+});
+
+export default ModernNavbar;

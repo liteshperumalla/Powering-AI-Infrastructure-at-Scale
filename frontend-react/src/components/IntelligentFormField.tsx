@@ -27,6 +27,7 @@ import {
     FormControlLabel,
     Collapse,
     Button,
+    CircularProgress,
 } from '@mui/material';
 import {
     Help,
@@ -112,13 +113,9 @@ export default function IntelligentFormField({
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [textInputValue, setTextInputValue] = useState('');
     const [showTextInput, setShowTextInput] = useState(false);
+    const [isLoadingAI, setIsLoadingAI] = useState(false);
 
-    // Load smart defaults when form context changes
-    useEffect(() => {
-        if (onGetSmartDefaults && !value) {
-            loadSmartDefaults();
-        }
-    }, [formContext, name, onGetSmartDefaults, value]);
+    // Removed automatic loading of smart defaults - now opt-in only
 
     // Load contextual help
     useEffect(() => {
@@ -174,21 +171,43 @@ export default function IntelligentFormField({
         onChange(newValue);
         setShowSmartDefaults(false);
 
-        // Load suggestions for text inputs
+        // Update input value but don't auto-load suggestions
         if (type === 'text' || type === 'autocomplete') {
             setInputValue(newValue as string);
-            if (newValue && (newValue as string).length > 1) {
-                loadSuggestions(newValue as string);
-                setShowSuggestions(true);
-            } else {
-                setShowSuggestions(false);
-            }
         }
     };
 
     const applySmartDefault = (defaultValue: SmartDefault) => {
         onChange(defaultValue.value);
         setShowSmartDefaults(false);
+    };
+
+    // Manual AI suggestion triggers
+    const handleLoadSmartDefaults = async () => {
+        setIsLoadingAI(true);
+        try {
+            await loadSmartDefaults();
+            setShowSmartDefaults(true);
+        } finally {
+            setIsLoadingAI(false);
+        }
+    };
+
+    const handleLoadSuggestions = async () => {
+        setIsLoadingAI(true);
+        try {
+            const query = (value as string) || inputValue || '';
+            if (query.trim()) {
+                await loadSuggestions(query);
+                setShowSuggestions(true);
+            } else {
+                // If no query, load smart defaults instead
+                await loadSmartDefaults();
+                setShowSmartDefaults(true);
+            }
+        } finally {
+            setIsLoadingAI(false);
+        }
     };
 
     const handleHelpClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -236,6 +255,66 @@ export default function IntelligentFormField({
                                     sx={{ cursor: 'pointer' }}
                                 />
                             </Tooltip>
+                        ))}
+                    </Box>
+                </Alert>
+            </Fade>
+        );
+    };
+
+    const renderAISuggestions = () => {
+        if (!showSuggestions || suggestions.length === 0) return null;
+
+        const applySuggestion = (suggestion: Suggestion) => {
+            onChange(suggestion.value);
+            setShowSuggestions(false);
+        };
+
+        return (
+            <Fade in={showSuggestions}>
+                <Alert
+                    severity="success"
+                    icon={<AutoAwesome />}
+                    sx={{ mb: 1 }}
+                    action={
+                        <IconButton
+                            size="small"
+                            onClick={() => setShowSuggestions(false)}
+                            color="inherit"
+                        >
+                            ×
+                        </IconButton>
+                    }
+                >
+                    <Typography variant="body2" gutterBottom>
+                        AI suggestions for "{inputValue || value}":
+                    </Typography>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
+                        {suggestions.slice(0, 4).map((suggestion, index) => (
+                            <Box
+                                key={index}
+                                sx={{
+                                    p: 1,
+                                    border: 1,
+                                    borderColor: 'divider',
+                                    borderRadius: 1,
+                                    cursor: 'pointer',
+                                    '&:hover': { bgcolor: 'action.hover' }
+                                }}
+                                onClick={() => applySuggestion(suggestion)}
+                            >
+                                <Typography variant="body2" fontWeight="medium">
+                                    {suggestion.label}
+                                </Typography>
+                                {suggestion.description && (
+                                    <Typography variant="caption" color="text.secondary">
+                                        {suggestion.description}
+                                    </Typography>
+                                )}
+                                <Typography variant="caption" sx={{ ml: 1 }}>
+                                    ({Math.round(suggestion.confidence * 100)}% confidence)
+                                </Typography>
+                            </Box>
                         ))}
                     </Box>
                 </Alert>
@@ -493,9 +572,7 @@ export default function IntelligentFormField({
                             setInputValue(newInputValue);
                             // Update the form value immediately when typing (for freeSolo mode)
                             handleInputChange(newInputValue);
-                            if (newInputValue && newInputValue.length > 1) {
-                                loadSuggestions(newInputValue);
-                            }
+                            // Removed automatic suggestion loading - now manual only
                         }}
                         freeSolo
                     />
@@ -509,11 +586,45 @@ export default function IntelligentFormField({
     return (
         <Box sx={{ mb: 2 }}>
             {renderSmartDefaults()}
+            {renderAISuggestions()}
 
             <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
                 <Box sx={{ flexGrow: 1 }}>
                     {renderField()}
                 </Box>
+
+                {/* AI Suggestion Triggers */}
+                {onGetSuggestions && (
+                    <Tooltip title={isLoadingAI ? "Loading AI suggestions..." : "Get AI suggestions for this field"}>
+                        <span>
+                            <IconButton
+                                onClick={handleLoadSuggestions}
+                                size="small"
+                                sx={{ mt: 1 }}
+                                color="primary"
+                                disabled={isLoadingAI}
+                            >
+                                {isLoadingAI ? <CircularProgress size={20} /> : <AutoAwesome />}
+                            </IconButton>
+                        </span>
+                    </Tooltip>
+                )}
+
+                {onGetSmartDefaults && (
+                    <Tooltip title={isLoadingAI ? "Loading smart defaults..." : "Get smart default values"}>
+                        <span>
+                            <IconButton
+                                onClick={handleLoadSmartDefaults}
+                                size="small"
+                                sx={{ mt: 1 }}
+                                color="secondary"
+                                disabled={isLoadingAI}
+                            >
+                                {isLoadingAI ? <CircularProgress size={20} /> : <Lightbulb />}
+                            </IconButton>
+                        </span>
+                    </Tooltip>
+                )}
 
                 {contextualHelp && (
                     <Tooltip title="Get help with this field">

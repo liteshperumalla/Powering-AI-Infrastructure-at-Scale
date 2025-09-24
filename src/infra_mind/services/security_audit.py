@@ -245,11 +245,11 @@ class SecurityAuditService:
                 # Add component-specific context
                 vulnerability = vuln_template.copy()
                 vulnerability.update({
-                    "component_id": component.get("id", "unknown"),
+                    "component_id": component.get("id"),
                     "component_type": component_type,
-                    "component_name": component.get("name", "unknown"),
-                    "provider": component.get("provider", "unknown"),
-                    "region": component.get("region", "unknown"),
+                    "component_name": component.get("name"),
+                    "provider": component.get("provider"),
+                    "region": component.get("region"),
                     "discovered_at": datetime.utcnow().isoformat(),
                     "vulnerability_type": VulnerabilityType.MISCONFIG,
                     "cvss_score": self._calculate_cvss_score(vulnerability["severity"]),
@@ -520,7 +520,7 @@ class SecurityAuditService:
         # Group findings by component type and vulnerability type
         grouped_findings = {}
         for finding in prioritized_findings[:10]:  # Top 10 most critical
-            key = f"{finding.get('component_type', 'unknown')}_{finding.get('vulnerability_type', 'unknown')}"
+            key = f"{finding.get('component_type')}_{finding.get('vulnerability_type')}"
             if key not in grouped_findings:
                 grouped_findings[key] = []
             grouped_findings[key].append(finding)

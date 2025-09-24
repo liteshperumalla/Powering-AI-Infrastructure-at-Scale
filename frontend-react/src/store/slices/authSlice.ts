@@ -6,6 +6,8 @@ export interface User {
     email: string;
     full_name: string;
     role: string;
+    job_title?: string;
+    company_name?: string;
     created_at: string;
     last_login: string;
 }
@@ -46,6 +48,7 @@ export const register = createAsyncThunk(
         password: string;
         full_name: string;
         company?: string;
+        job_title?: string;
     }, { rejectWithValue }) => {
         try {
             const response = await apiClient.register(userData);
@@ -97,6 +100,7 @@ export const updateProfile = createAsyncThunk(
     async (updates: {
         full_name?: string;
         company?: string;
+        job_title?: string;
         preferences?: Record<string, unknown>;
     }, { rejectWithValue }) => {
         try {
@@ -109,6 +113,19 @@ export const updateProfile = createAsyncThunk(
         }
     }
 );
+
+export const googleLogin = createAsyncThunk(
+    'auth/googleLogin',
+    async (data: { credential: string }, { rejectWithValue }) => {
+        try {
+            const response = await apiClient.googleLogin(data.credential);
+            return response;
+        } catch (error) {
+            return rejectWithValue(error instanceof Error ? error.message : 'Google login failed');
+        }
+    }
+);
+
 
 export const initializeAuth = createAsyncThunk(
     'auth/initialize',
@@ -167,8 +184,10 @@ const authSlice = createSlice({
                     id: action.payload.user_id,
                     email: action.payload.email,
                     full_name: action.payload.full_name,
-                    role: 'user', // default role
-                    created_at: new Date().toISOString(),
+                    role: action.payload.role || 'user',
+                    job_title: action.payload.job_title,
+                    company_name: action.payload.company_name,
+                    created_at: action.payload.created_at || new Date().toISOString(),
                     last_login: new Date().toISOString()
                 };
                 state.token = action.payload.access_token;
@@ -191,8 +210,10 @@ const authSlice = createSlice({
                     id: action.payload.user_id,
                     email: action.payload.email,
                     full_name: action.payload.full_name,
-                    role: 'user', // default role
-                    created_at: new Date().toISOString(),
+                    role: action.payload.role || 'user',
+                    job_title: action.payload.job_title,
+                    company_name: action.payload.company_name,
+                    created_at: action.payload.created_at || new Date().toISOString(),
                     last_login: new Date().toISOString()
                 };
                 state.token = action.payload.access_token;
@@ -234,8 +255,10 @@ const authSlice = createSlice({
                     id: action.payload.user_id,
                     email: action.payload.email,
                     full_name: action.payload.full_name,
-                    role: 'user', // default role
-                    created_at: new Date().toISOString(),
+                    role: action.payload.role || 'user',
+                    job_title: action.payload.job_title,
+                    company_name: action.payload.company_name,
+                    created_at: action.payload.created_at || new Date().toISOString(),
                     last_login: new Date().toISOString()
                 };
                 state.token = action.payload.access_token;
@@ -262,6 +285,8 @@ const authSlice = createSlice({
                     email: action.payload.email,
                     full_name: action.payload.full_name,
                     role: action.payload.role,
+                    job_title: action.payload.job_title,
+                    company_name: action.payload.company_name,
                     created_at: action.payload.created_at,
                     last_login: new Date().toISOString()
                 };
@@ -283,6 +308,8 @@ const authSlice = createSlice({
                     email: action.payload.email,
                     full_name: action.payload.full_name,
                     role: action.payload.role,
+                    job_title: action.payload.job_title,
+                    company_name: action.payload.company_name,
                     created_at: action.payload.created_at,
                     last_login: new Date().toISOString()
                 };
@@ -291,6 +318,32 @@ const authSlice = createSlice({
             .addCase(updateProfile.rejected, (state, action) => {
                 state.loading = false;
                 state.error = action.payload as string;
+            })
+            // Google Login
+            .addCase(googleLogin.pending, (state) => {
+                state.loading = true;
+                state.error = null;
+            })
+            .addCase(googleLogin.fulfilled, (state, action) => {
+                state.loading = false;
+                state.user = {
+                    id: action.payload.user_id,
+                    email: action.payload.email,
+                    full_name: action.payload.full_name,
+                    role: action.payload.role || 'user',
+                    job_title: action.payload.job_title,
+                    company_name: action.payload.company_name,
+                    created_at: action.payload.created_at || new Date().toISOString(),
+                    last_login: new Date().toISOString()
+                };
+                state.token = action.payload.access_token;
+                state.isAuthenticated = true;
+                state.error = null;
+            })
+            .addCase(googleLogin.rejected, (state, action) => {
+                state.loading = false;
+                state.error = action.payload as string;
+                state.isAuthenticated = false;
             })
             // Initialize auth
             .addCase(initializeAuth.pending, (state) => {
@@ -305,6 +358,8 @@ const authSlice = createSlice({
                         email: action.payload.user.email,
                         full_name: action.payload.user.full_name,
                         role: action.payload.user.role,
+                        job_title: action.payload.user.job_title,
+                        company_name: action.payload.user.company_name,
                         created_at: action.payload.user.created_at,
                         last_login: new Date().toISOString()
                     };

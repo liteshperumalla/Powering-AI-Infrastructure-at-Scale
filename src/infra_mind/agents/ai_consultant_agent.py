@@ -762,7 +762,7 @@ class AIConsultantAgent(BaseAgent):
             
             for rec in recommendations[start_idx:end_idx]:
                 phase_recs.append({
-                    "title": rec.get("title", "Unknown"),
+                    "title": rec.get("title"),
                     "priority": rec.get("priority", "medium"),
                     "timeline": rec.get("estimated_timeline", "3-6 months"),
                     "cost": rec.get("estimated_cost", "$25,000 - $75,000")
@@ -1239,8 +1239,8 @@ class AIConsultantAgent(BaseAgent):
             if sources:
                 context_parts.append(f"{category.replace('_', ' ').title()}:")
                 for source in sources[:3]:  # Limit to top 3 per category
-                    title = source.get("title", "")
-                    snippet = source.get("snippet", "")
+                    title = source.get("title")
+                    snippet = source.get("snippet")
                     context_parts.append(f"- {title}: {snippet[:200]}...")
         
         return "\n".join(context_parts)
@@ -1539,7 +1539,7 @@ CRITICAL: Respond with ONLY the JSON object. No additional text."""
                 "change_management": llm_analysis.get("change_management", {}),
                 "roi_analysis": llm_analysis.get("roi_analysis", {}),
                 "implementation_timeline": llm_analysis.get("implementation_timeline", {}),
-                "market_insights": llm_analysis.get("analysis", ""),
+                "market_insights": llm_analysis.get("analysis"),
                 "analysis_timestamp": datetime.now(timezone.utc).isoformat()
             }
             
@@ -1698,7 +1698,7 @@ CRITICAL: Respond with ONLY the JSON object. No additional text."""
                 "operational_efficiency": opportunities_analysis.get("operational_efficiency", []),
                 "market_validation": market_intelligence.get("success_stories", []),
                 "trends_context": market_intelligence.get("trends", []),
-                "opportunities_insights": opportunities_analysis.get("analysis", ""),
+                "opportunities_insights": opportunities_analysis.get("analysis"),
                 "analysis_timestamp": datetime.now(timezone.utc).isoformat()
             }
             
@@ -1852,7 +1852,7 @@ CRITICAL: Respond with ONLY the JSON object. No additional text."""
                 "gap_analysis": readiness_analysis.get("gap_analysis", {}),
                 "improvement_plan": readiness_analysis.get("improvement_plan", []),
                 "benchmark_data": market_intelligence.get("benchmarks", {}),
-                "readiness_insights": readiness_analysis.get("analysis", ""),
+                "readiness_insights": readiness_analysis.get("analysis"),
                 "assessment_timestamp": datetime.now(timezone.utc).isoformat()
             }
             
@@ -1875,8 +1875,8 @@ CRITICAL: Respond with ONLY the JSON object. No additional text."""
         if trends:
             context_parts.append("Current AI Trends:")
             for trend in trends[:5]:  # Limit to top 5
-                title = trend.get("title", "")
-                snippet = trend.get("snippet", "")
+                title = trend.get("title")
+                snippet = trend.get("snippet")
                 context_parts.append(f"- {title}: {snippet[:150]}...")
         
         # Add success stories
@@ -1884,8 +1884,8 @@ CRITICAL: Respond with ONLY the JSON object. No additional text."""
         if success_stories:
             context_parts.append("\nAI Success Stories:")
             for story in success_stories[:3]:  # Limit to top 3
-                title = story.get("title", "")
-                snippet = story.get("snippet", "")
+                title = story.get("title")
+                snippet = story.get("snippet")
                 context_parts.append(f"- {title}: {snippet[:150]}...")
         
         return "\n".join(context_parts)
@@ -1899,8 +1899,8 @@ CRITICAL: Respond with ONLY the JSON object. No additional text."""
         if benchmarks:
             context_parts.append("Industry AI Benchmarks:")
             for benchmark in benchmarks[:3]:
-                title = benchmark.get("title", "")
-                snippet = benchmark.get("snippet", "")
+                title = benchmark.get("title")
+                snippet = benchmark.get("snippet")
                 context_parts.append(f"- {title}: {snippet[:150]}...")
         
         return "\n".join(context_parts)

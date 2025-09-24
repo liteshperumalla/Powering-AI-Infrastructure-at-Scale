@@ -119,7 +119,7 @@ async def create_experiment(
                 type=VariantType(variant_data.get("type", "treatment" if i > 0 else "control")),
                 traffic_percentage=variant_data.get("traffic_percentage", 100 / len(request.variants)),
                 configuration=variant_data.get("configuration", {}),
-                description=variant_data.get("description", "")
+                description=variant_data.get("description")
             )
             await variant.insert()
             variant_ids.append(str(variant.id))
@@ -353,7 +353,7 @@ async def track_experiment_event(
             experiment_id=str(experiment.id),
             feature_flag=feature_flag,
             user_id=event_data.get("user_id", "anonymous"),
-            variant_name=event_data.get("variant", "unknown"),
+            variant_name=event_data.get("variant"),
             event_type=event_data.get("event_type", "conversion"),
             event_value=event_data.get("value"),
             custom_metrics=event_data.get("custom_metrics", {}),

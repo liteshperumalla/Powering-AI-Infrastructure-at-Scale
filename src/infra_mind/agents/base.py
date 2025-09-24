@@ -486,6 +486,62 @@ class BaseAgent(ABC):
         """
         return await self.toolkit.use_tool(tool_name, **kwargs)
 
+    def generate_unique_title(self, llm_data: Dict[str, Any], fallback_category: str = "Infrastructure") -> str:
+        """
+        Generate a unique recommendation title avoiding generic fallbacks.
+
+        Args:
+            llm_data: Data from LLM containing title suggestions
+            fallback_category: Category to use if no specific data is available
+
+        Returns:
+            Unique, descriptive title for the recommendation
+        """
+        # Try to extract title from LLM data
+        title = llm_data.get("title").strip()
+
+        # Check if it's a generic title that should be improved
+        generic_titles = [
+            "Recommendation",
+            "Cloud Service Recommendation",
+            "Multi-Agent Recommendation",
+            "Infrastructure Recommendation",
+            "Strategic Recommendation"
+        ]
+
+        if not title or title in generic_titles:
+            # Generate a more specific title based on available data
+
+            # Try to get specific service or technology
+            service = (llm_data.get("primary_service") or
+                      llm_data.get("service_name") or
+                      llm_data.get("technology"))
+
+            # Try to get provider
+            provider = llm_data.get("provider", "Multi-Cloud")
+
+            # Try to get category/focus area
+            category = (llm_data.get("category") or
+                       llm_data.get("focus_area") or
+                       fallback_category)
+
+            # Build descriptive title
+            if service:
+                title = f"{provider} {service} Optimization"
+            elif "cost" in str(llm_data).lower():
+                title = f"{provider} Cost Optimization Strategy"
+            elif "security" in str(llm_data).lower() or "compliance" in str(llm_data).lower():
+                title = f"{provider} Security & Compliance Framework"
+            elif "performance" in str(llm_data).lower():
+                title = f"{provider} Performance Enhancement Plan"
+            else:
+                # Use agent name + category as last resort with timestamp for uniqueness
+                agent_suffix = self.config.name.replace(" Agent").replace("_", " ")
+                timestamp = datetime.now().strftime("%H%M")
+                title = f"{agent_suffix} {category} Strategy ({timestamp})"
+
+        return title
+
 
 class AgentRegistry:
     """

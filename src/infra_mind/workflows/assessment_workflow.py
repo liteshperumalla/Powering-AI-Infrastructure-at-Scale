@@ -1034,9 +1034,22 @@ class AssessmentWorkflow(BaseWorkflow):
                             except Exception as e:
                                 logger.warning(f"Failed to create service recommendation: {e}")
                         
-                        # Create main recommendation with proper field validation
-                        title = rec_data.get("title", f"{node_id.replace('_', ' ').title()} Recommendation")
-                        description = rec_data.get("description", "")
+                        # Create main recommendation with proper field validation and unique title
+                        title = rec_data.get("title")
+                        if not title or "Recommendation" in title:
+                            # Generate more specific title based on agent and data
+                            agent_name = node_id.replace('_', ' ').title()
+
+                            # Try to extract specific focus from rec_data
+                            if rec_data.get("primary_service"):
+                                title = f"{agent_name} {rec_data['primary_service']} Analysis"
+                            elif rec_data.get("category"):
+                                title = f"{agent_name} {rec_data['category'].title()} Strategy"
+                            else:
+                                # Use timestamp for uniqueness
+                                timestamp = datetime.now().strftime("%H%M")
+                                title = f"{agent_name} Analysis ({timestamp})"
+                        description = rec_data.get("description")
                         if not description or description.strip() == "":
                             description = f"AI-generated recommendation from {node_id} agent based on infrastructure analysis"
                         summary = description[:500] if len(description) > 500 else description
@@ -1076,7 +1089,7 @@ class AssessmentWorkflow(BaseWorkflow):
     
     def _extract_services_from_description(self, rec_data: Dict[str, Any]) -> List[str]:
         """Extract service names from recommendation description."""
-        description = str(rec_data.get("description", ""))
+        description = str(rec_data.get("description"))
         services = []
         
         # Common cloud services to look for
@@ -2437,7 +2450,7 @@ class AssessmentWorkflow(BaseWorkflow):
                         validation_results["validation_checks"][report_node] = {
                             "quality_score": report_quality,
                             "meets_standards": report_quality >= quality_standards.get("executive_readiness", 0.85),
-                            "status": report_result.get("status", "unknown")
+                            "status": report_result.get("status")
                         }
                         
                         total_quality_score += report_quality

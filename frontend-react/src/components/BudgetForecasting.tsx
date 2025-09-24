@@ -212,14 +212,16 @@ const BudgetForecasting: React.FC = () => {
             <Card>
               <CardContent>
                 <Typography variant="h6" color="primary.main">
-                  ${currentSpending.current_month_spend.toLocaleString()}
+                  ${currentSpending.current_month_spend?.toLocaleString() || '0'}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Current Month Spend
                 </Typography>
                 <LinearProgress 
                   variant="determinate" 
-                  value={(currentSpending.current_month_spend / currentSpending.projected_month_end) * 100}
+                  value={(currentSpending.current_month_spend && currentSpending.projected_month_end) 
+                    ? (currentSpending.current_month_spend / currentSpending.projected_month_end) * 100 
+                    : 0}
                   sx={{ mt: 1 }}
                 />
               </CardContent>
@@ -230,7 +232,7 @@ const BudgetForecasting: React.FC = () => {
             <Card>
               <CardContent>
                 <Typography variant="h6" color="warning.main">
-                  ${currentSpending.projected_month_end.toLocaleString()}
+                  ${currentSpending.projected_month_end?.toLocaleString() || '0'}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Projected Month End
@@ -243,7 +245,7 @@ const BudgetForecasting: React.FC = () => {
             <Card>
               <CardContent>
                 <Typography variant="h6" color="success.main">
-                  ${currentSpending.budget_remaining.toLocaleString()}
+                  ${currentSpending.budget_remaining?.toLocaleString() || '0'}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Budget Remaining
@@ -256,7 +258,7 @@ const BudgetForecasting: React.FC = () => {
             <Card>
               <CardContent>
                 <Typography variant="h6" color="error.main">
-                  {currentSpending.days_remaining_at_current_rate}
+                  {currentSpending.days_remaining_at_current_rate || '0'}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Days Remaining at Current Rate
@@ -293,7 +295,7 @@ const BudgetForecasting: React.FC = () => {
         <Card>
           <CardContent>
             <Typography variant="h6" mb={2}>Budget Alerts</Typography>
-            {budgetAlerts.slice(0, 5).map((alert) => (
+            {Array.isArray(budgetAlerts) ? budgetAlerts.slice(0, 5).map((alert) => (
               <Alert 
                 key={alert.id}
                 severity={alert.severity as any}
@@ -301,8 +303,8 @@ const BudgetForecasting: React.FC = () => {
               >
                 <Typography variant="body2">{alert.message}</Typography>
               </Alert>
-            ))}
-            {budgetAlerts.length === 0 && (
+            )) : null}
+            {(!Array.isArray(budgetAlerts) || budgetAlerts.length === 0) && (
               <Box display="flex" alignItems="center">
                 <CheckCircle color="success" sx={{ mr: 1 }} />
                 <Typography variant="body2">No active alerts</Typography>
@@ -348,7 +350,7 @@ const BudgetForecasting: React.FC = () => {
       </Box>
 
       <Grid container spacing={3}>
-        {forecasts.map((forecast) => (
+        {Array.isArray(forecasts) && forecasts.length > 0 ? forecasts.map((forecast) => (
           <Grid item xs={12} md={6} lg={4} key={forecast.id}>
             <Card>
               <CardContent>
@@ -408,7 +410,15 @@ const BudgetForecasting: React.FC = () => {
               </CardContent>
             </Card>
           </Grid>
-        ))}
+        )) : (
+          <Grid item xs={12}>
+            <Box textAlign="center" py={3}>
+              <Typography color="textSecondary">
+                No forecasts available
+              </Typography>
+            </Box>
+          </Grid>
+        )}
       </Grid>
     </Box>
   );
@@ -418,7 +428,7 @@ const BudgetForecasting: React.FC = () => {
       <Typography variant="h6" mb={3}>Cost Optimization Opportunities</Typography>
       
       <Grid container spacing={3}>
-        {optimizationOpportunities.map((opportunity) => (
+        {Array.isArray(optimizationOpportunities) && optimizationOpportunities.length > 0 ? optimizationOpportunities.map((opportunity) => (
           <Grid item xs={12} md={6} key={opportunity.id}>
             <Card>
               <CardContent>
@@ -492,7 +502,15 @@ const BudgetForecasting: React.FC = () => {
               </CardContent>
             </Card>
           </Grid>
-        ))}
+        )) : (
+          <Grid item xs={12}>
+            <Box textAlign="center" py={3}>
+              <Typography color="textSecondary">
+                No optimization opportunities available
+              </Typography>
+            </Box>
+          </Grid>
+        )}
       </Grid>
     </Box>
   );
@@ -523,7 +541,7 @@ const BudgetForecasting: React.FC = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {costModels.map((model) => (
+            {Array.isArray(costModels) && costModels.length > 0 ? costModels.map((model) => (
               <TableRow key={model.id}>
                 <TableCell>{model.model_name}</TableCell>
                 <TableCell>
@@ -569,7 +587,15 @@ const BudgetForecasting: React.FC = () => {
                   </Tooltip>
                 </TableCell>
               </TableRow>
-            ))}
+            )) : (
+              <TableRow>
+                <TableCell colSpan={6} align="center">
+                  <Typography color="textSecondary">
+                    No cost models available
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </TableContainer>

@@ -80,6 +80,7 @@ services:
       
       # Authentication configuration
       ACCESS_TOKEN_EXPIRE_MINUTES: "480"  # 8 hours
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
       
       # LLM configuration - Azure OpenAI (Primary)
       INFRA_MIND_LLM_PROVIDER: azure_openai
@@ -155,6 +156,10 @@ services:
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       NODE_ENV: development
+      NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID: ${NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID:-}
+    volumes:
+      - ./frontend-react/src:/app/src
+      - ./frontend-react/public:/app/public
     depends_on:
       - api
     networks:

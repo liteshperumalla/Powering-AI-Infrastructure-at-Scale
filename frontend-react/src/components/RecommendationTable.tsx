@@ -96,6 +96,18 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
 }) => {
     const [expandedRows, setExpandedRows] = React.useState<Set<string>>(new Set());
 
+    // Trust that recommendations have proper IDs from the backend
+    const safeRecommendations = React.useMemo(() => {
+        // Log any recommendations without IDs for debugging
+        const missingIds = recommendations.filter(rec => !rec.id);
+        if (missingIds.length > 0) {
+            console.error('Recommendations missing IDs:', missingIds);
+        }
+
+        // Filter out any recommendations without IDs
+        return recommendations.filter(rec => rec.id);
+    }, [recommendations]);
+
     const toggleRowExpansion = (id: string) => {
         const newExpanded = new Set(expandedRows);
         if (newExpanded.has(id)) {
@@ -112,12 +124,12 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
         return diff > 0 ? <TrendingUp color="error" /> : <TrendingDown color="success" />;
     };
 
-    const avgCost = recommendations.length > 0 
-        ? recommendations.reduce((sum, rec) => sum + safeParseFloat(rec.costEstimate), 0) / recommendations.length 
+    const avgCost = safeRecommendations.length > 0 
+        ? safeRecommendations.reduce((sum, rec) => sum + safeParseFloat(rec.costEstimate), 0) / safeRecommendations.length 
         : 0;
 
     // Handle empty state
-    if (recommendations.length === 0) {
+    if (safeRecommendations.length === 0) {
         return (
             <Card>
                 <CardContent>
@@ -162,7 +174,7 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
                         {title}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
-                        {recommendations.length} services compared
+                        {safeRecommendations.length} services compared
                     </Typography>
                 </Box>
 
@@ -181,8 +193,8 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
                             Best Value
                         </Typography>
                         <Typography variant="h6" color="success.main">
-                            {recommendations.find(r => r.status === 'recommended')?.serviceName || 
-                             recommendations.sort((a, b) => b.confidenceScore - a.confidenceScore)[0]?.serviceName || 
+                            {safeRecommendations.find(r => r.status === 'recommended')?.serviceName || 
+                             safeRecommendations.sort((a, b) => b.confidenceScore - a.confidenceScore)[0]?.serviceName || 
                              'No Data'}
                         </Typography>
                     </Box>
@@ -191,8 +203,8 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
                             Avg Confidence
                         </Typography>
                         <Typography variant="h6">
-                            {recommendations.length > 0 
-                                ? (recommendations.reduce((sum, r) => sum + r.confidenceScore, 0) / recommendations.length).toFixed(1)
+                            {safeRecommendations.length > 0 
+                                ? (safeRecommendations.reduce((sum, r) => sum + r.confidenceScore, 0) / safeRecommendations.length).toFixed(1)
                                 : '0'}%
                         </Typography>
                     </Box>
@@ -215,7 +227,7 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
                             </TableRow>
                         </TableHead>
                         <TableBody>
-                            {recommendations.map((rec) => (
+                            {safeRecommendations.map((rec) => (
                                 <React.Fragment key={rec.id}>
                                     <TableRow hover>
                                         <TableCell>

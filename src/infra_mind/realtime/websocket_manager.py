@@ -455,7 +455,7 @@ class WebSocketManager:
             room_info = RoomInfo(
                 room_id=room_id,
                 name=message.data.get("room_name", room_id),
-                description=message.data.get("description", "")
+                description=message.data.get("description")
             )
             self.connection_manager.create_room(room_info)
         

@@ -18,6 +18,7 @@ from datetime import datetime, timezone, timedelta
 
 from ...models.assessment import Assessment
 from ...models.recommendation import Recommendation
+from ...core.smart_defaults import smart_get, SmartDefaults
 from ...models.report import Report
 from ...models.user import User
 from .auth import get_current_user
@@ -106,7 +107,7 @@ async def get_dashboard_overview(
         # Group reports by type
         report_types = {}
         for report in reports:
-            report_type = report.get('report_type', 'unknown')
+            report_type = smart_get(report, 'report_type')
             report_types[report_type] = report_types.get(report_type, 0) + 1
         
         # Skip recent activity calculation to isolate datetime error
@@ -174,12 +175,12 @@ async def get_assessments_progress(
             progress_item = {
                 "assessment_id": assessment_id,
                 "title": assessment.get('title', 'Unknown Assessment'),
-                "status": assessment.get('status', 'unknown'),
+                "status": smart_get(assessment, 'status'),
                 "completion_percentage": assessment.get('completion_percentage', 0),
-                "current_step": progress.get('current_step', 'unknown'),
+                "current_step": smart_get(progress, 'current_step'),
                 "completed_steps": progress.get('completed_steps', []),
                 "total_steps": progress.get('total_steps', 5),
-                "message": progress.get('message', ''),
+                "message": progress.get('message'),
                 "estimated_completion": progress.get('estimated_completion'),
                 "created_at": assessment.get('created_at'),
                 "updated_at": assessment.get('updated_at'),
@@ -298,7 +299,7 @@ async def get_recommendations_dashboard(
                 "id": str(rec['_id']),
                 "assessment_id": rec.get('assessment_id'),
                 "title": rec.get('title', 'Unknown Recommendation'),
-                "summary": rec.get('summary', ''),
+                "summary": rec.get('summary'),
                 "category": rec.get('category', 'general'),
                 "priority": rec.get('priority', 'medium'),
                 "business_impact": rec.get('business_impact', 'medium'),
@@ -310,8 +311,8 @@ async def get_recommendations_dashboard(
                     "annual_savings": cost_estimates.get('roi_projection', {}).get('annual_savings', 0)
                 },
                 "provider_info": {
-                    "provider": rec_data.get('provider', 'Unknown'),
-                    "region": rec_data.get('region', 'Unknown'),
+                    "provider": rec_data.get('provider'),
+                    "region": rec_data.get('region'),
                     "service_category": rec_data.get('service_category', 'general')
                 },
                 "implementation": {
@@ -337,15 +338,15 @@ async def get_recommendations_dashboard(
         
         for rec in all_recommendations:
             # Categories
-            cat = rec.get('category', 'unknown')
+            cat = rec.get('category')
             categories[cat] = categories.get(cat, 0) + 1
             
             # Providers
-            prov = rec.get('recommendation_data', {}).get('provider', 'unknown')
+            prov = rec.get('provider')
             providers[prov] = providers.get(prov, 0) + 1
             
             # Priorities
-            pri = rec.get('priority', 'unknown')
+            pri = rec.get('priority')
             priorities[pri] = priorities.get(pri, 0) + 1
         
         return {
@@ -419,18 +420,18 @@ async def get_visualization_data(
             cost_est = rec.get('cost_estimates', {})
             if cost_est.get('monthly_cost', 0) > 0:
                 cost_comparison.append({
-                    "recommendation": rec.get('title', 'Unknown')[:30],
+                    "recommendation": rec.get('title')[:30],
                     "monthly_cost": cost_est.get('monthly_cost', 0),
                     "annual_cost": cost_est.get('annual_cost', 0),
                     "annual_savings": cost_est.get('roi_projection', {}).get('annual_savings', 0),
                     "category": rec.get('category', 'general'),
-                    "provider": rec.get('recommendation_data', {}).get('provider', 'unknown')
+                    "provider": rec.get('provider')
                 })
         
         # 2. Provider Distribution
         provider_distribution = {}
         for rec in recommendations:
-            provider = rec.get('recommendation_data', {}).get('provider', 'Unknown')
+            provider = rec.get('provider')
             provider_distribution[provider] = provider_distribution.get(provider, 0) + 1
         
         # 3. Category Performance Metrics
@@ -627,7 +628,7 @@ async def get_advanced_analytics(
                     ]),
                     "category_distribution": {
                         cat: len([r for r in recommendations if r.get('category') == cat])
-                        for cat in set(r.get('category', 'unknown') for r in recommendations)
+                        for cat in set(r.get('category') for r in recommendations)
                     }
                 },
                 "performance_metrics": {

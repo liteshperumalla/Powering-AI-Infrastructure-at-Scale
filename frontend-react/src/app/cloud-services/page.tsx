@@ -43,23 +43,35 @@ export default function CloudServicesPage() {
     const [selectedProvider, setSelectedProvider] = useState<string>('');
     const [selectedCategory, setSelectedCategory] = useState<string>('');
     const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+    const [availableProviders, setAvailableProviders] = useState<string[]>([]);
     const [selectedService, setSelectedService] = useState<CloudService | null>(null);
     const [detailsOpen, setDetailsOpen] = useState(false);
 
-    // Load categories on component mount
+    // Load providers and categories on component mount
     useEffect(() => {
-        const loadCategories = async () => {
+        const loadProvidersAndCategories = async () => {
             try {
-                const categoriesResponse = await apiClient.getCloudServiceCategories();
-                setAvailableCategories(categoriesResponse.categories.map(cat => cat.name));
+                console.log('🔄 Loading providers and categories...');
+                
+                // Use fallback first, then try to optimize later
+                const knownProviders = ['aws', 'azure', 'gcp', 'alibaba', 'ibm'];
+                const knownCategories = ['compute', 'storage', 'database', 'networking', 'security', 'ai/ml', 'analytics', 'containers', 'serverless', 'management'];
+                
+                setAvailableProviders(knownProviders);
+                setAvailableCategories(knownCategories);
+                
+                console.log('✅ Set providers:', knownProviders);
+                console.log('✅ Set categories:', knownCategories);
+                
             } catch (error) {
-                console.error('Failed to load categories:', error);
-                // Fallback to common categories
-                setAvailableCategories(['Compute', 'Database', 'Storage', 'AI/ML', 'Containers', 'Serverless']);
+                console.error('Failed to load providers/categories:', error);
+                // Fallback to known providers and categories
+                setAvailableProviders(['aws', 'azure', 'gcp', 'alibaba', 'ibm']);
+                setAvailableCategories(['compute', 'storage', 'database', 'networking', 'security', 'ai/ml', 'analytics', 'containers', 'serverless', 'management']);
             }
         };
         
-        loadCategories();
+        loadProvidersAndCategories();
     }, []);
 
     useEffect(() => {
@@ -70,10 +82,16 @@ export default function CloudServicesPage() {
                 // Build filters from current state
                 const filters: any = {};
                 if (selectedProvider) {
-                    filters.provider = selectedProvider;
+                    // Convert lowercase provider to uppercase for API filter
+                    filters.provider = selectedProvider.toUpperCase();
                 }
                 if (selectedCategory) {
-                    filters.category = selectedCategory;
+                    // Convert to title case for API filter with special handling for AI/ML
+                    if (selectedCategory === 'ai/ml') {
+                        filters.category = 'AI/ML';
+                    } else {
+                        filters.category = selectedCategory.charAt(0).toUpperCase() + selectedCategory.slice(1).toLowerCase();
+                    }
                 }
                 if (searchQuery) {
                     filters.search = searchQuery;
@@ -87,17 +105,13 @@ export default function CloudServicesPage() {
                     filters
                 });
                 
-                // Use timeout with Promise.race - increased timeout for real SDK calls
-                const timeoutPromise = new Promise((_, reject) => {
-                    setTimeout(() => reject(new Error('Request timeout')), 65000); // 65 seconds for real cloud SDK calls
-                });
+                // Simplified API call with better error handling
+                console.log('📡 Making API call with filters:', filters);
                 
-                const apiPromise = apiClient.getCloudServices({
+                const response = await apiClient.getCloudServices({
                     ...filters,
                     limit: 50 // Get up to 50 services
                 });
-                
-                const response = await Promise.race([apiPromise, timeoutPromise]);
                 
                 // Check if response has services array
                 if (response && response.services && Array.isArray(response.services)) {
@@ -123,81 +137,69 @@ export default function CloudServicesPage() {
                         {
                             id: 'aws-ec2',
                             name: 'Amazon EC2',
-                            provider: 'AWS',
-                            category: 'Compute',
+                            provider: 'aws',
+                            category: 'compute',
                             description: 'Scalable virtual servers in the cloud',
-                            pricing_model: 'Pay-as-you-use',
                             pricing: {
-                                starting_price: '0.0116',
+                                starting_price: 0.0116,
                                 unit: 'per hour'
                             },
-                            regions: ['us-east-1', 'us-west-2', 'eu-west-1'],
                             features: ['Auto Scaling', 'Load Balancing', 'Spot Instances'],
                             compliance: ['SOC2', 'ISO27001', 'GDPR'],
                             region_availability: ['us-east-1', 'us-west-2', 'eu-west-1'],
                             use_cases: ['Web applications', 'Big data', 'Machine learning'],
                             integration: ['CloudWatch', 'IAM', 'VPC'],
-                            cost_optimization_tips: ['Use Reserved Instances', 'Right-size instances'],
                             rating: 4.5
                         },
                         {
                             id: 'azure-vm',
                             name: 'Azure Virtual Machines',
-                            provider: 'Azure',
-                            category: 'Compute',
+                            provider: 'azure',
+                            category: 'compute',
                             description: 'On-demand scalable computing resources',
-                            pricing_model: 'Pay-as-you-use',
                             pricing: {
-                                starting_price: '0.012',
+                                starting_price: 0.012,
                                 unit: 'per hour'
                             },
-                            regions: ['eastus', 'westus2', 'westeurope'],
                             features: ['Auto Scaling', 'Availability Sets', 'Managed Disks'],
                             compliance: ['SOC2', 'ISO27001', 'HIPAA'],
                             region_availability: ['eastus', 'westus2', 'westeurope'],
                             use_cases: ['Enterprise apps', 'Development', 'Testing'],
                             integration: ['Azure Monitor', 'Azure AD', 'VNet'],
-                            cost_optimization_tips: ['Use B-series for variable workloads'],
                             rating: 4.3
                         },
                         {
                             id: 'gcp-compute',
                             name: 'Google Compute Engine',
-                            provider: 'GCP',
-                            category: 'Compute',
+                            provider: 'gcp',
+                            category: 'compute',
                             description: 'High-performance virtual machines',
-                            pricing_model: 'Pay-as-you-use',
                             pricing: {
-                                starting_price: '0.010',
+                                starting_price: 0.010,
                                 unit: 'per hour'
                             },
-                            regions: ['us-central1', 'us-west1', 'europe-west1'],
                             features: ['Preemptible VMs', 'Live Migration', 'Custom Machine Types'],
                             compliance: ['SOC2', 'ISO27001', 'GDPR'],
                             region_availability: ['us-central1', 'us-west1', 'europe-west1'],
                             use_cases: ['Batch processing', 'Web services', 'Analytics'],
                             integration: ['Cloud Monitoring', 'IAM', 'VPC'],
-                            cost_optimization_tips: ['Use preemptible instances', 'Sustained use discounts'],
                             rating: 4.4
                         },
                         {
                             id: 'aws-s3',
                             name: 'Amazon S3',
-                            provider: 'AWS',
-                            category: 'Storage',
+                            provider: 'aws',
+                            category: 'storage',
                             description: 'Object storage built to store and retrieve any amount of data',
-                            pricing_model: 'Pay-as-you-use',
                             pricing: {
-                                starting_price: '0.023',
+                                starting_price: 0.023,
                                 unit: 'per GB/month'
                             },
-                            regions: ['Global'],
                             features: ['99.999999999% durability', 'Versioning', 'Cross-region replication'],
                             compliance: ['SOC2', 'PCI DSS', 'HIPAA'],
                             region_availability: ['Global'],
                             use_cases: ['Backup', 'Data archiving', 'Content distribution'],
                             integration: ['CloudFront', 'Lambda', 'Glacier'],
-                            cost_optimization_tips: ['Use appropriate storage classes', 'Lifecycle policies'],
                             rating: 4.7
                         }
                     ]);
@@ -231,26 +233,22 @@ export default function CloudServicesPage() {
     };
 
     const getProviderIcon = (provider: string) => {
-        switch (provider) {
-            case 'AWS': return <CloudQueue />;
-            case 'Azure': return <Computer />;
-            case 'GCP': return <Storage />;
-            case 'Alibaba': 
+        switch (provider.toLowerCase()) {
+            case 'aws': return <CloudQueue />;
+            case 'azure': return <Computer />;
+            case 'gcp': return <Storage />;
             case 'alibaba': return <Cloud />;
-            case 'IBM': 
             case 'ibm': return <CloudQueue />;
             default: return <Cloud />;
         }
     };
 
     const getProviderColor = (provider: string) => {
-        switch (provider) {
-            case 'AWS': return '#FF9900';
-            case 'Azure': return '#0078D4';
-            case 'GCP': return '#4285F4';
-            case 'Alibaba':
+        switch (provider.toLowerCase()) {
+            case 'aws': return '#FF9900';
+            case 'azure': return '#0078D4';
+            case 'gcp': return '#4285F4';
             case 'alibaba': return '#FF6A00';
-            case 'IBM':
             case 'ibm': return '#006699';
             default: return '#666';
         }
@@ -305,26 +303,14 @@ export default function CloudServicesPage() {
                                             exclusive
                                             size="small"
                                         >
-                                            <ToggleButton value="AWS">
-                                                <CloudQueue sx={{ mr: 1 }} />
-                                                AWS
-                                            </ToggleButton>
-                                            <ToggleButton value="Azure">
-                                                <Computer sx={{ mr: 1 }} />
-                                                Azure
-                                            </ToggleButton>
-                                            <ToggleButton value="GCP">
-                                                <Storage sx={{ mr: 1 }} />
-                                                GCP
-                                            </ToggleButton>
-                                            <ToggleButton value="Alibaba">
-                                                <Cloud sx={{ mr: 1, color: '#FF6A00' }} />
-                                                Alibaba
-                                            </ToggleButton>
-                                            <ToggleButton value="IBM">
-                                                <CloudQueue sx={{ mr: 1, color: '#006699' }} />
-                                                IBM
-                                            </ToggleButton>
+                                            {availableProviders.map(provider => (
+                                                <ToggleButton key={provider} value={provider}>
+                                                    <Box sx={{ color: getProviderColor(provider), mr: 1 }}>
+                                                        {getProviderIcon(provider)}
+                                                    </Box>
+                                                    {provider.toUpperCase()}
+                                                </ToggleButton>
+                                            ))}
                                         </ToggleButtonGroup>
                                     </Box>
                                 </Grid>

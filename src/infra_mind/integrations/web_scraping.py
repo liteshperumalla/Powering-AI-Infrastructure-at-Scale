@@ -234,15 +234,15 @@ class RealWebScrapingService:
                     
                     for i, item in enumerate(data.get("items", [])):
                         result = SearchResult(
-                            title=item.get("title", ""),
-                            url=item.get("link", ""),
-                            snippet=item.get("snippet", ""),
+                            title=item.get("title"),
+                            url=item.get("link"),
+                            snippet=item.get("snippet"),
                             provider=SearchProvider.GOOGLE_CUSTOM,
                             search_query=query,
                             rank=i + 1,
                             timestamp=datetime.now(timezone.utc),
                             metadata={
-                                "display_link": item.get("displayLink", ""),
+                                "display_link": item.get("displayLink"),
                                 "search_info": data.get("searchInformation", {})
                             }
                         )
@@ -295,16 +295,16 @@ class RealWebScrapingService:
                     
                     for i, item in enumerate(data.get("webPages", {}).get("value", [])):
                         result = SearchResult(
-                            title=item.get("name", ""),
-                            url=item.get("url", ""),
-                            snippet=item.get("snippet", ""),
+                            title=item.get("name"),
+                            url=item.get("url"),
+                            snippet=item.get("snippet"),
                             provider=SearchProvider.BING,
                             search_query=query,
                             rank=i + 1,
                             timestamp=datetime.now(timezone.utc),
                             metadata={
-                                "display_url": item.get("displayUrl", ""),
-                                "date_last_crawled": item.get("dateLastCrawled", "")
+                                "display_url": item.get("displayUrl"),
+                                "date_last_crawled": item.get("dateLastCrawled")
                             }
                         )
                         results.append(result)
@@ -496,8 +496,8 @@ class RealWebScrapingService:
         for img in soup.find_all('img', src=True)[:10]:  # Limit to first 10 images
             extracted["images"].append({
                 "src": img['src'],
-                "alt": img.get('alt', ''),
-                "title": img.get('title', '')
+                "alt": img.get('alt'),
+                "title": img.get('title')
             })
         
         # Content-type specific extraction

@@ -6,7 +6,7 @@ Supports API versioning for backward compatibility and evolution.
 """
 
 from fastapi import APIRouter, HTTPException, status
-from .endpoints import auth, assessments, recommendations, reports, monitoring, webhooks, admin, testing, resilience, compliance, integrations, compliance_dashboard, business_tools, performance_monitoring, forms, cloud_services, chat, advanced_analytics, scenarios, validation, dashboard, experiments, feedback, quality
+from .endpoints import auth, assessments, recommendations, reports, monitoring, webhooks, admin, testing, resilience, compliance, integrations, compliance_dashboard, business_tools, performance_monitoring, forms, cloud_services, chat, advanced_analytics, scenarios, validation, dashboard, experiments, feedback, quality, vendor_lockin, rollback, budget_forecasting, change_impact, gitops, approval_workflows
 from .documentation import get_api_integration_guide
 
 # Create versioned API routers
@@ -78,6 +78,42 @@ api_v1_router.include_router(
     scenarios.router,
     prefix="/scenarios",
     tags=["Scenarios"]
+)
+
+api_v1_router.include_router(
+    vendor_lockin.router,
+    prefix="/vendor-lockin",
+    tags=["Vendor Lock-in"]
+)
+
+api_v1_router.include_router(
+    rollback.router,
+    prefix="/rollback",
+    tags=["Rollback Automation"]
+)
+
+api_v1_router.include_router(
+    budget_forecasting.router,
+    prefix="/budget-forecasting",
+    tags=["Budget Forecasting"]
+)
+
+api_v1_router.include_router(
+    change_impact.router,
+    prefix="/change-impact",
+    tags=["Change Impact Analysis"]
+)
+
+api_v1_router.include_router(
+    gitops.router,
+    prefix="/gitops",
+    tags=["GitOps Integration"]
+)
+
+api_v1_router.include_router(
+    approval_workflows.router,
+    prefix="/approval-workflows",
+    tags=["Approval Workflows"]
 )
 
 # V2 API Routes (Enhanced with new features)
@@ -230,6 +266,42 @@ api_v2_router.include_router(
     quality.router,
     prefix="/quality",
     tags=["Quality Assurance"]
+)
+
+api_v2_router.include_router(
+    vendor_lockin.router,
+    prefix="/vendor-lockin",
+    tags=["Vendor Lock-in"]
+)
+
+api_v2_router.include_router(
+    rollback.router,
+    prefix="/rollback",
+    tags=["Rollback Automation"]
+)
+
+api_v2_router.include_router(
+    budget_forecasting.router,
+    prefix="/budget-forecasting",
+    tags=["Budget Forecasting"]
+)
+
+api_v2_router.include_router(
+    change_impact.router,
+    prefix="/change-impact",
+    tags=["Change Impact Analysis"]
+)
+
+api_v2_router.include_router(
+    gitops.router,
+    prefix="/gitops",
+    tags=["GitOps Integration"]
+)
+
+api_v2_router.include_router(
+    approval_workflows.router,
+    prefix="/approval-workflows",
+    tags=["Approval Workflows"]
 )
 
 # Documentation endpoints are now included directly in main api_router

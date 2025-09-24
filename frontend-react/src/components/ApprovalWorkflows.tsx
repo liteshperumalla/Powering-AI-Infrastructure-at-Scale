@@ -133,10 +133,28 @@ const ApprovalWorkflows: React.FC = () => {
                 approvalService.getApprovalRules(),
             ]);
             
-            setRequests(requestsData);
+            // Ensure requests have proper structure
+            const formattedRequests = Array.isArray(requestsData) ? requestsData.map(request => ({
+                ...request,
+                workflow: request.workflow || {
+                    status: request.status || 'pending',
+                    current_level: request.current_level || 1,
+                    approval_progress: request.approval_progress || [{
+                        level: 1,
+                        name: 'Review',
+                        status: request.status || 'pending',
+                        approvals: Array.isArray(request.approved_by) ? request.approved_by.map(email => ({ email })) : [],
+                        required_approvals: request.required_approvers || []
+                    }]
+                }
+            })) : [];
+            setRequests(formattedRequests);
             setRules(rulesData);
         } catch (error) {
             console.error('Failed to load approval data:', error);
+            // Set fallback data
+            setRequests([]);
+            setRules([]);
         } finally {
             setLoading(false);
         }
@@ -300,7 +318,7 @@ const ApprovalWorkflows: React.FC = () => {
 
                                 {/* Request List */}
                                 <List>
-                                    {requests.map((request) => (
+                                    {Array.isArray(requests) && requests.length > 0 ? requests.map((request) => (
                                         <React.Fragment key={request.id}>
                                             <ListItem
                                                 alignItems="flex-start"
@@ -328,20 +346,20 @@ const ApprovalWorkflows: React.FC = () => {
                                                 <ListItemText
                                                     primary={
                                                         <Stack direction="row" alignItems="center" spacing={1}>
-                                                            {getStatusIcon(request.workflow.status)}
+                                                            {getStatusIcon(request.workflow?.status || 'pending')}
                                                             <Typography variant="h6">
                                                                 {request.title}
                                                             </Typography>
                                                             <Chip
                                                                 size="small"
-                                                                label={request.resource_details.environment}
-                                                                color={request.resource_details.environment === 'prod' ? 'error' : 'primary'}
+                                                                label={request.resource_details?.environment || 'Unknown'}
+                                                                color={request.resource_details?.environment === 'prod' ? 'error' : 'primary'}
                                                                 variant="outlined"
                                                             />
                                                             <Chip
                                                                 size="small"
-                                                                label={request.resource_details.risk_assessment.level}
-                                                                color={getRiskColor(request.resource_details.risk_assessment.level)}
+                                                                label={request.resource_details?.risk_assessment?.level || 'Unknown'}
+                                                                color={getRiskColor(request.resource_details?.risk_assessment?.level || 'low')}
                                                                 variant="filled"
                                                             />
                                                         </Stack>
@@ -374,22 +392,24 @@ const ApprovalWorkflows: React.FC = () => {
                                                                 <Stack direction="row" alignItems="center" spacing={1}>
                                                                     <Typography variant="caption">Requested by:</Typography>
                                                                     <Avatar sx={{ width: 24, height: 24 }}>
-                                                                        {request.requester.name.charAt(0)}
+                                                                        {request.requester?.name?.charAt(0) || '?'}
                                                                     </Avatar>
-                                                                    <Typography variant="caption">{request.requester.name}</Typography>
+                                                                    <Typography variant="caption">{request.requester?.name || 'Unknown'}</Typography>
                                                                 </Stack>
                                                                 
                                                                 <Stack direction="row" alignItems="center" spacing={1}>
                                                                     <Typography variant="caption">Pending approvals:</Typography>
                                                                     <AvatarGroup max={3} sx={{ '& .MuiAvatar-root': { width: 24, height: 24 } }}>
-                                                                        {request.workflow.approval_progress
-                                                                            .filter(p => p.status === 'pending' || p.status === 'in_progress')
-                                                                            .flatMap(p => p.approvals)
-                                                                            .map((approval, idx) => (
-                                                                                <Avatar key={idx}>
-                                                                                    {approval.approver.name.charAt(0)}
-                                                                                </Avatar>
-                                                                            ))}
+                                                                        {Array.isArray(request.workflow?.approval_progress) 
+                                                                            ? request.workflow.approval_progress
+                                                                                .filter(p => p.status === 'pending' || p.status === 'in_progress')
+                                                                                .flatMap(p => Array.isArray(p.approvals) ? p.approvals : [])
+                                                                                .map((approval, idx) => (
+                                                                                    <Avatar key={idx}>
+                                                                                        {approval.approver?.name?.charAt(0) || '?'}
+                                                                                    </Avatar>
+                                                                                ))
+                                                                            : []}
                                                                     </AvatarGroup>
                                                                 </Stack>
                                                                 
@@ -411,7 +431,7 @@ const ApprovalWorkflows: React.FC = () => {
                                                         >
                                                             Details
                                                         </Button>
-                                                        {request.workflow.status === 'pending' || request.workflow.status === 'in_progress' ? (
+                                                        {(request.workflow?.status === 'pending' || request.workflow?.status === 'in_progress') ? (
                                                             <>
                                                                 <Button
                                                                     size="small"
@@ -431,8 +451,8 @@ const ApprovalWorkflows: React.FC = () => {
                                                         ) : (
                                                             <Chip
                                                                 size="small"
-                                                                label={request.workflow.status}
-                                                                color={getStatusColor(request.workflow.status)}
+                                                                label={request.workflow?.status || 'pending'}
+                                                                color={getStatusColor(request.workflow?.status || 'pending')}
                                                                 variant="filled"
                                                             />
                                                         )}
@@ -440,7 +460,13 @@ const ApprovalWorkflows: React.FC = () => {
                                                 </ListItemSecondaryAction>
                                             </ListItem>
                                         </React.Fragment>
-                                    ))}
+                                    )) : (
+                                        <Box textAlign="center" py={3}>
+                                            <Typography color="textSecondary">
+                                                No approval requests found
+                                            </Typography>
+                                        </Box>
+                                    )}
                                 </List>
                             </CardContent>
                         </Card>
@@ -451,7 +477,7 @@ const ApprovalWorkflows: React.FC = () => {
             {/* Rules Tab */}
             <TabPanel value={tabValue} index={1}>
                 <Grid container spacing={3}>
-                    {rules.map((rule) => (
+                    {Array.isArray(rules) && rules.length > 0 ? rules.map((rule) => (
                         <Grid item xs={12} md={6} lg={4} key={rule.id}>
                             <Card>
                                 <CardContent>
@@ -489,7 +515,15 @@ const ApprovalWorkflows: React.FC = () => {
                                 </CardContent>
                             </Card>
                         </Grid>
-                    ))}
+                    )) : (
+                        <Grid item xs={12}>
+                            <Box textAlign="center" py={3}>
+                                <Typography color="textSecondary">
+                                    No approval rules configured
+                                </Typography>
+                            </Box>
+                        </Grid>
+                    )}
                 </Grid>
             </TabPanel>
 
@@ -577,17 +611,17 @@ const ApprovalWorkflows: React.FC = () => {
                 <DialogContent>
                     {selectedRequest && (
                         <Stack spacing={3} sx={{ mt: 1 }}>
-                            <Alert severity={getRiskColor(selectedRequest.resource_details.risk_assessment.level)}>
+                            <Alert severity={getRiskColor(selectedRequest.resource_details?.risk_assessment?.level || 'low')}>
                                 <Typography variant="subtitle2">
-                                    Risk Level: {selectedRequest.resource_details.risk_assessment.level.toUpperCase()}
+                                    Risk Level: {(selectedRequest.resource_details?.risk_assessment?.level || 'unknown').toUpperCase()}
                                 </Typography>
                                 <Typography variant="body2">
-                                    Impact Score: {selectedRequest.resource_details.risk_assessment.impact_score}/100
+                                    Impact Score: {selectedRequest.resource_details?.risk_assessment?.impact_score || 0}/100
                                 </Typography>
                             </Alert>
 
                             <Stepper activeStep={selectedRequest.workflow.current_level - 1} orientation="vertical">
-                                {selectedRequest.workflow.approval_progress.map((progress, index) => (
+                                {Array.isArray(selectedRequest.workflow?.approval_progress) ? selectedRequest.workflow.approval_progress.map((progress, index) => (
                                     <Step key={index} completed={progress.status === 'approved'}>
                                         <StepLabel
                                             error={progress.status === 'rejected'}
@@ -605,7 +639,7 @@ const ApprovalWorkflows: React.FC = () => {
                                                 Required: {progress.required_approvals} approvals | 
                                                 Current: {progress.current_approvals} approvals
                                             </Typography>
-                                            {progress.approvals.length > 0 && (
+                                            {Array.isArray(progress.approvals) && progress.approvals.length > 0 && (
                                                 <List dense>
                                                     {progress.approvals.map((approval, idx) => (
                                                         <ListItem key={idx}>
@@ -627,7 +661,11 @@ const ApprovalWorkflows: React.FC = () => {
                                             )}
                                         </StepContent>
                                     </Step>
-                                ))}
+                                )) : (
+                                    <Typography color="textSecondary">
+                                        No approval progress available
+                                    </Typography>
+                                )}
                             </Stepper>
                         </Stack>
                     )}

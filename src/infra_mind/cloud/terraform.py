@@ -327,9 +327,9 @@ class TerraformCloudClient:
                     "type": "workspaces",
                     "attributes": {
                         "name": workspace_config.get("name"),
-                        "description": workspace_config.get("description", ""),
+                        "description": workspace_config.get("description"),
                         "terraform-version": workspace_config.get("terraform_version", "latest"),
-                        "working-directory": workspace_config.get("working_directory", ""),
+                        "working-directory": workspace_config.get("working_directory"),
                         "auto-apply": workspace_config.get("auto_apply", False),
                         "queue-all-runs": workspace_config.get("queue_all_runs", False)
                     }
@@ -850,7 +850,7 @@ class TerraformRegistryClient:
                         "version": version_attrs.get("version"),
                         "published_at": version_attrs.get("published-at"),
                         "protocols": version_attrs.get("protocols", []),
-                        "platforms": version_attrs.get("shasums-url", "").split("/")[-2:] if version_attrs.get("shasums-url") else []
+                        "platforms": version_attrs.get("shasums-url").split("/")[-2:] if version_attrs.get("shasums-url") else []
                     })
             
             # Get basic provider info
@@ -947,8 +947,8 @@ class TerraformRegistryClient:
                     "published_at": module.get("published_at"),
                     "verified": module.get("verified", False),
                     "version": module.get("version"),
-                    "full_name": f"{module.get('namespace', '')}/{module.get('name', '')}/{module.get('provider', '')}",
-                    "registry_url": f"https://registry.terraform.io/modules/{module.get('namespace', '')}/{module.get('name', '')}/{module.get('provider', '')}"
+                    "full_name": f"{module.get('namespace')}/{module.get('name')}/{module.get('provider')}",
+                    "registry_url": f"https://registry.terraform.io/modules/{module.get('namespace')}/{module.get('name')}/{module.get('provider')}"
                 }
                 
                 # Add category classification based on module name and description
@@ -1003,8 +1003,8 @@ class TerraformRegistryClient:
         Returns:
             Category string
         """
-        name = module_info.get("name", "").lower()
-        description = module_info.get("description", "").lower()
+        name = module_info.get("name").lower()
+        description = module_info.get("description").lower()
         text = f"{name} {description}"
         
         # Define category keywords
@@ -1048,7 +1048,7 @@ class TerraformRegistryClient:
             score *= 1.5
         
         # Bonus for official/popular namespaces
-        namespace = module_info.get("namespace", "").lower()
+        namespace = module_info.get("namespace").lower()
         if namespace in ["terraform-aws-modules", "azure", "terraform-google-modules", "hashicorp"]:
             score *= 1.3
         
@@ -1066,7 +1066,7 @@ class TerraformRegistryClient:
             
             # Process AWS compute modules
             for module in aws_compute.get("modules", []):
-                if any(keyword in module.get("name", "").lower() for keyword in ["ec2", "compute", "instance", "autoscaling"]):
+                if any(keyword in module.get("name").lower() for keyword in ["ec2", "compute", "instance", "autoscaling"]):
                     service = CloudService(
                         provider=CloudProvider.AWS,
                         service_name=f"Terraform Module: {module.get('name')}",
@@ -1087,7 +1087,7 @@ class TerraformRegistryClient:
             
             # Process Azure compute modules
             for module in azure_compute.get("modules", []):
-                if any(keyword in module.get("name", "").lower() for keyword in ["vm", "compute", "instance", "scale"]):
+                if any(keyword in module.get("name").lower() for keyword in ["vm", "compute", "instance", "scale"]):
                     service = CloudService(
                         provider=CloudProvider.AZURE,
                         service_name=f"Terraform Module: {module.get('name')}",
@@ -1108,7 +1108,7 @@ class TerraformRegistryClient:
             
             # Process GCP compute modules
             for module in gcp_compute.get("modules", []):
-                if any(keyword in module.get("name", "").lower() for keyword in ["compute", "instance", "vm", "gce"]):
+                if any(keyword in module.get("name").lower() for keyword in ["compute", "instance", "vm", "gce"]):
                     service = CloudService(
                         provider=CloudProvider.GCP,
                         service_name=f"Terraform Module: {module.get('name')}",
@@ -1159,7 +1159,7 @@ class TerraformRegistryClient:
                 (gcp_storage, CloudProvider.GCP)
             ]:
                 for module in provider_data.get("modules", []):
-                    if any(keyword in module.get("name", "").lower() for keyword in ["s3", "storage", "bucket", "blob", "disk"]):
+                    if any(keyword in module.get("name").lower() for keyword in ["s3", "storage", "bucket", "blob", "disk"]):
                         service = CloudService(
                             provider=cloud_provider,
                             service_name=f"Terraform Module: {module.get('name')}",
@@ -1210,7 +1210,7 @@ class TerraformRegistryClient:
                 (gcp_db, CloudProvider.GCP)
             ]:
                 for module in provider_data.get("modules", []):
-                    if any(keyword in module.get("name", "").lower() for keyword in ["rds", "database", "db", "sql", "mysql", "postgres", "mongodb"]):
+                    if any(keyword in module.get("name").lower() for keyword in ["rds", "database", "db", "sql", "mysql", "postgres", "mongodb"]):
                         service = CloudService(
                             provider=cloud_provider,
                             service_name=f"Terraform Module: {module.get('name')}",
@@ -1261,7 +1261,7 @@ class TerraformRegistryClient:
                 (gcp_ai, CloudProvider.GCP)
             ]:
                 for module in provider_data.get("modules", []):
-                    if any(keyword in module.get("name", "").lower() for keyword in ["sagemaker", "ml", "ai", "machine", "learning", "cognitive", "vertex"]):
+                    if any(keyword in module.get("name").lower() for keyword in ["sagemaker", "ml", "ai", "machine", "learning", "cognitive", "vertex"]):
                         service = CloudService(
                             provider=cloud_provider,
                             service_name=f"Terraform Module: {module.get('name')}",

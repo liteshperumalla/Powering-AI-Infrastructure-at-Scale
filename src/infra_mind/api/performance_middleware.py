@@ -142,7 +142,7 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
                 data = json.loads(cached_data)
                 
                 # Check if cache is still valid
-                cached_at = datetime.fromisoformat(data.get("cached_at", ""))
+                cached_at = datetime.fromisoformat(data.get("cached_at"))
                 if datetime.utcnow() - cached_at < timedelta(seconds=self.cache_ttl):
                     return JSONResponse(
                         content=data["content"],
@@ -285,12 +285,12 @@ class CompressionMiddleware(BaseHTTPMiddleware):
     def _should_compress(self, request: Request, response: Response) -> bool:
         """Check if response should be compressed."""
         # Check if client accepts gzip
-        accept_encoding = request.headers.get("accept-encoding", "")
+        accept_encoding = request.headers.get("accept-encoding")
         if "gzip" not in accept_encoding.lower():
             return False
         
         # Check content type
-        content_type = response.headers.get("content-type", "")
+        content_type = response.headers.get("content-type")
         if not any(ct in content_type for ct in self.compressible_types):
             return False
         

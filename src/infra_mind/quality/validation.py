@@ -437,7 +437,7 @@ class RecommendationValidator:
             business_reqs = assessment.business_requirements
             
             # Check budget alignment
-            budget_range = business_reqs.get('budget_range', '')
+            budget_range = business_reqs.get('budget_range')
             if budget_range:
                 budget_validation = await self._validate_budget_alignment(
                     recommendation, budget_range
@@ -445,7 +445,7 @@ class RecommendationValidator:
                 results.append(budget_validation)
             
             # Check timeline alignment
-            timeline = business_reqs.get('timeline', '')
+            timeline = business_reqs.get('timeline')
             if timeline:
                 timeline_validation = await self._validate_timeline_alignment(
                     recommendation, timeline

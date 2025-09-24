@@ -251,7 +251,7 @@ export default function AnalyticsPage() {
                             )}
                             <Grid container spacing={3}>
                             {/* Cost Modeling */}
-                            <Grid item xs={12} lg={6}>
+                            <Grid item xs={12} lg={6} key="cost-modeling">
                                 <Card>
                                     <CardContent>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
@@ -319,7 +319,7 @@ export default function AnalyticsPage() {
                             </Grid>
 
                             {/* Performance Benchmarks */}
-                            <Grid item xs={12} lg={6}>
+                            <Grid item xs={12} lg={6} key="performance-benchmarks">
                                 <Card>
                                     <CardContent>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
@@ -362,7 +362,7 @@ export default function AnalyticsPage() {
                             </Grid>
 
                             {/* Security Analytics */}
-                            <Grid item xs={12} lg={6}>
+                            <Grid item xs={12} lg={6} key="security-analytics">
                                 <Card>
                                     <CardContent>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
@@ -438,7 +438,7 @@ export default function AnalyticsPage() {
                             </Grid>
 
                             {/* Multi-Cloud Analysis */}
-                            <Grid item xs={12} lg={6}>
+                            <Grid item xs={12} lg={6} key="multi-cloud-analysis">
                                 <Card>
                                     <CardContent>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
@@ -508,7 +508,7 @@ export default function AnalyticsPage() {
                                         {analyticsData.optimization_opportunities?.length > 0 && (
                                             <Grid container spacing={2}>
                                                 {analyticsData.optimization_opportunities.map((opportunity, index) => (
-                                                    <Grid item xs={12} md={6} lg={4} key={`opt-opp-${opportunity.title?.replace(/\s+/g, '-') || index}`}>
+                                                    <Grid item xs={12} md={6} lg={4} key={`opt-opp-${index}-${opportunity.title?.replace(/\s+/g, '-') || 'untitled'}`}>
                                                         <Paper sx={{ p: 2, height: '100%' }}>
                                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                                                                 <Typography variant="h6" sx={{ fontSize: '1rem' }}>

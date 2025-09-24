@@ -89,9 +89,9 @@ async def get_user_reports(current_user: User = Depends(get_current_user)):
         for report in reports:
             simple_reports.append({
                 "id": str(report["_id"]),
-                "title": report.get("title", ""),
-                "status": report.get("status", ""),
-                "created_at": str(report.get("created_at", "")),
+                "title": report.get("title"),
+                "status": report.get("status"),
+                "created_at": str(report.get("created_at")),
             })
         
         return simple_reports
@@ -142,7 +142,7 @@ async def get_all_user_reports(current_user: User = Depends(get_current_user)):
             async def generate_llm_findings_content(llm_manager, company_name, industry, current_infra, recommendations, current_spend, total_monthly_cost, savings, savings_pct, avg_confidence, high_priority_recs):
                 """Generate LLM-enhanced findings content."""
                 # Default content if LLM fails
-                default_content = f"**Current Infrastructure Analysis:**\n• Assessment completed for {company_name} in {industry} sector\n• {len(recommendations)} AI-generated recommendations produced\n• Average recommendation confidence: {avg_confidence:.1%}\n• {len(high_priority_recs)} high-priority initiatives identified\n\n**Cost Optimization Analysis:**\n• Current monthly spend: ${current_spend:,.0f}\n• Projected monthly cost: ${total_monthly_cost:,.0f}\n• Projected monthly savings: ${savings:,.0f} ({savings_pct:.1f}% reduction)\n\n**Technical Infrastructure:**\n" + (f"• Cloud providers: {', '.join(current_infra.get('cloud_providers', []))}\n• Virtual machines: {current_infra.get('compute_resources', {}).get('virtual_machines', 'N/A')}\n• Containers: {current_infra.get('compute_resources', {}).get('containers', 'N/A')}" if current_infra else "• Infrastructure assessment completed\n• Optimization opportunities identified") + f"\n\n**Recommendation Categories:**\n" + '\n'.join([f"• {rec.get('category', 'General')}: {rec.get('title', 'Untitled')}" for rec in recommendations[:4]])
+                default_content = f"**Current Infrastructure Analysis:**\n• Assessment completed for {company_name} in {industry} sector\n• {len(recommendations)} AI-generated recommendations produced\n• Average recommendation confidence: {avg_confidence:.1%}\n• {len(high_priority_recs)} high-priority initiatives identified\n\n**Cost Optimization Analysis:**\n• Current monthly spend: ${current_spend:,.0f}\n• Projected monthly cost: ${total_monthly_cost:,.0f}\n• Projected monthly savings: ${savings:,.0f} ({savings_pct:.1f}% reduction)\n\n**Technical Infrastructure:**\n" + (f"• Cloud providers: {', '.join(current_infra.get('cloud_providers', []))}\n• Virtual machines: {current_infra.get('compute_resources', {}).get('virtual_machines')}\n• Containers: {current_infra.get('compute_resources', {}).get('containers')}" if current_infra else "• Infrastructure assessment completed\n• Optimization opportunities identified") + f"\n\n**Recommendation Categories:**\n" + '\n'.join([f"• {rec.get('category', 'General')}: {rec.get('title', 'Untitled')}" for rec in recommendations[:4]])
                 
                 if not llm_manager:
                     return default_content
@@ -158,8 +158,8 @@ async def get_all_user_reports(current_user: User = Depends(get_current_user)):
 
 Company: {company_name} ({industry} industry)
 Current Infrastructure: {infrastructure_summary}
-- VMs: {compute_resources.get('virtual_machines', 'N/A')}
-- Containers: {compute_resources.get('containers', 'N/A')}
+- VMs: {compute_resources.get('virtual_machines')}
+- Containers: {compute_resources.get('containers')}
 - Current spend: ${current_spend:,}/month
 
 Assessment Results:
@@ -348,7 +348,7 @@ Focus on practical implementation guidance and strategic value. Be specific abou
                                     "business_objectives": business_req.get('objectives', []),
                                     "technical_targets": tech_req.get('performance_targets', {}),
                                     "current_infrastructure": current_infra,
-                                    "recommendations": [{"title": r.get('title', ''), "category": r.get('category', ''), "priority": r.get('priority', '')} for r in recommendations[:3]]
+                                    "recommendations": [{"title": r.get('title'), "category": r.get('category'), "priority": r.get('priority')} for r in recommendations[:3]]
                                 }
                                 
                                 llm_request = LLMRequest(
@@ -410,7 +410,7 @@ Generate a professional executive summary (2-3 paragraphs) highlighting the stra
                             {
                                 "title": "Technical Assessment Summary",
                                 "type": "technical_analysis",
-                                "content": f"Technical assessment for {company_name} reveals:\n\n**Infrastructure Overview:**\n" + (f"• Cloud providers: {', '.join(current_infra.get('cloud_providers', []))}\n• Virtual machines: {current_infra.get('compute_resources', {}).get('virtual_machines', 'N/A')}\n• Containers: {current_infra.get('compute_resources', {}).get('containers', 'N/A')}" if current_infra else "• Infrastructure modernization opportunities identified") + f"\n\n**Analysis Results:**\n• {len(recommendations)} technical recommendations\n• Average confidence: {avg_confidence:.1%}\n• Target monthly cost: ${total_monthly_cost:,.0f}"
+                                "content": f"Technical assessment for {company_name} reveals:\n\n**Infrastructure Overview:**\n" + (f"• Cloud providers: {', '.join(current_infra.get('cloud_providers', []))}\n• Virtual machines: {current_infra.get('compute_resources', {}).get('virtual_machines')}\n• Containers: {current_infra.get('compute_resources', {}).get('containers')}" if current_infra else "• Infrastructure modernization opportunities identified") + f"\n\n**Analysis Results:**\n• {len(recommendations)} technical recommendations\n• Average confidence: {avg_confidence:.1%}\n• Target monthly cost: ${total_monthly_cost:,.0f}"
                             }
                         ]
                     
@@ -464,7 +464,7 @@ Generate a professional executive summary (2-3 paragraphs) highlighting the stra
                         providers = set()
                         high_priority_count = 0
                         for rec in recommendations:
-                            provider = rec.get('recommendation_data', {}).get('provider', '')
+                            provider = rec.get('recommendation_data', {}).get('provider')
                             if provider:
                                 providers.add(provider.upper())
                             if rec.get('priority') == 'high':
@@ -534,8 +534,8 @@ Generate a professional executive summary (2-3 paragraphs) highlighting the stra
                         # Use actual recommendation titles/summaries from the database
                         intelligent_recs = []
                         for rec in recommendations[:5]:  # Limit to top 5
-                            title = rec.get('title', '')
-                            summary = rec.get('summary', '')
+                            title = rec.get('title')
+                            summary = rec.get('summary')
                             if title:
                                 intelligent_recs.append(title)
                             elif summary:
@@ -593,27 +593,27 @@ Generate a professional executive summary (2-3 paragraphs) highlighting the stra
                 "generated_at": format_date(completed_at),  # Use completed_at as generated_at
                 "report_type": report.get("report_type", "executive_summary"),
                 "format": report.get("format", "pdf"),
-                "assessment_id": str(report.get("assessment_id", "")),
-                "user_id": str(report.get("user_id", "")),
-                "assessmentId": str(report.get("assessment_id", "")),  # Frontend compatibility
+                "assessment_id": str(report.get("assessment_id")),
+                "user_id": str(report.get("user_id")),
+                "assessmentId": str(report.get("assessment_id")),  # Frontend compatibility
                 "estimated_savings": report.get("estimated_savings", 75000),  # Default savings estimate
                 "total_pages": report.get("total_pages", 1),
                 "word_count": report.get("word_count", 0),
-                "file_path": report.get("file_path", ""),
+                "file_path": report.get("file_path"),
                 "file_size_bytes": report.get("file_size_bytes", 0),
                 "progress_percentage": report.get("progress_percentage", 100),
                 "sections": await generate_intelligent_report_content(
                     report.get("report_type", "executive_summary"),
-                    str(report.get("assessment_id", "")),
+                    str(report.get("assessment_id")),
                     report.get("title", "Infrastructure Assessment Report")
                 ),
                 "key_findings": await generate_intelligent_key_findings(
                     report.get("report_type", "executive_summary"),
-                    str(report.get("assessment_id", ""))
+                    str(report.get("assessment_id"))
                 ),
                 "recommendations": await generate_intelligent_recommendations(
                     report.get("report_type", "executive_summary"), 
-                    str(report.get("assessment_id", ""))
+                    str(report.get("assessment_id"))
                 ),
                 "compliance_score": report.get("compliance_score", 92),  # Add compliance score for display
                 "generated_by": report.get("generated_by", ["ai_report_generator"]),
@@ -822,18 +822,18 @@ async def get_reports(
                 try:
                     report_data = {
                         "id": str(report_doc["_id"]),
-                        "assessment_id": report_doc.get("assessment_id", ""),
-                        "user_id": report_doc.get("user_id", ""),
-                        "title": report_doc.get("title", ""),
-                        "description": report_doc.get("description", ""),
-                        "report_type": map_report_type(report_doc.get("report_type", "")),
+                        "assessment_id": report_doc.get("assessment_id"),
+                        "user_id": report_doc.get("user_id"),
+                        "title": report_doc.get("title"),
+                        "description": report_doc.get("description"),
+                        "report_type": map_report_type(report_doc.get("report_type")),
                         "format": map_format(report_doc.get("format", "PDF")),
                         "status": map_status(report_doc.get("status", "completed")),
                         "progress_percentage": report_doc.get("progress_percentage", 0),
                         "sections": report_doc.get("sections", []),
                         "total_pages": report_doc.get("total_pages", 0),
                         "word_count": report_doc.get("word_count", 0),
-                        "file_path": report_doc.get("file_path", ""),
+                        "file_path": report_doc.get("file_path"),
                         "file_size_bytes": report_doc.get("file_size_bytes", 0),
                         "generated_by": report_doc.get("generated_by", []),
                         "generation_time_seconds": report_doc.get("generation_time_seconds", 0),
@@ -848,7 +848,7 @@ async def get_reports(
                     }
                     report_responses.append(report_data)
                 except Exception as e:
-                    logger.error(f"Error processing report {report_doc.get('_id', 'unknown')}: {e}")
+                    logger.error(f"Error processing report {report_doc.get('_id')}: {e}")
                     continue
             
             logger.info(f"Found {len(report_responses)} reports for user {current_user.id}")
@@ -1592,9 +1592,9 @@ async def get_report_by_id(
                         def __init__(self, rec_data):
                             self.priority = rec_data.get('priority', 'medium')
                             self.estimated_cost = rec_data.get('cost_estimates', {}).get('monthly_cost', 0)
-                            self.title = rec_data.get('title', '')
-                            self.summary = rec_data.get('summary', '')
-                            self.category = rec_data.get('category', '')
+                            self.title = rec_data.get('title')
+                            self.summary = rec_data.get('summary')
+                            self.category = rec_data.get('category')
                     
                     mock_assessment = MockAssessment(assessment)
                     mock_recommendations = [MockRecommendation(rec) for rec in recommendations]
@@ -1618,7 +1618,7 @@ async def get_report_by_id(
         existing_sections = report.get('sections', [])
         if not existing_sections or len(existing_sections) == 0:
             # Try to get real AI content first
-            assessment_id = report.get('assessment_id', '')
+            assessment_id = report.get('assessment_id')
             report_type = report.get('report_type', 'executive_summary')
             
             ai_sections = await get_real_ai_content(report, assessment_id, report_type)
@@ -1630,7 +1630,7 @@ async def get_report_by_id(
                 generated_sections = await generate_intelligent_report_content(
                     report_type,
                     assessment_id,
-                    report.get('title', '')
+                    report.get('title')
                 )
         else:
             generated_sections = existing_sections
@@ -1645,7 +1645,7 @@ async def get_report_by_id(
                     report_sections.append(ReportSection(
                         title=section.get('title', 'Untitled Section'),
                         type=section.get('type', 'general'),
-                        content=section.get('content', ''),
+                        content=section.get('content'),
                         order=section.get('order', 0)
                     ))
                 elif isinstance(section, str):
@@ -2004,7 +2004,7 @@ async def download_report(
                 "assessment_summary": {
                     "status": assessment.status,
                     "progress_percentage": assessment.progress.get('progress_percentage', 0) if assessment.progress else 0,
-                    "current_step": assessment.progress.get('current_step', 'N/A') if assessment.progress else 'N/A',
+                    "current_step": assessment.progress.get('current_step') if assessment.progress else 'N/A',
                     "created_at": assessment.created_at.isoformat() if assessment.created_at else None,
                     "user_id": assessment.user_id
                 },

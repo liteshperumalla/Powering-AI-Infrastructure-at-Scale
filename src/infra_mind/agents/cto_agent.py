@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from .base import BaseAgent, AgentConfig, AgentRole
 from .tools import ToolResult
 from ..models.assessment import Assessment
+from ..core.smart_defaults import smart_get, SmartDefaults
 
 logger = logging.getLogger(__name__)
 
@@ -975,7 +976,7 @@ For each risk, provide:
 CRITICAL: You must respond with ONLY a valid JSON object. No text before or after the JSON.
 
 Example format:
-{"identified_risks": [{"type": "technology", "risk": "description", "impact": "high", "probability": 0.6, "mitigation": "strategy"}], "risk_categories": {"technology": [], "operational": [], "financial": [], "compliance": []}}
+{{"identified_risks": [{{"type": "technology", "risk": "description", "impact": "high", "probability": 0.6, "mitigation": "strategy"}}], "risk_categories": {{"technology": [], "operational": [], "financial": [], "compliance": []}}}}
 
 Respond now with valid JSON only:"""
 
@@ -1111,7 +1112,7 @@ Respond now with valid JSON only:"""
             })
         
         # Budget risks
-        budget_range = business_req.get("budget_range", "")
+        budget_range = business_req.get("budget_range")
         if budget_range in ["$1k-10k", "$10k-50k"]:
             risks.append({
                 "category": "financial",
@@ -1177,7 +1178,7 @@ BUSINESS ANALYSIS SUMMARY:
 
 STRATEGIC ALIGNMENT:
 - Alignment Score: {strategic_alignment.get('alignment_score', 0.0):.2f}/1.0
-- Alignment Level: {strategic_alignment.get('alignment_level', 'Unknown')}
+- Alignment Level: {strategic_alignment.get('alignment_level')}
 - Key Gaps: {', '.join(strategic_alignment.get('strategic_gaps', []))}
 
 FINANCIAL ANALYSIS:
@@ -1255,7 +1256,7 @@ Respond in JSON format with an array of strategic recommendations."""
                             "category": rec.get("category", "general"),
                             "priority": rec.get("priority", "medium"),
                             "title": rec.get("title", "Strategic Recommendation"),
-                            "description": rec.get("description", ""),
+                            "description": rec.get("description"),
                             "rationale": rec.get("rationale", "Based on comprehensive analysis"),
                             "actions": rec.get("actions", ["Review and implement"]),
                             "business_impact": rec.get("business_impact", "Positive impact on business operations"),
@@ -1478,9 +1479,9 @@ Respond in JSON format with an array of strategic recommendations."""
         business_req = assessment_data.get("business_requirements", {})
         
         return {
-            "company_size": business_req.get("company_size", "unknown"),
-            "industry": business_req.get("industry", "unknown"),
-            "budget_range": business_req.get("budget_range", "unknown"),
+            "company_size": smart_get(business_req, "company_size"),
+            "industry": smart_get(business_req, "industry"),
+            "budget_range": smart_get(business_req, "budget_range"),
             "primary_goals": business_req.get("primary_goals", [])
         }
     
@@ -1821,8 +1822,8 @@ Respond in JSON format with an array of strategic recommendations."""
     
     def _fallback_strategic_fit(self, requirements: Dict[str, Any]) -> Dict[str, Any]:
         """Fallback strategic fit analysis."""
-        industry = requirements.get("industry", "unknown")
-        company_size = requirements.get("company_size", "unknown")
+        industry = smart_get(requirements, "industry")
+        company_size = smart_get(requirements, "company_size")
         
         industry_score = 85 if industry in ["technology", "finance", "healthcare"] else 70
         size_score = 80 if company_size in ["medium", "large"] else 65

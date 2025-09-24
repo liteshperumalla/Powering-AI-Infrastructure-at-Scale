@@ -307,7 +307,7 @@ class TokenManager:
                 sub=payload["sub"],
                 email=payload["email"],
                 role=payload.get("role", "user"),
-                full_name=payload.get("full_name", ""),
+                full_name=payload.get("full_name"),
                 iat=payload["iat"],
                 exp=payload["exp"],
                 jti=jti,

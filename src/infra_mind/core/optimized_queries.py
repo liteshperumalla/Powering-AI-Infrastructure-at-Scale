@@ -210,7 +210,7 @@ class OptimizedExperimentQueries:
                 experiment_id=event_data["experiment_id"],
                 feature_flag=event_data["feature_flag"],
                 user_id=event_data["user_id"],
-                variant_name=event_data.get("variant_name", "unknown"),
+                variant_name=event_data.get("variant_name"),
                 event_type=event_data.get("event_type", "conversion"),
                 event_value=event_data.get("event_value"),
                 custom_metrics=event_data.get("custom_metrics", {}),

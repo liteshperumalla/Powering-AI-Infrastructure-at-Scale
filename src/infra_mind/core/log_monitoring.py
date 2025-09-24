@@ -88,7 +88,7 @@ class LogPatternMatcher:
                 continue
             
             # Check if pattern matches
-            message = log_entry.get('message', '')
+            message = log_entry.get('message')
             if self.compiled_patterns[pattern.name].search(message):
                 # Record pattern match
                 self.pattern_counts[pattern.name].append(current_time)
@@ -364,7 +364,7 @@ class RealTimeLogMonitor:
         with self.metrics_lock:
             self.metrics.total_logs += 1
             
-            level = log_entry.get('level', '').upper()
+            level = log_entry.get('level').upper()
             if level == 'ERROR':
                 self.metrics.error_count += 1
                 self.error_buffer.append(log_entry)
@@ -414,7 +414,7 @@ class RealTimeLogMonitor:
             # Get top errors
             error_counts = defaultdict(int)
             for error in self.error_buffer:
-                message = error.get('message', '')[:100]  # Truncate for grouping
+                message = error.get('message')[:100]  # Truncate for grouping
                 error_counts[message] += 1
             
             self.metrics.top_errors = [

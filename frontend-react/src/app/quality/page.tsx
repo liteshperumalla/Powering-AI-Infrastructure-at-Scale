@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
+import ResponsiveLayout from '../../components/ResponsiveLayout';
 import {
   Container,
   Typography,
@@ -51,7 +52,7 @@ import {
 } from '@mui/icons-material';
 import {
   getQualityOverview,
-  getQualityMetrics,
+  getAllQualityMetrics,
   createQualityMetric,
   getQualityReports,
   generateQualityReport,
@@ -105,17 +106,29 @@ export default function QualityPage() {
   const fetchData = useCallback(async () => {
     try {
       setLoading(true);
-      const [overviewData, metricsData, reportsData] = await Promise.all([
-        getQualityOverview(),
-        getQualityMetrics(),
-        getQualityReports()
+
+      // Try to fetch data but handle failures gracefully
+      const results = await Promise.allSettled([
+        getQualityOverview().catch(() => null),
+        getAllQualityMetrics().catch(() => []),
+        getQualityReports().catch(() => [])
       ]);
-      setOverview(overviewData);
-      setMetrics(metricsData);
-      setReports(reportsData);
+
+      const [overviewResult, metricsResult, reportsResult] = results;
+
+      setOverview(overviewResult.status === 'fulfilled' ? overviewResult.value : null);
+      setMetrics(metricsResult.status === 'fulfilled' ?
+        (Array.isArray(metricsResult.value) ? metricsResult.value : []) : []);
+      setReports(reportsResult.status === 'fulfilled' ?
+        (Array.isArray(reportsResult.value) ? reportsResult.value : []) : []);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load quality data');
+      console.error('Failed to load quality data:', err);
+      setError(err?.message || 'Failed to load quality data');
+      // Set fallback data
+      setOverview(null);
+      setMetrics([]);
+      setReports([]);
     } finally {
       setLoading(false);
     }
@@ -142,21 +155,18 @@ export default function QualityPage() {
       });
       fetchData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create quality metric');
+      setError(err?.message || 'Failed to create quality metric');
     }
   };
 
   const handleGenerateReport = async () => {
     try {
       setGenerateReportLoading(true);
-      await generateQualityReport({
-        report_type: 'comprehensive',
-        target_types: ['assessment', 'recommendation', 'report'],
-        date_range: 30
-      });
+      await generateQualityReport('comprehensive', 'assessment-001');
       await fetchData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to generate quality report');
+      console.error('Generate report error:', err);
+      setError(err?.message || 'Failed to generate quality report');
     } finally {
       setGenerateReportLoading(false);
     }
@@ -176,16 +186,19 @@ export default function QualityPage() {
 
   if (loading) {
     return (
-      <Container>
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
-          <CircularProgress />
-        </Box>
-      </Container>
+      <ResponsiveLayout title="Quality Assurance">
+        <Container>
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+            <CircularProgress />
+          </Box>
+        </Container>
+      </ResponsiveLayout>
     );
   }
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
+    <ResponsiveLayout title="Quality Assurance">
+      <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
       <Box sx={{ mb: 4 }}>
         <Typography variant="h4" component="h1" gutterBottom>
           Quality Assurance Dashboard
@@ -531,6 +544,7 @@ export default function QualityPage() {
           <Button onClick={handleCreateMetric} variant="contained">Create</Button>
         </DialogActions>
       </Dialog>
-    </Container>
+      </Container>
+    </ResponsiveLayout>
   );
 }

@@ -887,7 +887,7 @@ class InfrastructureAgent(BaseAgent):
         patterns = []
         
         # Determine pattern based on business characteristics
-        industry = business_req.get("industry", "")
+        industry = business_req.get("industry")
         
         if industry in ["retail", "ecommerce"]:
             patterns.append({
@@ -1239,7 +1239,7 @@ class InfrastructureAgent(BaseAgent):
             """
             
             for result in infra_trends.get("results", [])[:3]:
-                infrastructure_context += f"- {result.get('title', '')}: {result.get('snippet', '')[:200]}...\n"
+                infrastructure_context += f"- {result.get('title')}: {result.get('snippet')[:200]}...\n"
             
             analysis_prompt = f"""
             Analyze infrastructure requirements and provide comprehensive recommendations:
@@ -1282,7 +1282,7 @@ class InfrastructureAgent(BaseAgent):
                 "reliability_strategy": llm_analysis.get("reliability_strategy", {}),
                 "security_requirements": llm_analysis.get("security_requirements", {}),
                 "infrastructure_trends": infra_trends.get("results", []),
-                "llm_insights": llm_analysis.get("analysis", ""),
+                "llm_insights": llm_analysis.get("analysis"),
                 "analysis_timestamp": datetime.now(timezone.utc).isoformat()
             }
             

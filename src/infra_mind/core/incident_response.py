@@ -328,7 +328,7 @@ class IncidentDetector:
     
     async def _check_sql_injection_attempt(self, rule_config: Dict, event_data: Dict) -> Optional[SecurityIncident]:
         """Check for SQL injection attempts."""
-        request_data = event_data.get("request_data", "")
+        request_data = event_data.get("request_data")
         
         # SQL injection patterns
         sql_patterns = [

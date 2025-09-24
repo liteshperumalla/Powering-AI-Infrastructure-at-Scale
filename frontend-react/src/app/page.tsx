@@ -6,7 +6,7 @@ import ModernHomePage from '@/components/ModernHomePage';
 
 export default function HomePage() {
   return (
-    <ResponsiveLayout title="Home">
+    <ResponsiveLayout title="Home" fullWidth>
       <ModernHomePage />
     </ResponsiveLayout>
   );

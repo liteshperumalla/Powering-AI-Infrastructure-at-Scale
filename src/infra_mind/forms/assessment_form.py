@@ -643,9 +643,9 @@ class AssessmentForm(BaseForm):
                 "processed_data": self.form_data,
                 "text_inputs": text_inputs,  # Include custom text inputs in result
                 "summary": {
-                    "company": company_info.get("name", "Unknown"),
-                    "industry": self.form_data.get("industry", "Unknown"),
-                    "size": company_info.get("size", "Unknown"),
+                    "company": company_info.get("name"),
+                    "industry": self.form_data.get("industry"),
+                    "size": company_info.get("size"),
                     "monthly_spend": current_infra.get("monthly_spend", 0),
                     "ai_use_cases": len(assessment_data.get("ai_requirements", {}).get("use_cases", [])),
                     "compliance_requirements": len(assessment_data.get("ai_requirements", {}).get("compliance_requirements", []))

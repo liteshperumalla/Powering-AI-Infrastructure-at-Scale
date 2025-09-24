@@ -25,7 +25,7 @@ const getApiBaseUrl = () => {
 
 const API_BASE_URL = getApiBaseUrl();
 const API_VERSION = 'v1';
-const API_PREFIX = `/api`; // Remove v1 prefix as backend doesn't use it
+const API_PREFIX = `/api/v1`; // Use v1 prefix to match backend
 
 // Debug environment variables with fallback check
 const debugEnvVars = {
@@ -94,11 +94,19 @@ export interface LoginRequest {
 
 export interface LoginResponse {
     access_token: string;
+    refresh_token?: string;
     token_type: string;
     expires_in: number;
     user_id: string;
     email: string;
     full_name: string;
+    user?: any;
+}
+
+export interface MFARequiredResponse {
+    mfa_required: boolean;
+    temp_token: string;
+    message: string;
 }
 
 export interface RegisterRequest {
@@ -106,6 +114,7 @@ export interface RegisterRequest {
     password: string;
     full_name: string;
     company?: string;
+    job_title?: string;
 }
 
 export interface CreateAssessmentRequest {
@@ -198,11 +207,11 @@ export interface Report {
 export interface CloudService {
     id: string;
     name: string;
-    provider: 'AWS' | 'Azure' | 'GCP' | 'Alibaba' | 'IBM';
+    provider: string; // Changed to allow any provider string (lowercase)
     category: string;
     description: string;
     pricing: {
-        model: string;
+        model?: string;
         starting_price: number;
         unit: string;
     };
@@ -305,8 +314,8 @@ class ApiClient {
         const config: RequestInit = {
             ...fetchOptions,
             headers,
-            // Add timeout for requests - longer for cloud services
-            signal: AbortSignal.timeout(60000), // 60 second timeout for cloud services
+            // Add timeout for requests - shorter for form suggestions
+            signal: AbortSignal.timeout(60000), // 60 second timeout to handle slower responses
         };
 
         try {
@@ -537,14 +546,21 @@ class ApiClient {
     }
 
     // Authentication methods
-    async login(credentials: LoginRequest): Promise<LoginResponse> {
-        const response = await this.request<LoginResponse>('/auth/login', {
+    async login(credentials: LoginRequest): Promise<LoginResponse | MFARequiredResponse> {
+        const response = await this.request<LoginResponse | MFARequiredResponse>('/auth/login', {
             method: 'POST',
             body: JSON.stringify(credentials),
         });
 
-        this.setStoredToken(response.access_token);
-        return response;
+        // Check if MFA is required
+        if ('mfa_required' in response && response.mfa_required) {
+            return response as MFARequiredResponse;
+        }
+
+        // Normal login response
+        const loginResponse = response as LoginResponse;
+        this.setStoredToken(loginResponse.access_token);
+        return loginResponse;
     }
 
     async register(userData: RegisterRequest): Promise<LoginResponse> {
@@ -556,6 +572,17 @@ class ApiClient {
         this.setStoredToken(response.access_token);
         return response;
     }
+
+    async googleLogin(credential: string): Promise<LoginResponse> {
+        const response = await this.request<LoginResponse>('/auth/google', {
+            method: 'POST',
+            body: JSON.stringify({ credential }),
+        });
+
+        this.setStoredToken(response.access_token);
+        return response;
+    }
+
 
     async logout(): Promise<void> {
         try {
@@ -578,10 +605,22 @@ class ApiClient {
 
     // Assessment methods
     async createAssessment(assessmentData: CreateAssessmentRequest): Promise<Assessment> {
-        return this.request<Assessment>('/assessments/', {
-            method: 'POST',
-            body: JSON.stringify(assessmentData),
-        });
+        console.log('🔄 Creating assessment with data:', assessmentData);
+        console.log('📊 Business requirements:', assessmentData.business_requirements);
+        console.log('⚙️ Technical requirements:', assessmentData.technical_requirements);
+
+        try {
+            const result = await this.request<Assessment>('/assessments/', {
+                method: 'POST',
+                body: JSON.stringify(assessmentData),
+            });
+            console.log('✅ Assessment created successfully:', result);
+            return result;
+        } catch (error) {
+            console.error('❌ Assessment creation failed:', error);
+            console.error('📝 Failed assessment data:', assessmentData);
+            throw error;
+        }
     }
 
     async createSimpleAssessment(data: { title: string; description?: string }): Promise<Assessment> {
@@ -956,7 +995,8 @@ class ApiClient {
         id: string;
         email: string;
         full_name: string;
-        company: string;
+        company_name?: string;
+        job_title?: string;
         role: string;
         is_active: boolean;
         created_at: string;
@@ -967,6 +1007,7 @@ class ApiClient {
     async updateUserProfile(updates: {
         full_name?: string;
         company?: string;
+        job_title?: string;
         preferences?: Record<string, unknown>;
     }): Promise<void> {
         return this.request('/auth/profile', {
@@ -1358,6 +1399,15 @@ class ApiClient {
         });
     }
 
+    async generateConversationTitle(conversationId: string): Promise<{
+        message: string;
+        title: string;
+    }> {
+        return this.chatRequest(`/conversations/${conversationId}/generate-title`, {
+            method: 'POST',
+        });
+    }
+
     async deleteConversation(conversationId: string): Promise<{
         message: string;
     }> {
@@ -1368,6 +1418,7 @@ class ApiClient {
 
     async endConversation(conversationId: string, satisfactionRating?: number): Promise<{
         message: string;
+        title?: string;
     }> {
         const params = new URLSearchParams();
         if (satisfactionRating) {

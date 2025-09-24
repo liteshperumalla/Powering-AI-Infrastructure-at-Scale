@@ -31,14 +31,16 @@ interface ResponsiveLayoutProps {
     loading?: boolean;
     showProgress?: boolean;
     progressValue?: number;
+    fullWidth?: boolean; // When true, no content padding is applied (for pages with their own containers)
 }
 
-export default function ResponsiveLayout({ 
-    children, 
-    title, 
+export default function ResponsiveLayout({
+    children,
+    title,
     loading = false,
     showProgress = false,
-    progressValue = 0
+    progressValue = 0,
+    fullWidth = false
 }: ResponsiveLayoutProps) {
     const [darkMode, setDarkMode] = useState(false);
     const [showScrollTop, setShowScrollTop] = useState(false);
@@ -47,6 +49,7 @@ export default function ResponsiveLayout({
     const [showConnectionRestored, setShowConnectionRestored] = useState(false);
     const [isHydrated, setIsHydrated] = useState(false);
     const [mounted, setMounted] = useState(false);
+    const [navbarReady, setNavbarReady] = useState(false);
 
     const prefersDarkMode = useMediaQuery('(prefers-color-scheme: dark)');
     const { isOnline, isSyncing, queueLength } = useBackgroundSync();
@@ -78,6 +81,9 @@ export default function ResponsiveLayout({
     useEffect(() => {
         setMounted(true);
         setIsHydrated(true);
+        // Delay navbar loading slightly to improve perceived performance
+        const timer = setTimeout(() => setNavbarReady(true), 50);
+        return () => clearTimeout(timer);
     }, []);
 
     // Handle online/offline status
@@ -274,13 +280,17 @@ export default function ResponsiveLayout({
                 }}
             >
                 {/* Modern Navigation */}
-                <ModernNavbar
-                    onThemeToggle={handleThemeToggle}
-                    isDarkMode={darkMode}
-                    userName={user?.first_name || "User"}
-                    isAuthenticated={isAuthenticated}
-                    syncStatus={{ isOnline, isSyncing, queueLength }}
-                />
+                {navbarReady ? (
+                    <ModernNavbar
+                        onThemeToggle={handleThemeToggle}
+                        isDarkMode={darkMode}
+                        userName={user?.full_name || user?.first_name || "User"}
+                        isAuthenticated={isAuthenticated}
+                        syncStatus={{ isOnline, isSyncing, queueLength }}
+                    />
+                ) : (
+                    <Box sx={{ height: 64, backgroundColor: 'background.paper', borderBottom: 1, borderColor: 'divider' }} />
+                )}
 
                 {/* Progress Bar */}
                 {showProgress && (
@@ -324,7 +334,22 @@ export default function ResponsiveLayout({
                     </Backdrop>
 
                     {/* Page Content */}
-                    <Box sx={{ flexGrow: 1 }}>
+                    <Box
+                        sx={{
+                            flexGrow: 1,
+                            ...(fullWidth ? {
+                                // Full width pages - no padding, let pages manage their own layout
+                                width: '100%',
+                            } : {
+                                // Content pages - add responsive padding and centering
+                                px: { xs: 2, sm: 3, md: 4, lg: 5 }, // Responsive horizontal padding
+                                py: { xs: 2, sm: 3 }, // Responsive vertical padding
+                                maxWidth: '1400px', // Maximum content width
+                                mx: 'auto', // Center content horizontally
+                                width: '100%',
+                            })
+                        }}
+                    >
                         {children}
                     </Box>
                 </Box>

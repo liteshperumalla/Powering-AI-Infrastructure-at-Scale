@@ -287,7 +287,7 @@ class ReportService:
                 raise ValueError(f"Report {report_id} not found")
             
             # Check if user is owner or already has admin permission
-            user_id_str = str(report_doc.get("user_id", ""))
+            user_id_str = str(report_doc.get("user_id"))
             shared_with = report_doc.get("shared_with", [])
             sharing_permissions = report_doc.get("sharing_permissions", {})
             
@@ -361,7 +361,7 @@ class ReportService:
                 raise ValueError(f"Report {report_id} not found")
             
             # Check permissions - user must be owner or have admin access
-            user_id_str = str(report_doc.get("user_id", ""))
+            user_id_str = str(report_doc.get("user_id"))
             sharing_permissions = report_doc.get("sharing_permissions", {})
             
             if not (user_id_str == user_id or sharing_permissions.get(user_id) == "admin"):

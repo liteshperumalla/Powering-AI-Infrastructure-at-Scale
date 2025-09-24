@@ -33,7 +33,7 @@ interface ProgressStep {
 interface ProgressIndicatorProps {
     title: string;
     steps: ProgressStep[];
-    variant?: 'linear' | 'circular' | 'stepper';
+    variant?: 'linear' | 'circular' | 'stepper' | 'vertical';
     showPercentage?: boolean;
     compact?: boolean;
 }
@@ -209,6 +209,133 @@ export default function ProgressIndicator({
                             </Step>
                         ))}
                     </Stepper>
+                )}
+
+                {variant === 'vertical' && (
+                    <Box>
+                        {/* Overall progress bar */}
+                        {showPercentage && (
+                            <Box sx={{ mb: 2, p: 2, bgcolor: 'action.hover', borderRadius: 1 }}>
+                                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                                    <Typography variant="body2" fontWeight="medium">
+                                        Overall Progress
+                                    </Typography>
+                                    <Typography variant="body2" color="primary" fontWeight="bold">
+                                        {Math.round(overallProgress)}%
+                                    </Typography>
+                                </Box>
+                                <LinearProgress
+                                    variant="determinate"
+                                    value={overallProgress}
+                                    sx={{ height: 8, borderRadius: 4 }}
+                                />
+                            </Box>
+                        )}
+
+                        {/* Vertical step list */}
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                            {steps.map((step, index) => (
+                                <Box
+                                    key={index}
+                                    sx={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 2,
+                                        p: 1.5,
+                                        borderRadius: 1,
+                                        bgcolor: step.status === 'active' ? 'primary.main' : 'transparent',
+                                        color: step.status === 'active' ? 'primary.contrastText' : 'text.primary',
+                                        border: step.status === 'active' ? 'none' : '1px solid',
+                                        borderColor: step.status === 'completed' ? 'success.main' : 'divider',
+                                    }}
+                                >
+                                    <Avatar
+                                        sx={{
+                                            width: 32,
+                                            height: 32,
+                                            bgcolor: step.status === 'completed'
+                                                ? 'success.main'
+                                                : step.status === 'active'
+                                                    ? 'primary.contrastText'
+                                                    : 'grey.300',
+                                            color: step.status === 'completed'
+                                                ? 'success.contrastText'
+                                                : step.status === 'active'
+                                                    ? 'primary.main'
+                                                    : 'grey.600'
+                                        }}
+                                    >
+                                        {step.status === 'completed' ? (
+                                            <CheckCircle sx={{ fontSize: 20 }} />
+                                        ) : step.status === 'active' ? (
+                                            <Schedule sx={{ fontSize: 20 }} />
+                                        ) : step.status === 'error' ? (
+                                            <Error sx={{ fontSize: 20 }} />
+                                        ) : (
+                                            index + 1
+                                        )}
+                                    </Avatar>
+
+                                    <Box sx={{ flex: 1 }}>
+                                        <Typography
+                                            variant="body2"
+                                            fontWeight={step.status === 'active' ? 'bold' : 'medium'}
+                                            sx={{
+                                                color: step.status === 'active' ? 'inherit' : 'text.primary'
+                                            }}
+                                        >
+                                            {step.label}
+                                        </Typography>
+                                        {step.status === 'active' && step.progress !== undefined && (
+                                            <LinearProgress
+                                                variant="determinate"
+                                                value={step.progress}
+                                                sx={{
+                                                    mt: 0.5,
+                                                    height: 4,
+                                                    borderRadius: 2,
+                                                    bgcolor: 'primary.contrastText',
+                                                    '& .MuiLinearProgress-bar': {
+                                                        bgcolor: 'warning.main'
+                                                    }
+                                                }}
+                                            />
+                                        )}
+                                    </Box>
+
+                                    {step.status === 'completed' && (
+                                        <Chip
+                                            label="Done"
+                                            size="small"
+                                            color="success"
+                                            variant="filled"
+                                            sx={{ fontSize: '0.7rem' }}
+                                        />
+                                    )}
+                                    {step.status === 'active' && (
+                                        <Chip
+                                            label="Current"
+                                            size="small"
+                                            sx={{
+                                                bgcolor: 'primary.contrastText',
+                                                color: 'primary.main',
+                                                fontSize: '0.7rem'
+                                            }}
+                                        />
+                                    )}
+                                    {step.status === 'error' && (
+                                        <Chip
+                                            label="Error"
+                                            size="small"
+                                            color="error"
+                                            variant="filled"
+                                            sx={{ fontSize: '0.7rem' }}
+                                        />
+                                    )}
+                                </Box>
+                            ))}
+                        </Box>
+                    </Box>
                 )}
 
                 {loading.global && (

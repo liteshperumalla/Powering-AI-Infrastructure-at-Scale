@@ -84,7 +84,7 @@ class DirectShareService:
                 )
             
             # Check ownership
-            report_user_id = str(report.get("user_id", ""))
+            report_user_id = str(report.get("user_id"))
             shared_with = report.get("shared_with", [])
             sharing_permissions = report.get("sharing_permissions", {})
             
@@ -148,7 +148,7 @@ class DirectShareService:
                 )
             
             # Check permissions
-            report_user_id = str(report.get("user_id", ""))
+            report_user_id = str(report.get("user_id"))
             sharing_permissions = report.get("sharing_permissions", {})
             
             if not (report_user_id == user_id or sharing_permissions.get(user_id) == "admin"):

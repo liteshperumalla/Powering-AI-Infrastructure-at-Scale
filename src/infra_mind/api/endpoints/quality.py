@@ -76,6 +76,47 @@ async def submit_quality_metric(
         )
 
 
+@router.get("/metrics")
+async def get_all_quality_metrics(
+    target_type: Optional[str] = Query(None, description="Filter by target type"),
+    metric_name: Optional[str] = Query(None, description="Filter by metric name"),
+    limit: int = Query(100, ge=1, le=1000, description="Maximum results"),
+    current_user: User = Depends(require_enterprise_access)
+):
+    """Get all quality metrics (admin only)."""
+    try:
+        # Build query
+        query = {}
+        if target_type:
+            query["target_type"] = target_type
+        if metric_name:
+            query["metric_name"] = metric_name
+
+        # Get metrics
+        metrics = await QualityMetric.find(query).sort(-QualityMetric.measured_at).limit(limit).to_list()
+
+        return [
+            {
+                "id": str(metric.id),
+                "target_type": metric.target_type,
+                "target_id": metric.target_id,
+                "metric_name": metric.metric_name,
+                "metric_value": metric.metric_value,
+                "quality_score": metric.quality_score,
+                "created_at": metric.measured_at.isoformat() if metric.measured_at else None,
+                "metadata": metric.metadata or {}
+            }
+            for metric in metrics
+        ]
+
+    except Exception as e:
+        logger.error(f"Failed to get all quality metrics: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get quality metrics: {str(e)}"
+        )
+
+
 @router.get("/metrics/{target_id}")
 async def get_quality_metrics(
     target_id: str,

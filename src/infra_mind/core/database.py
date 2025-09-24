@@ -367,7 +367,20 @@ async def create_production_indexes() -> None:
         partialFilterExpression={"status": "draft", "is_temporary": True},
         name="idx_assessments_draft_ttl"
     )
-    created_indexes.extend(["assessments_id_unique", "assessments_user_status", "assessments_user_created", "assessments_status_priority_created", "assessments_status_updated", "assessments_industry_status", "assessments_company_size_created", "assessments_tags", "assessments_type_status", "assessments_completion_time", "assessments_agent_count_status", "assessments_draft_ttl"])
+
+    # Duplicate prevention indexes
+    await _safe_create_index(
+        db.database.assessments,
+        [("user_id", 1), ("title", 1), ("created_at", -1)],
+        name="idx_assessments_user_title_created"
+    )
+    await _safe_create_index(
+        db.database.assessments,
+        [("user_id", 1), ("business_requirements.company_size", 1), ("business_requirements.industry", 1), ("business_requirements.budget_constraints", 1), ("created_at", -1)],
+        name="idx_assessments_content_duplicate_check"
+    )
+
+    created_indexes.extend(["assessments_id_unique", "assessments_user_status", "assessments_user_created", "assessments_status_priority_created", "assessments_status_updated", "assessments_industry_status", "assessments_company_size_created", "assessments_tags", "assessments_type_status", "assessments_completion_time", "assessments_agent_count_status", "assessments_draft_ttl", "assessments_user_title_created", "assessments_content_duplicate_check"])
 
     # === RECOMMENDATIONS COLLECTION INDEXES ===
     logger.info("💡 Creating recommendation indexes...")
@@ -535,7 +548,7 @@ async def get_database_info() -> dict:
         return {
             "status": "connected",
             "database": settings.mongodb_database,
-            "server_version": server_status.get("version", "unknown"),
+            "server_version": server_status.get("version"),
             "uptime_seconds": server_status.get("uptime", 0),
             
             # Database statistics
@@ -564,8 +577,8 @@ async def get_database_info() -> dict:
             
             # Security info
             "security": {
-                "authentication": server_status.get("security", {}).get("authentication", "unknown"),
-                "authorization": server_status.get("security", {}).get("authorization", "unknown")
+                "authentication": server_status.get("security", {}).get("authentication"),
+                "authorization": server_status.get("security", {}).get("authorization")
             }
         }
         

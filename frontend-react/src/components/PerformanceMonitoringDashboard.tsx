@@ -125,21 +125,19 @@ const PerformanceMonitoringDashboard: React.FC = () => {
         lastMessage,
         sendMessage
     } = useWebSocket({
-        url: 'ws://localhost:8000/api/api/v1/performance/ws'
+        url: 'ws://localhost:8000/api/performance/ws'
     });
 
     // Fetch dashboard data
     const fetchDashboardData = useCallback(async () => {
         try {
-            const response = await fetch('/api/api/v1/performance/dashboard-data');
-            if (!response.ok) {
-                throw new Error('Failed to fetch dashboard data');
-            }
-            const data = await response.json();
+            // Use apiClient for authenticated requests
+            const { apiClient } = await import('@/services/api');
+            const data = await apiClient.request('/performance/dashboard-data');
             setDashboardData(data);
             setError(null);
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Unknown error');
+            setError(err instanceof Error ? err.message : 'Failed to fetch dashboard data');
         } finally {
             setLoading(false);
         }
@@ -149,7 +147,9 @@ const PerformanceMonitoringDashboard: React.FC = () => {
     useEffect(() => {
         if (lastMessage) {
             try {
-                const message = JSON.parse(lastMessage);
+                // Ensure lastMessage is a string before parsing
+                const messageString = typeof lastMessage === 'string' ? lastMessage : JSON.stringify(lastMessage);
+                const message = JSON.parse(messageString);
 
                 switch (message.type) {
                     case 'metrics':
@@ -210,11 +210,11 @@ const PerformanceMonitoringDashboard: React.FC = () => {
 
     // Process metrics for display
     const processedMetrics = useMemo(() => {
-        if (!dashboardData) return [];
+        if (!dashboardData || !dashboardData.currentMetrics) return [];
 
         const metrics: PerformanceMetric[] = [];
 
-        Object.entries(dashboardData.currentMetrics).forEach(([name, value]) => {
+        Object.entries(dashboardData.currentMetrics || {}).forEach(([name, value]) => {
             let status: 'healthy' | 'warning' | 'critical' = 'healthy';
             let unit = '';
 
@@ -234,11 +234,12 @@ const PerformanceMonitoringDashboard: React.FC = () => {
             }
 
             // Determine trend (simplified)
-            const trend = dashboardData.monitoringSummary.performanceTrends[name];
+            const trend = dashboardData.monitoringSummary?.performanceTrends?.[name];
             let trendDirection: 'up' | 'down' | 'stable' = 'stable';
-            if (trend && trend.direction) {
-                trendDirection = trend.direction === 'increasing' ? 'up' :
-                    trend.direction === 'decreasing' ? 'down' : 'stable';
+            if (trend && typeof trend === 'object' && 'direction' in trend) {
+                const direction = (trend as any).direction;
+                trendDirection = direction === 'increasing' ? 'up' :
+                    direction === 'decreasing' ? 'down' : 'stable';
             }
 
             metrics.push({
@@ -382,7 +383,7 @@ const PerformanceMonitoringDashboard: React.FC = () => {
                         <CardContent>
                             <Typography variant="h6" gutterBottom>System Health</Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                {dashboardData?.monitoringSummary.activeAlertsCount === 0 ? (
+                                {(dashboardData?.monitoringSummary?.activeAlertsCount ?? 0) === 0 ? (
                                     <>
                                         <CheckCircleIcon color="success" />
                                         <Typography color="success.main">Healthy</Typography>
@@ -391,7 +392,7 @@ const PerformanceMonitoringDashboard: React.FC = () => {
                                     <>
                                         <WarningIcon color="warning" />
                                         <Typography color="warning.main">
-                                            {dashboardData?.monitoringSummary.activeAlertsCount} Alert(s)
+                                            {dashboardData?.monitoringSummary?.activeAlertsCount ?? 0} Alert(s)
                                         </Typography>
                                     </>
                                 )}
@@ -405,8 +406,8 @@ const PerformanceMonitoringDashboard: React.FC = () => {
                         <CardContent>
                             <Typography variant="h6" gutterBottom>Monitoring Status</Typography>
                             <Chip
-                                label={dashboardData?.monitoringSummary.monitoringActive ? 'Active' : 'Inactive'}
-                                color={dashboardData?.monitoringSummary.monitoringActive ? 'success' : 'error'}
+                                label={dashboardData?.monitoringSummary?.monitoringActive ? 'Active' : 'Inactive'}
+                                color={dashboardData?.monitoringSummary?.monitoringActive ? 'success' : 'error'}
                             />
                         </CardContent>
                     </Card>
@@ -417,7 +418,7 @@ const PerformanceMonitoringDashboard: React.FC = () => {
                         <CardContent>
                             <Typography variant="h6" gutterBottom>Alert Rules</Typography>
                             <Typography variant="h4">
-                                {dashboardData?.monitoringSummary.alertRulesCount || 0}
+                                {dashboardData?.monitoringSummary?.alertRulesCount || 0}
                             </Typography>
                         </CardContent>
                     </Card>
@@ -428,7 +429,7 @@ const PerformanceMonitoringDashboard: React.FC = () => {
                         <CardContent>
                             <Typography variant="h6" gutterBottom>Connected Clients</Typography>
                             <Typography variant="h4">
-                                {dashboardData?.monitoringSummary.websocketClientsCount || 0}
+                                {dashboardData?.monitoringSummary?.websocketClientsCount || 0}
                             </Typography>
                         </CardContent>
                     </Card>

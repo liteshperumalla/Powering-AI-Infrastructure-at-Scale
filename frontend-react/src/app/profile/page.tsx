@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Box,
     Container,
@@ -34,9 +34,12 @@ import {
     Notifications,
     Language,
     Palette,
+    Work,
 } from '@mui/icons-material';
 import ResponsiveLayout from '@/components/ResponsiveLayout';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import { updateProfile } from '@/store/slices/authSlice';
 
 interface UserProfile {
     name: string;
@@ -50,18 +53,38 @@ interface UserProfile {
 }
 
 export default function ProfilePage() {
+    const dispatch = useAppDispatch();
+    const { user, loading } = useAppSelector(state => state.auth);
     const [isEditing, setIsEditing] = useState(false);
+
     const [profile, setProfile] = useState<UserProfile>({
-        name: 'John Doe',
-        email: 'john.doe@company.com',
-        company: 'Tech Solutions Inc.',
-        location: 'San Francisco, CA',
-        phone: '+1 (555) 123-4567',
-        role: 'Infrastructure Architect',
-        joinDate: 'January 2024'
+        name: user?.full_name || '',
+        email: user?.email || '',
+        company: user?.company_name || '',
+        location: '',
+        phone: '',
+        role: user?.job_title || user?.role || '',
+        joinDate: user?.created_at ? new Date(user.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : ''
     });
 
     const [editedProfile, setEditedProfile] = useState<UserProfile>(profile);
+
+    // Update profile when user data changes
+    useEffect(() => {
+        if (user) {
+            const updatedProfile = {
+                name: user.full_name || '',
+                email: user.email || '',
+                company: user.company_name || '',
+                location: '',
+                phone: '',
+                role: user.job_title || user.role || '',
+                joinDate: user.created_at ? new Date(user.created_at).toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) : ''
+            };
+            setProfile(updatedProfile);
+            setEditedProfile(updatedProfile);
+        }
+    }, [user]);
     
     const [preferences, setPreferences] = useState({
         emailNotifications: true,
@@ -75,10 +98,19 @@ export default function ProfilePage() {
         setIsEditing(true);
     };
 
-    const handleSave = () => {
-        setProfile(editedProfile);
-        setIsEditing(false);
-        // Here you would typically save to backend
+    const handleSave = async () => {
+        try {
+            await dispatch(updateProfile({
+                full_name: editedProfile.name,
+                company: editedProfile.company,
+                job_title: editedProfile.role,
+            })).unwrap();
+            setProfile(editedProfile);
+            setIsEditing(false);
+        } catch (error) {
+            console.error('Failed to update profile:', error);
+            // You might want to show an error message to the user
+        }
     };
 
     const handleCancel = () => {
@@ -125,9 +157,9 @@ export default function ProfilePage() {
                                     {profile.name}
                                 </Typography>
                                 
-                                <Chip 
-                                    label={profile.role} 
-                                    color="primary" 
+                                <Chip
+                                    label={profile.role || 'User'}
+                                    color="primary"
                                     variant="outlined"
                                     sx={{ mb: 2 }}
                                 />
@@ -217,7 +249,20 @@ export default function ProfilePage() {
                                             }}
                                         />
                                     </Grid>
-                                    
+
+                                    <Grid item xs={12} sm={6}>
+                                        <TextField
+                                            fullWidth
+                                            label="Job Title / Profession"
+                                            value={isEditing ? editedProfile.role : profile.role}
+                                            onChange={handleInputChange('role')}
+                                            disabled={!isEditing}
+                                            InputProps={{
+                                                startAdornment: <Work sx={{ mr: 1, color: 'action.active' }} />
+                                            }}
+                                        />
+                                    </Grid>
+
                                     <Grid item xs={12} sm={6}>
                                         <TextField
                                             fullWidth

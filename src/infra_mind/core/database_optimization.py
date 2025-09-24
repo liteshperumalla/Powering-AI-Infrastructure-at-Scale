@@ -176,8 +176,8 @@ class DatabaseOptimizer:
             
             for op in profile_data[:10]:  # Top 10 slowest
                 analysis["slowest_operations"].append({
-                    "namespace": op.get("ns", "unknown"),
-                    "operation": op.get("op", "unknown"),
+                    "namespace": op.get("ns"),
+                    "operation": op.get("op"),
                     "duration_ms": op.get("duration", 0),
                     "timestamp": op.get("ts"),
                     "command": op.get("command", {})

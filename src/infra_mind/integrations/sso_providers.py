@@ -393,9 +393,9 @@ class SSOProviderIntegrator:
         if provider == SSOProvider.AZURE_AD:
             return SSOUser(
                 provider=provider,
-                provider_user_id=user_data.get("id", ""),
-                email=user_data.get("mail") or user_data.get("userPrincipalName", ""),
-                full_name=user_data.get("displayName", ""),
+                provider_user_id=user_data.get("id"),
+                email=user_data.get("mail") or user_data.get("userPrincipalName"),
+                full_name=user_data.get("displayName"),
                 first_name=user_data.get("givenName"),
                 last_name=user_data.get("surname"),
                 job_title=user_data.get("jobTitle"),
@@ -407,9 +407,9 @@ class SSOProviderIntegrator:
         elif provider == SSOProvider.OKTA:
             return SSOUser(
                 provider=provider,
-                provider_user_id=user_data.get("sub", ""),
-                email=user_data.get("email", ""),
-                full_name=user_data.get("name", ""),
+                provider_user_id=user_data.get("sub"),
+                email=user_data.get("email"),
+                full_name=user_data.get("name"),
                 first_name=user_data.get("given_name"),
                 last_name=user_data.get("family_name"),
                 groups=user_data.get("groups", []),
@@ -419,9 +419,9 @@ class SSOProviderIntegrator:
         elif provider == SSOProvider.AUTH0:
             return SSOUser(
                 provider=provider,
-                provider_user_id=user_data.get("sub", ""),
-                email=user_data.get("email", ""),
-                full_name=user_data.get("name", ""),
+                provider_user_id=user_data.get("sub"),
+                email=user_data.get("email"),
+                full_name=user_data.get("name"),
                 first_name=user_data.get("given_name"),
                 last_name=user_data.get("family_name"),
                 avatar_url=user_data.get("picture"),
@@ -431,9 +431,9 @@ class SSOProviderIntegrator:
         elif provider == SSOProvider.GOOGLE_WORKSPACE:
             return SSOUser(
                 provider=provider,
-                provider_user_id=user_data.get("sub", ""),
-                email=user_data.get("email", ""),
-                full_name=user_data.get("name", ""),
+                provider_user_id=user_data.get("sub"),
+                email=user_data.get("email"),
+                full_name=user_data.get("name"),
                 first_name=user_data.get("given_name"),
                 last_name=user_data.get("family_name"),
                 avatar_url=user_data.get("picture"),
@@ -444,9 +444,9 @@ class SSOProviderIntegrator:
             # Generic OIDC parsing
             return SSOUser(
                 provider=provider,
-                provider_user_id=user_data.get("sub", ""),
-                email=user_data.get("email", ""),
-                full_name=user_data.get("name", ""),
+                provider_user_id=user_data.get("sub"),
+                email=user_data.get("email"),
+                full_name=user_data.get("name"),
                 first_name=user_data.get("given_name"),
                 last_name=user_data.get("family_name"),
                 metadata=user_data

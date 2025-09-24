@@ -72,7 +72,7 @@ class CustomerServiceManager:
                 "title": title,
                 "description": description,
                 "customer_email": customer_email,
-                "customer_name": kwargs.get("customer_name", "Unknown"),
+                "customer_name": kwargs.get("customer_name"),
                 "category": category,
                 "priority": priority,
                 "status": "open",

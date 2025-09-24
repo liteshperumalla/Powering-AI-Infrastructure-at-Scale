@@ -39,15 +39,15 @@ import {
     FormControlLabel,
 } from '@mui/material';
 import {
-    GitHub,
-    GitLab,
+    Code as GitHub,
+    Storage as GitLab,
     Add as AddIcon,
     Delete as DeleteIcon,
     Refresh as RefreshIcon,
     Launch as LaunchIcon,
     Code as CodeIcon,
-    Branch as BranchIcon,
-    PullRequest as PullRequestIcon,
+    AccountTree as BranchIcon,
+    MergeType as PullRequestIcon,
     PlayArrow as DeployIcon,
     Visibility as PreviewIcon,
     Settings as SettingsIcon,
@@ -125,16 +125,29 @@ const GitOpsIntegration: React.FC = () => {
                 gitOpsService.getIaCTemplates(),
                 gitOpsService.getDeploymentPlans(),
             ]);
-            setRepositories(repos);
-            setTemplates(templates);
-            setDeploymentPlans(plans);
             
-            if (repos.length > 0 && selectedRepo) {
-                const prs = await gitOpsService.getPullRequests(selectedRepo.id);
-                setPullRequests(prs);
+            // Ensure data is arrays and handle null/undefined responses
+            setRepositories(Array.isArray(repos) ? repos : []);
+            setTemplates(Array.isArray(templates) ? templates : []);
+            setDeploymentPlans(Array.isArray(plans) ? plans : []);
+            
+            const repoArray = Array.isArray(repos) ? repos : [];
+            if (repoArray.length > 0 && selectedRepo) {
+                try {
+                    const prs = await gitOpsService.getPullRequests(selectedRepo.id);
+                    setPullRequests(Array.isArray(prs) ? prs : []);
+                } catch (prError) {
+                    console.error('Failed to load pull requests:', prError);
+                    setPullRequests([]);
+                }
             }
         } catch (error) {
             console.error('Failed to load GitOps data:', error);
+            // Set empty arrays as fallback
+            setRepositories([]);
+            setTemplates([]);
+            setDeploymentPlans([]);
+            setPullRequests([]);
         } finally {
             setLoading(false);
         }
@@ -211,22 +224,27 @@ const GitOpsIntegration: React.FC = () => {
     };
 
     const generateDeploymentMetrics = () => {
+        // Calculate real metrics from deployment plans
+        if (!deploymentPlans.length) return [];
+
+        const successCount = deploymentPlans.filter(plan => plan.auto_deploy).length;
+        const totalCount = deploymentPlans.length;
+        const failedCount = 0; // Would need to track deployment status
+        const pendingCount = totalCount - successCount - failedCount;
+
         return [
-            { name: 'Success', value: 85, category: 'deployment' },
-            { name: 'Failed', value: 10, category: 'deployment' },
-            { name: 'Pending', value: 5, category: 'deployment' },
+            { name: 'Success', value: successCount, category: 'deployment' },
+            { name: 'Failed', value: failedCount, category: 'deployment' },
+            { name: 'Pending', value: pendingCount, category: 'deployment' },
         ];
     };
 
     const generateActivityMetrics = () => {
-        return [
-            { name: 'Jan', value: 12, category: 'commits' },
-            { name: 'Feb', value: 18, category: 'commits' },
-            { name: 'Mar', value: 25, category: 'commits' },
-            { name: 'Apr', value: 20, category: 'commits' },
-            { name: 'May', value: 30, category: 'commits' },
-            { name: 'Jun', value: 28, category: 'commits' },
-        ];
+        // Calculate real activity metrics from repositories or return empty
+        if (!repositories.length) return [];
+
+        // TODO: Fetch real commit activity data when repository analytics API is available
+        return [];
     };
 
     return (
@@ -347,16 +365,22 @@ const GitOpsIntegration: React.FC = () => {
                                 <Typography variant="h6" sx={{ mb: 2 }}>
                                     Deployment Success Rate
                                 </Typography>
-                                <InteractiveCharts
-                                    config={{
-                                        type: 'pie',
-                                        title: '',
-                                        data: generateDeploymentMetrics(),
-                                        colors: ['#4caf50', '#f44336', '#ff9800'],
-                                    }}
-                                    height={250}
-                                    exportable={false}
-                                />
+                                {generateDeploymentMetrics().length > 0 ? (
+                                    <InteractiveCharts
+                                        config={{
+                                            type: 'pie',
+                                            title: '',
+                                            data: generateDeploymentMetrics(),
+                                            colors: ['#4caf50', '#f44336', '#ff9800'],
+                                        }}
+                                        height={250}
+                                        exportable={false}
+                                    />
+                                ) : (
+                                    <Alert severity="info">
+                                        No deployment data available. Deploy some infrastructure to see metrics.
+                                    </Alert>
+                                )}
                             </CardContent>
                         </Card>
                     </Grid>
@@ -603,16 +627,22 @@ const GitOpsIntegration: React.FC = () => {
                                 <Typography variant="h6" sx={{ mb: 2 }}>
                                     Activity Timeline
                                 </Typography>
-                                <InteractiveCharts
-                                    config={{
-                                        type: 'line',
-                                        title: '',
-                                        data: generateActivityMetrics(),
-                                        colors: ['#2196f3'],
-                                    }}
-                                    height={300}
-                                    exportable={false}
-                                />
+                                {generateActivityMetrics().length > 0 ? (
+                                    <InteractiveCharts
+                                        config={{
+                                            type: 'line',
+                                            title: '',
+                                            data: generateActivityMetrics(),
+                                            colors: ['#2196f3'],
+                                        }}
+                                        height={300}
+                                        exportable={false}
+                                    />
+                                ) : (
+                                    <Alert severity="info">
+                                        Activity timeline will show when repository data is available.
+                                    </Alert>
+                                )}
                             </CardContent>
                         </Card>
                     </Grid>

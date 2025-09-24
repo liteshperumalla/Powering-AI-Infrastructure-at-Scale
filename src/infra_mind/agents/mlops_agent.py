@@ -465,7 +465,7 @@ class MLOpsAgent(BaseAgent):
         use_cases = []
         
         workload_types = technical_req.get("workload_types", [])
-        industry = business_req.get("industry", "")
+        industry = business_req.get("industry")
         
         # Common ML use cases by workload type
         if "ai_ml" in workload_types or "machine_learning" in workload_types:
@@ -1348,7 +1348,7 @@ class MLOpsAgent(BaseAgent):
             """
             
             for result in mlops_trends.get("results", [])[:3]:
-                mlops_context += f"- {result.get('title', '')}: {result.get('snippet', '')[:200]}...\n"
+                mlops_context += f"- {result.get('title')}: {result.get('snippet')[:200]}...\n"
             
             analysis_prompt = f"""
             Analyze ML/AI requirements and provide comprehensive MLOps recommendations:
@@ -1401,7 +1401,7 @@ class MLOpsAgent(BaseAgent):
                 "cost_optimization": llm_analysis.get("cost_optimization", {}),
                 "governance_framework": llm_analysis.get("governance_framework", {}),
                 "mlops_trends": mlops_trends.get("results", []),
-                "llm_insights": llm_analysis.get("analysis", ""),
+                "llm_insights": llm_analysis.get("analysis"),
                 "analysis_timestamp": datetime.now(timezone.utc).isoformat()
             }
             

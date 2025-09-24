@@ -628,7 +628,7 @@ output "project_id" {
 kind: Deployment
 metadata:
   name: {app["name"]}
-  namespace: {app.get("namespace", "default")}
+  namespace: {app.get("namespace")}
   labels:
     app: {app["name"]}
     version: {app.get("version", "v1")}
@@ -1113,7 +1113,7 @@ data:
 kind: Service
 metadata:
   name: {app["name"]}-service
-  namespace: {app.get("namespace", "default")}
+  namespace: {app.get("namespace")}
 spec:
   selector:
     app: {app["name"]}
