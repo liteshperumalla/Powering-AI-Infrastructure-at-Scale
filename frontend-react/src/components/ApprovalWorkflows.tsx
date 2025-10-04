@@ -210,10 +210,11 @@ const ApprovalWorkflows: React.FC = () => {
     };
 
     const generateApprovalMetrics = () => {
+        const safeRequests = Array.isArray(requests) ? requests : [];
         return [
-            { name: 'Approved', value: requests.filter(r => r.workflow.status === 'approved').length, category: 'status' },
-            { name: 'Pending', value: requests.filter(r => r.workflow.status === 'pending' || r.workflow.status === 'in_progress').length, category: 'status' },
-            { name: 'Rejected', value: requests.filter(r => r.workflow.status === 'rejected').length, category: 'status' },
+            { name: 'Approved', value: safeRequests.filter(r => r.workflow?.status === 'approved').length, category: 'status' },
+            { name: 'Pending', value: safeRequests.filter(r => r.workflow?.status === 'pending' || r.workflow?.status === 'in_progress').length, category: 'status' },
+            { name: 'Rejected', value: safeRequests.filter(r => r.workflow?.status === 'rejected').length, category: 'status' },
         ];
     };
 

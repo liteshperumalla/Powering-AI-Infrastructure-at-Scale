@@ -1063,7 +1063,7 @@ class AzurePricingClient:
                     "$top": 1000  # Increased to get more comprehensive data
                 }
                 
-                response = await client.get(self.base_url, params=params, timeout=60.0)
+                response = await client.get(self.base_url, params=params, timeout=2.0)
                 
                 if response.status_code == 200:
                     data = response.json()
@@ -1191,7 +1191,7 @@ class AzurePricingClient:
                             "$filter": f"serviceName eq '{service_name}' and armRegionName eq '{region}'",
                             "$top": 1000
                         }
-                        response = await client.get(self.base_url, params=params, timeout=60.0)
+                        response = await client.get(self.base_url, params=params, timeout=2.0)
                     
                     if response.status_code != 200:
                         break

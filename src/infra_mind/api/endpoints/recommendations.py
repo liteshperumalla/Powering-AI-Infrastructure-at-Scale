@@ -222,9 +222,13 @@ async def get_recommendations(
             # Convert service recommendations (use empty list if not present)
             service_recs = []
             for service in rec.get('recommended_services', []):
+                # Normalize provider to lowercase for enum matching
+                provider_raw = service.get('provider', 'AWS')
+                provider_normalized = provider_raw.lower() if isinstance(provider_raw, str) else 'aws'
+
                 service_recs.append(ServiceRecommendationResponse(
                     service_name=service.get('service_name'),
-                    provider=service.get('provider', 'AWS'),
+                    provider=provider_normalized,
                     service_category=service.get('service_category'),
                     estimated_monthly_cost=service.get('estimated_monthly_cost'),
                     cost_model=service.get('cost_model'),

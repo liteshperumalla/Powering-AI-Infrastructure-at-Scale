@@ -565,19 +565,108 @@ async def send_message(
             except Exception as e:
                 logger.warning(f"Failed to load report data: {str(e)}")
         
-        # Load assessment data if available for context
+        # Load comprehensive assessment data if available for context
         if bot_context.get("assessment_id"):
             try:
+                from ...models.recommendation import Recommendation
+
                 assessment = await Assessment.get(bot_context["assessment_id"])
                 if assessment:
+                    # Get all recommendations for this assessment
+                    recommendations = await Recommendation.find(
+                        {"assessment_id": str(assessment.id)}
+                    ).to_list()
+
+                    # Get advanced analytics
+                    analytics_collection = db.get_collection("advanced_analytics")
+                    advanced_analytics = await analytics_collection.find_one(
+                        {"assessment_id": str(assessment.id)}
+                    )
+
+                    # Get quality metrics
+                    quality_collection = db.get_collection("quality_metrics")
+                    quality_metrics = await quality_collection.find_one(
+                        {"assessment_id": str(assessment.id)}
+                    )
+
+                    # Get reports for this assessment
+                    reports = await Report.find(
+                        {"assessment_id": str(assessment.id)}
+                    ).to_list()
+
+                    # Build comprehensive context
                     bot_context["assessment_data"] = {
+                        "id": str(assessment.id),
                         "title": assessment.title,
-                        "status": assessment.status,
-                        "business_goals": assessment.business_requirements.business_goals,
-                        "cloud_providers": getattr(assessment.technical_requirements, 'preferred_cloud_providers', [])
+                        "status": str(assessment.status),
+                        "completion_percentage": assessment.completion_percentage,
+                        "business_requirements": {
+                            "company_name": assessment.business_requirements.get("company_name"),
+                            "industry": assessment.business_requirements.get("industry"),
+                            "company_size": assessment.business_requirements.get("company_size"),
+                            "business_goals": assessment.business_requirements.get("business_goals", []),
+                            "budget_range": assessment.business_requirements.get("budget_range"),
+                            "timeline": assessment.business_requirements.get("timeline")
+                        },
+                        "technical_requirements": {
+                            "workload_types": getattr(assessment.technical_requirements, 'workload_types', []),
+                            "cloud_preference": getattr(assessment.technical_requirements, 'cloud_preference', None),
+                            "scalability_requirements": getattr(assessment.technical_requirements, 'scalability_requirements', {}),
+                            "performance_requirements": getattr(assessment.technical_requirements, 'performance_requirements', {})
+                        },
+                        "recommendations": {
+                            "count": len(recommendations),
+                            "summary": [
+                                {
+                                    "title": rec.title,
+                                    "category": rec.category,
+                                    "confidence_score": rec.confidence_score,
+                                    "benefits": rec.benefits if hasattr(rec, 'benefits') else [],
+                                    "risks": rec.risks if hasattr(rec, 'risks') else rec.risks_and_considerations,
+                                    "implementation_steps": rec.implementation_steps,
+                                    "cloud_provider": rec.cloud_provider,
+                                    "estimated_cost": rec.total_estimated_monthly_cost,
+                                    "business_impact": rec.business_impact
+                                }
+                                for rec in recommendations[:10]  # Limit to top 10
+                            ]
+                        },
+                        "analytics": {
+                            "cost_analysis": advanced_analytics.get("cost_analysis") if advanced_analytics else None,
+                            "performance_analysis": advanced_analytics.get("performance_analysis") if advanced_analytics else None,
+                            "risk_assessment": advanced_analytics.get("risk_assessment") if advanced_analytics else None,
+                            "optimization_opportunities": advanced_analytics.get("optimization_opportunities", []) if advanced_analytics else []
+                        },
+                        "quality_metrics": {
+                            "overall_score": quality_metrics.get("value") if quality_metrics else None,
+                            "completeness": quality_metrics.get("details", {}).get("completeness") if quality_metrics else None,
+                            "accuracy": quality_metrics.get("details", {}).get("accuracy") if quality_metrics else None,
+                            "confidence": quality_metrics.get("details", {}).get("confidence") if quality_metrics else None
+                        },
+                        "reports": {
+                            "count": len(reports),
+                            "available_types": [report.report_type for report in reports]
+                        },
+                        "agents_involved": list(set([rec.agent_name for rec in recommendations])),
+                        "decision_factors": {
+                            "total_estimated_cost": sum([
+                                float(str(rec.total_estimated_monthly_cost).replace('$', '').replace(',', '') or 0)
+                                for rec in recommendations
+                            ]) if recommendations else 0,
+                            "average_confidence": sum([rec.confidence_score for rec in recommendations]) / len(recommendations) if recommendations else 0,
+                            "high_priority_items": len([rec for rec in recommendations if rec.priority == "high"]),
+                            "implementation_complexity": [rec.implementation_effort for rec in recommendations if hasattr(rec, 'implementation_effort')]
+                        }
                     }
+
+                    logger.info(f"Loaded comprehensive context for assessment {assessment.id}: {len(recommendations)} recommendations, {len(reports)} reports")
             except Exception as e:
-                logger.warning(f"Failed to load assessment data: {str(e)}")
+                logger.error(f"Failed to load comprehensive assessment data: {str(e)}")
+                # Provide minimal fallback
+                bot_context["assessment_data"] = {
+                    "error": "Failed to load complete assessment data",
+                    "message": "Some assessment information may be unavailable"
+                }
         
         # Generate bot response
         bot_response = await chatbot.handle_message(

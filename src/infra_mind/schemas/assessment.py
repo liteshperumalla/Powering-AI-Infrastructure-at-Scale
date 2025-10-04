@@ -224,6 +224,8 @@ class AssessmentUpdate(BaseSchema):
     status: Optional[AssessmentStatus] = None
     business_goal: Optional[str] = Field(default=None, max_length=500)
     tags: Optional[List[str]] = None
+    draft_data: Optional[Dict[str, Any]] = Field(default=None, description="Raw form data for draft assessments")
+    current_step: Optional[int] = Field(default=None, description="Current step in the assessment form")
 
 
 class AssessmentSummary(BaseSchema):
@@ -237,6 +239,7 @@ class AssessmentSummary(BaseSchema):
     updated_at: datetime
     
     # Key metrics
+    company_name: str = Field(default="Unknown Company", description="Company name")
     company_size: str
     industry: str
     budget_range: str

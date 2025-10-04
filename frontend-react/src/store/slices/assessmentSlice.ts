@@ -277,7 +277,7 @@ export const fetchAssessments = createAsyncThunk(
             try {
                 console.log('🔍 Starting response inspection...');
                 console.log('🔍 Response type:', typeof response);
-                console.log('🔍 Response keys:', Object.keys(response));
+                console.log('🔍 Response keys:', response && typeof response === 'object' ? Object.keys(response) : 'N/A - not an object');
             } catch (inspectionError) {
                 console.error('❌ Error during response inspection:', inspectionError);
             }

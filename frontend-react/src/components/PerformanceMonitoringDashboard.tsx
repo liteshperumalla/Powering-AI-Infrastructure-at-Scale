@@ -106,7 +106,11 @@ interface DashboardData {
     timestamp: string;
 }
 
-const PerformanceMonitoringDashboard: React.FC = () => {
+interface PerformanceMonitoringDashboardProps {
+    assessmentId?: string;
+}
+
+const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardProps> = ({ assessmentId }) => {
     // State
     const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -130,18 +134,57 @@ const PerformanceMonitoringDashboard: React.FC = () => {
 
     // Fetch dashboard data
     const fetchDashboardData = useCallback(async () => {
+        if (!assessmentId) {
+            setLoading(false);
+            return;
+        }
+
         try {
             // Use apiClient for authenticated requests
             const { apiClient } = await import('@/services/api');
-            const data = await apiClient.request('/performance/dashboard-data');
-            setDashboardData(data);
+            const apiResponse = await apiClient.get<any>(`/features/assessment/${assessmentId}/performance`);
+
+            // Transform API response to match component's expected structure
+            const transformedData: DashboardData = {
+                currentMetrics: {
+                    'response_time': apiResponse.metrics?.response_time?.current || 0,
+                    'throughput': apiResponse.metrics?.throughput?.requests_per_second || 0,
+                    'error_rate': apiResponse.metrics?.error_rate?.percentage || 0,
+                    'uptime': apiResponse.summary?.uptime_percentage || 0,
+                    'cpu_usage': 45, // Mock data
+                    'memory_usage': 60, // Mock data
+                },
+                activeAlerts: (apiResponse.alerts || []).map((alert: any) => ({
+                    id: alert.id,
+                    severity: alert.severity as 'info' | 'warning' | 'critical' | 'emergency',
+                    metric: alert.title,
+                    currentValue: 0,
+                    thresholdValue: 0,
+                    message: alert.description,
+                    timestamp: alert.timestamp,
+                    acknowledged: false,
+                })),
+                monitoringSummary: {
+                    monitoringActive: true,
+                    activeAlertsCount: apiResponse.summary?.active_alerts || 0,
+                    alertRulesCount: 0,
+                    scalingPoliciesCount: 0,
+                    websocketClientsCount: 0,
+                    performanceTrends: {},
+                    lastUpdated: apiResponse.generated_at || new Date().toISOString(),
+                },
+                performanceReport: apiResponse.summary || {},
+                timestamp: apiResponse.generated_at || new Date().toISOString(),
+            };
+
+            setDashboardData(transformedData);
             setError(null);
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to fetch dashboard data');
         } finally {
             setLoading(false);
         }
-    }, []);
+    }, [assessmentId]);
 
     // Handle WebSocket messages
     useEffect(() => {
@@ -326,6 +369,18 @@ const PerformanceMonitoringDashboard: React.FC = () => {
                 <LinearProgress />
                 <Typography sx={{ mt: 2 }}>Loading performance data...</Typography>
             </Box>
+        );
+    }
+
+    if (!assessmentId) {
+        // Import AssessmentSelector dynamically to avoid circular dependencies
+        const AssessmentSelector = require('./AssessmentSelector').default;
+        return (
+            <AssessmentSelector
+                redirectPath="/performance"
+                title="Select Assessment for Performance Monitoring"
+                description="Choose an assessment to view performance monitoring data"
+            />
         );
     }
 

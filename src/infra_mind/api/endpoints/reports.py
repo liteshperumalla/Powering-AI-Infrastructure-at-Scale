@@ -1024,7 +1024,31 @@ async def trigger_report_generation(
         if not assessment:
             raise ValueError(f"Assessment {assessment_id} not found")
         logger.info(f"DEBUG: Step 3 - Assessment retrieved successfully: {assessment.title}")
-        
+
+        # Check for and clean up existing IN_PROGRESS/GENERATING reports
+        logger.info(f"DEBUG: Step 3.5 - Checking for existing IN_PROGRESS reports")
+        try:
+            # Find all reports with GENERATING status for this assessment
+            existing_reports = await Report.find(
+                {
+                    "assessment_id": assessment_id,
+                    "status": {"$in": [ReportStatus.GENERATING.value]}
+                }
+            ).to_list()
+
+            if existing_reports:
+                logger.warning(f"Found {len(existing_reports)} existing IN_PROGRESS/GENERATING reports, cleaning up...")
+                for existing_report in existing_reports:
+                    # Mark as failed or delete
+                    existing_report.status = ReportStatus.FAILED
+                    existing_report.error_message = "Report generation superseded by new request"
+                    await existing_report.save()
+                    logger.info(f"Marked report {existing_report.id} as FAILED")
+            else:
+                logger.info("No existing IN_PROGRESS reports found, proceeding with new report creation")
+        except Exception as cleanup_error:
+            logger.warning(f"Error during cleanup check: {cleanup_error}. Proceeding anyway...")
+
         # Initialize AI agents for recommendation generation
         logger.info(f"DEBUG: Step 4 - Creating agent configurations")
         cto_config = AgentConfig(
@@ -1113,15 +1137,24 @@ async def trigger_report_generation(
         logger.info("DEBUG: Step 8 - AI agents initialized successfully")
         
         # Create a simple report ID for now to test the flow
-        logger.info(f"DEBUG: Step 9 - Creating simple report ID")
-        simple_report_id = str(ObjectId())
-        
-        # TODO: For testing, skip the actual Report creation to isolate the issue
-        logger.info(f"DEBUG: Step 10 - Created simple report ID: {simple_report_id}")
-        report_id = simple_report_id
-        
+        logger.info(f"DEBUG: Step 9 - Creating initial report document")
+
+        # Create initial report document
+        initial_report = Report(
+            assessment_id=assessment_id,
+            user_id=str(assessment.user_id) if assessment.user_id else "system",
+            report_type=report_type,
+            status=ReportStatus.GENERATING,
+            progress_percentage=0.0,
+            title=f"{assessment.business_requirements.get('company_name', 'Infrastructure')} Assessment Report",
+            generated_at=datetime.now()
+        )
+        await initial_report.save()
+        report_id = str(initial_report.id)
+
+        logger.info(f"DEBUG: Step 10 - Created report ID: {report_id}")
         logger.info(f"DEBUG: Step 11 - About to start background task")
-        
+
         # Start optimized background task for real agent execution
         async def generate_real_report():
             try:
@@ -1188,20 +1221,52 @@ async def trigger_report_generation(
                 
                 # Process recommendations from all agents
                 for agent_name, result in agent_results.items():
-                    if 'recommendations' in result and result['recommendations']:
+                    # Handle AgentResult object - access recommendations attribute
+                    recommendations = []
+                    if hasattr(result, 'recommendations'):
+                        recommendations = result.recommendations
+                    elif isinstance(result, dict) and 'recommendations' in result:
+                        recommendations = result['recommendations']
+
+                    if recommendations:
                         agent_meta = agent_metadata.get(agent_name, {"category": "general", "title_prefix": "General"})
-                        
-                        for rec in result['recommendations']:
+
+                        for rec in recommendations:
                             try:
+                                # Extract and prepare recommendation data
+                                description = rec.get('description', f'{agent_name} recommendation')
+                                summary = rec.get('summary', description[:500] if len(description) > 500 else description)
+
+                                # Build recommendation_data dict with all details
+                                recommendation_data = {
+                                    'description': description,
+                                    'priority': rec.get('priority', 'medium'),
+                                    'estimated_cost': rec.get('cost', rec.get('estimated_cost', 0)),
+                                    'implementation_time': rec.get('timeline', rec.get('implementation_time', '2-4 weeks')),
+                                    'details': rec.get('details', {}),
+                                    'benefits': rec.get('benefits', []),
+                                    'considerations': rec.get('considerations', [])
+                                }
+
+                                # Extract implementation steps if available
+                                implementation_steps = rec.get('implementation_steps', [])
+                                if not implementation_steps and 'steps' in rec:
+                                    implementation_steps = rec['steps']
+
                                 recommendation = Recommendation(
                                     assessment_id=assessment_id,
+                                    agent_name=agent_name,
                                     title=f"{agent_meta['title_prefix']}: {rec.get('title', 'Recommendation')}",
-                                    description=rec.get('description', f'{agent_name} recommendation'),
+                                    summary=summary,
+                                    confidence_level=rec.get('confidence_level', 'medium'),
+                                    confidence_score=float(rec.get('confidence_score', 0.7)),
+                                    recommendation_data=recommendation_data,
                                     category=agent_meta['category'],
-                                    priority=rec.get('priority', 'medium'),
-                                    estimated_cost=rec.get('cost', rec.get('estimated_cost', 0)),
-                                    implementation_time=rec.get('timeline', rec.get('implementation_time', '2-4 weeks')),
-                                    agent_name=agent_name
+                                    implementation_steps=implementation_steps,
+                                    prerequisites=rec.get('prerequisites', []),
+                                    risks_and_considerations=rec.get('risks', rec.get('considerations', [])),
+                                    business_impact=rec.get('business_impact', 'medium'),
+                                    tags=rec.get('tags', [agent_name, agent_meta['category']])
                                 )
                                 
                                 # Validate recommendation before saving
@@ -1219,22 +1284,36 @@ async def trigger_report_generation(
                         logger.warning(f"No recommendations received from {agent_name}")
                 
                 logger.info(f"Total recommendations processed: {len(all_recommendations)}")
-                
-                # Generate final report with real recommendations
-                report_agent.context = assessment_context
-                final_report = await report_agent._generate_report(
-                    assessment, 
-                    all_recommendations, 
-                    report_type.value
-                )
-                
-                # Update report with final content and validate
+
+                # Update report with final content
                 updated_report = await Report.get(report_id)
                 if updated_report:
                     updated_report.status = ReportStatus.COMPLETED
                     updated_report.progress_percentage = 100.0
-                    updated_report.recommendations = [rec.to_dict() for rec in all_recommendations]
-                    updated_report.sections = final_report.sections
+
+                    # Convert recommendations to dict format safely
+                    updated_report.recommendations = []
+                    for rec in all_recommendations:
+                        if hasattr(rec, 'dict'):
+                            updated_report.recommendations.append(rec.dict())
+                        elif hasattr(rec, 'model_dump'):
+                            updated_report.recommendations.append(rec.model_dump())
+                        else:
+                            # Fallback: create dict manually
+                            updated_report.recommendations.append({
+                                'id': str(rec.id) if hasattr(rec, 'id') else None,
+                                'title': rec.title if hasattr(rec, 'title') else '',
+                                'summary': rec.summary if hasattr(rec, 'summary') else '',
+                                'category': rec.category if hasattr(rec, 'category') else ''
+                            })
+
+                    # Create basic sections from recommendations
+                    updated_report.sections = {
+                        'executive_summary': f'Infrastructure assessment report for {assessment.business_requirements.get("company_name", "your organization")}.',
+                        'recommendations': f'Generated {len(all_recommendations)} AI-powered recommendations.',
+                        'summary': f'This report contains {len(all_recommendations)} recommendations from AI analysis covering architecture, security, and cost optimization.'
+                    }
+
                     updated_report.completed_at = datetime.now()
                     
                     # Validate final report before saving

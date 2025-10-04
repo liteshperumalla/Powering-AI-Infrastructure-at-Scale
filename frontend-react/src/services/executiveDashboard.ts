@@ -188,30 +188,33 @@ class ExecutiveDashboardService {
     }
 
     private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
-        const response = await fetch(`${this.baseUrl}${endpoint}`, {
-            ...options,
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.token}`,
-                ...options.headers,
-            },
-        });
+        try {
+            const response = await fetch(`${this.baseUrl}${endpoint}`, {
+                ...options,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.token}`,
+                    ...options.headers,
+                },
+            });
 
-        if (!response.ok) {
-            throw new Error(`Executive Dashboard API Error: ${response.statusText}`);
+            if (!response.ok) {
+                console.warn(`Executive Dashboard API endpoint not available: ${endpoint} (${response.status})`);
+                throw new Error(`Executive Dashboard API Error: ${response.statusText}`);
+            }
+
+            return response.json();
+        } catch (error) {
+            console.warn(`Executive Dashboard API request failed for ${endpoint}:`, error);
+            throw error;
         }
-
-        return response.json();
     }
 
     // Executive Metrics and KPIs
     async getExecutiveMetrics(timeframe: string = '30d'): Promise<ExecutiveMetric[]> {
         try {
-            // Try to use admin analytics endpoints for real data
-            const dashboardSummary = await this.makeRequest('/api/admin/analytics/dashboard-summary');
-            
-            // Transform available data to executive metrics format
-            return this.transformToExecutiveMetrics(dashboardSummary, {}, timeframe);
+            // Use the new executive endpoints
+            return await this.makeRequest(`/api/v2/executive/metrics?timeframe=${timeframe}`);
         } catch (error) {
             console.warn('Failed to fetch executive metrics:', error);
             // Return meaningful fallback data
@@ -221,11 +224,8 @@ class ExecutiveDashboardService {
 
     async getKPIDashboard(): Promise<KPICard[]> {
         try {
-            // Use available dashboard summary endpoint
-            const dashboardSummary = await this.makeRequest('/api/admin/analytics/dashboard-summary');
-            
-            // Transform available data to KPI cards
-            return this.transformToKPICards(dashboardSummary, {});
+            // Use the new executive KPI endpoint
+            return await this.makeRequest('/api/v2/executive/kpis');
         } catch (error) {
             console.warn('Failed to fetch KPI dashboard:', error);
             return this.getFallbackKPICards();
@@ -242,23 +242,8 @@ class ExecutiveDashboardService {
     // Executive Summary and Reporting
     async getExecutiveSummary(period: 'weekly' | 'monthly' | 'quarterly' | 'annual' = 'monthly'): Promise<ExecutiveSummary> {
         try {
-            // Try to get dashboard and analytics data with individual error handling
-            let dashboardData = null;
-            let analyticsData = null;
-            
-            try {
-                dashboardData = await this.makeRequest('/api/v2/dashboard/overview');
-            } catch (dashErr) {
-                console.warn('Dashboard overview not available:', dashErr);
-            }
-            
-            try {
-                analyticsData = await this.makeRequest('/api/admin/analytics/comprehensive');
-            } catch (analyticsErr) {
-                console.warn('Analytics comprehensive not available:', analyticsErr);
-            }
-            
-            return this.transformToExecutiveSummary(dashboardData, analyticsData, period);
+            // Use the new executive summary endpoint
+            return await this.makeRequest(`/api/v2/executive/summary?period=${period}`);
         } catch (error) {
             console.error('Failed to fetch executive summary:', error);
             return this.getDefaultExecutiveSummary(period);
@@ -282,9 +267,8 @@ class ExecutiveDashboardService {
     // Strategic Initiatives Management
     async getStrategicInitiatives(): Promise<StrategicInitiative[]> {
         try {
-            // Use assessments and recommendations data for strategic initiatives
-            const assessments = await this.makeRequest('/api/v2/assessments/');
-            return this.transformToStrategicInitiatives(assessments);
+            // Use the new executive initiatives endpoint
+            return await this.makeRequest('/api/v2/executive/initiatives');
         } catch (error) {
             console.error('Failed to fetch strategic initiatives:', error);
             return [];
@@ -327,7 +311,7 @@ class ExecutiveDashboardService {
         top_risks: RiskFactor[];
         risk_heat_map: any[];
     }> {
-        return this.makeRequest('/api/executive/risks/dashboard');
+        return this.makeRequest('/api/v2/executive/risks/dashboard');
     }
 
     async createRiskAssessment(risk: Omit<RiskFactor, 'id' | 'created_at'>): Promise<RiskFactor> {
@@ -357,10 +341,8 @@ class ExecutiveDashboardService {
     // Business Unit Analysis
     async getBusinessUnits(): Promise<BusinessUnit[]> {
         try {
-            // Use cloud services data to create business units
-            const cloudServices = await this.makeRequest('/api/v2/cloud-services/');
-            const providers = await this.makeRequest('/api/v2/cloud-services/providers');
-            return this.transformToBusinessUnits(cloudServices, providers);
+            // Use the new executive business units endpoint
+            return await this.makeRequest('/api/v2/executive/business-units');
         } catch (error) {
             console.error('Failed to fetch business units:', error);
             return [];
@@ -378,7 +360,7 @@ class ExecutiveDashboardService {
 
     // Benchmarking and Industry Analysis
     async getBenchmarkData(): Promise<BenchmarkData[]> {
-        return this.makeRequest('/api/executive/benchmarks');
+        return this.makeRequest('/api/v2/executive/benchmarks');
     }
 
     async getIndustryInsights(): Promise<{
@@ -490,7 +472,7 @@ class ExecutiveDashboardService {
         action_required: boolean;
         related_entity: string;
     }>> {
-        return this.makeRequest('/api/executive/alerts');
+        return this.makeRequest('/api/v2/executive/alerts');
     }
 
     async acknowledgeAlert(alertId: string, notes?: string): Promise<void> {

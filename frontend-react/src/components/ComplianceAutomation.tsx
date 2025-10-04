@@ -100,7 +100,11 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-const ComplianceAutomation: React.FC = () => {
+interface ComplianceAutomationProps {
+  assessmentId?: string;
+}
+
+const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentId }) => {
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -836,6 +840,17 @@ const ComplianceAutomation: React.FC = () => {
       </Grid>
     </Box>
   );
+
+  if (!assessmentId) {
+    const AssessmentSelector = require('./AssessmentSelector').default;
+    return (
+      <AssessmentSelector
+        redirectPath="/compliance"
+        title="Select Assessment for Compliance"
+        description="Choose an assessment to view compliance automation data"
+      />
+    );
+  }
 
   return (
     <Box>

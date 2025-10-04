@@ -22,6 +22,7 @@ from .api.routes import api_router
 from .api.documentation import get_enhanced_openapi_schema
 from .orchestration.events import EventManager
 from .orchestration.monitoring import initialize_workflow_monitoring
+from .services.workflow_monitor import start_workflow_monitoring, stop_workflow_monitoring
 
 
 @asynccontextmanager
@@ -46,6 +47,11 @@ async def lifespan(app: FastAPI):
     event_manager = EventManager()
     await initialize_workflow_monitoring(event_manager)
     logger.success("✅ EventManager and workflow monitoring initialized")
+
+    # Start proactive workflow monitoring
+    logger.info("🔍 Starting proactive workflow monitoring service...")
+    asyncio.create_task(start_workflow_monitoring())
+    logger.success("✅ Proactive workflow monitoring started")
     
     logger.success("✅ Application startup complete")
     
@@ -53,6 +59,7 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     logger.info("🛑 Shutting down Infra Mind application...")
+    await stop_workflow_monitoring()
     await close_database()
     logger.success("✅ Application shutdown complete")
 

@@ -284,7 +284,7 @@ export default function RegisterPage() {
 
                     {showSuccess && (
                         <Alert severity="success" sx={{ width: '100%', mb: 2 }}>
-                            🎉 Account created successfully! Redirecting to your dashboard...
+                            Account created successfully! Redirecting to your dashboard...
                         </Alert>
                     )}
 

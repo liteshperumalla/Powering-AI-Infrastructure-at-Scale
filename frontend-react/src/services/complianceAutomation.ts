@@ -392,7 +392,7 @@ class ComplianceAutomationService {
 
     constructor() {
         this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        this.token = typeof window !== 'undefined' ? typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null : null;
+        this.token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
     }
 
     private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
@@ -414,7 +414,7 @@ class ComplianceAutomationService {
 
     // Dashboard and Overview
     async getComplianceDashboard(): Promise<ComplianceDashboard> {
-        const response = await this.makeRequest('/api/compliance/dashboard');
+        const response = await this.makeRequest('/api/v2/compliance/dashboard');
         return response.data || {};
     }
 
@@ -429,7 +429,7 @@ class ComplianceAutomationService {
 
     // Framework Management
     async getComplianceFrameworks(): Promise<ComplianceFramework[]> {
-        const response = await this.makeRequest('/api/compliance/frameworks');
+        const response = await this.makeRequest('/api/v2/compliance/frameworks');
         return response.frameworks || [];
     }
 
@@ -448,7 +448,7 @@ class ComplianceAutomationService {
         requirements_config: any;
         assessment_schedule: any;
     }): Promise<ComplianceFramework> {
-        return this.makeRequest('/api/compliance/frameworks', {
+        return this.makeRequest('/api/v2/compliance/frameworks', {
             method: 'POST',
             body: JSON.stringify(framework),
         });
@@ -474,7 +474,7 @@ class ComplianceAutomationService {
         const body: any = { framework_id: frameworkId };
         if (assessmentConfig) body.assessment_config = assessmentConfig;
         
-        return this.makeRequest('/api/compliance/frameworks/assess', {
+        return this.makeRequest('/api/v2/compliance/frameworks/assess', {
             method: 'POST',
             body: JSON.stringify(body),
         });
@@ -496,7 +496,7 @@ class ComplianceAutomationService {
         frequency: string;
         data_sources: string[];
     }): Promise<AutomatedCheck> {
-        return this.makeRequest('/api/compliance/automated-checks', {
+        return this.makeRequest('/api/v2/compliance/automated-checks', {
             method: 'POST',
             body: JSON.stringify(check),
         });
@@ -667,7 +667,7 @@ class ComplianceAutomationService {
         implementation_steps: string[];
         success_criteria: string[];
     }): Promise<RemediationAction> {
-        return this.makeRequest('/api/compliance/remediation/actions', {
+        return this.makeRequest('/api/v2/compliance/remediation/actions', {
             method: 'POST',
             body: JSON.stringify(action),
         });
@@ -725,7 +725,7 @@ class ComplianceAutomationService {
         status: string;
         download_url?: string;
     }>> {
-        return this.makeRequest('/api/compliance/reports/history');
+        return this.makeRequest('/api/v2/compliance/reports/history');
     }
 
     async scheduleAutomaticReport(schedule: {
@@ -735,7 +735,7 @@ class ComplianceAutomationService {
         recipients: string[];
         auto_send: boolean;
     }): Promise<{ schedule_id: string }> {
-        return this.makeRequest('/api/compliance/reports/schedule', {
+        return this.makeRequest('/api/v2/compliance/reports/schedule', {
             method: 'POST',
             body: JSON.stringify(schedule),
         });
@@ -743,7 +743,7 @@ class ComplianceAutomationService {
 
     // Audit Management
     async getAudits(): Promise<ComplianceAudit[]> {
-        const response = await this.makeRequest('/api/compliance/audits');
+        const response = await this.makeRequest('/api/v2/compliance/audits');
         return response.audits || [];
     }
 
@@ -755,7 +755,7 @@ class ComplianceAutomationService {
         timeline: any;
         scope: string[];
     }): Promise<ComplianceAudit> {
-        return this.makeRequest('/api/compliance/audits', {
+        return this.makeRequest('/api/v2/compliance/audits', {
             method: 'POST',
             body: JSON.stringify(audit),
         });
@@ -809,7 +809,7 @@ class ComplianceAutomationService {
         notification_channels: string[];
         escalation_rules: any[];
     }): Promise<void> {
-        await this.makeRequest('/api/compliance/alerts/config', {
+        await this.makeRequest('/api/v2/compliance/alerts/config', {
             method: 'PUT',
             body: JSON.stringify(config),
         });
@@ -824,7 +824,7 @@ class ComplianceAutomationService {
         created_at: string;
         action_required: boolean;
     }>> {
-        const response = await this.makeRequest('/api/compliance/alerts');
+        const response = await this.makeRequest('/api/v2/compliance/alerts');
         return response.alerts || [];
     }
 

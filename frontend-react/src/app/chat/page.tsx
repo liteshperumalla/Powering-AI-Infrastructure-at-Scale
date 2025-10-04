@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
     Box,
     Container,
@@ -78,28 +78,85 @@ interface ConversationDetail extends Conversation {
 }
 
 const CONVERSATION_CONTEXTS = [
-    { value: 'general_inquiry', label: 'General Questions', icon: '💬' },
-    { value: 'assessment_help', label: 'Assessment Help', icon: '📊' },
-    { value: 'report_analysis', label: 'Report Analysis', icon: '📄' },
-    { value: 'technical_support', label: 'Technical Support', icon: '🔧' },
-    { value: 'platform_guidance', label: 'Platform Guidance', icon: '🎯' },
-    { value: 'decision_making', label: 'Decision Making', icon: '🤔' },
+    { value: 'general_inquiry', label: 'General Questions', icon: '' },
+    { value: 'assessment_help', label: 'Assessment Help', icon: '' },
+    { value: 'report_analysis', label: 'Report Analysis', icon: '' },
+    { value: 'technical_support', label: 'Technical Support', icon: '' },
+    { value: 'platform_guidance', label: 'Platform Guidance', icon: '' },
+    { value: 'decision_making', label: 'Decision Making', icon: '' },
 ];
 
 export default function ChatPage() {
     const { user, isAuthenticated, loading: authLoading } = useAppSelector(state => state.auth);
 
-    // Debug authentication state
+    // State management
+    const [conversations, setConversations] = useState<Conversation[]>([]);
+    const [currentConversation, setCurrentConversation] = useState<ConversationDetail | null>(null);
+
+    // Add effect to monitor authentication state changes (basic logging without isUserLoggedInForced)
+    useEffect(() => {
+        console.log('🔄 Auth state changed:', {
+            isAuthenticated,
+            hasUser: !!user,
+            userEmail: user?.email,
+            authLoading,
+            conversationCount: conversations.length,
+            timestamp: new Date().toISOString()
+        });
+    }, [isAuthenticated, user, authLoading, conversations]);
+
+    // More robust authentication check
+    const isUserLoggedInForced = useMemo(() => {
+        // Check multiple conditions to ensure user is actually authenticated
+        const hasAuthToken = typeof window !== 'undefined' && (
+            localStorage.getItem('auth_token') ||      // Used by authSlice and API client
+            localStorage.getItem('access_token') ||    // Common name
+            localStorage.getItem('token') ||           // Used by MFA verify
+            document.cookie.includes('access_token') || document.cookie.includes('auth_token')
+        );
+
+        const hasValidUser = user && user.email;
+        const authStateValid = isAuthenticated || hasValidUser;
+
+        console.log('🧪 Authentication Check:', {
+            isAuthenticated,
+            hasValidUser: !!hasValidUser,
+            hasAuthToken: !!hasAuthToken,
+            authStateValid,
+            finalResult: authStateValid || hasAuthToken
+        });
+
+        // TEMPORARY: Force authentication to true for debugging if URL contains debug=force
+        const debugForced = typeof window !== 'undefined' && window.location.search.includes('debug=force');
+
+        return debugForced || authStateValid || hasAuthToken;
+    }, [isAuthenticated, user]);
+
+    // TEMPORARY: Debug flag handling - integrated into the useMemo above
+
+    // Debug authentication state after isUserLoggedInForced is defined
     console.log('🔍 Chat Page Auth State:', {
         isAuthenticated,
         user: user?.email || 'none',
         authLoading,
-        userObject: user
+        userObject: user,
+        conversations: conversations.length,
+        shouldShowContinue: isUserLoggedInForced && conversations.length > 0,
+        shouldShowNewChat: isUserLoggedInForced,
+        isUserLoggedInForced,
+        buttonLogic: {
+            condition: isAuthenticated || user,
+            isAuthenticatedValue: isAuthenticated,
+            userExists: !!user,
+            userEmail: user?.email
+        }
     });
-    
-    // State management
-    const [conversations, setConversations] = useState<Conversation[]>([]);
-    const [currentConversation, setCurrentConversation] = useState<ConversationDetail | null>(null);
+
+    // TEMPORARY: Add visual debugging alert for authentication state
+    if (typeof window !== 'undefined' && window.location.search.includes('debug=auth')) {
+        alert(`DEBUG: isUserLoggedInForced=${isUserLoggedInForced}, isAuthenticated=${isAuthenticated}, user=${user?.email || 'none'}, conversations=${conversations.length}`);
+    }
+
     const [messages, setMessages] = useState<ChatMessage[]>([]);
     const [newMessage, setNewMessage] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -135,22 +192,23 @@ export default function ChatPage() {
     
     // Load conversations on component mount, but only when authenticated
     useEffect(() => {
-        if (isAuthenticated && !authLoading) {
+        if (isUserLoggedInForced && !authLoading) {
             loadConversations();
             loadAvailableData();
         }
         // Initialize the chat even without authentication for simple chat mode
-        console.log('Chat page initialized. isAuthenticated:', isAuthenticated, 'authLoading:', authLoading);
-    }, [isAuthenticated, authLoading]);
+        console.log('Chat page initialized. isUserLoggedInForced:', isUserLoggedInForced, 'isAuthenticated:', isAuthenticated, 'authLoading:', authLoading);
+    }, [isUserLoggedInForced, isAuthenticated, authLoading]);
     
     const loadAvailableData = async () => {
-        if (!isAuthenticated) return;
+        if (!isUserLoggedInForced) return;
         
         try {
             // Load assessments for context selection
             const assessmentsResponse = await apiClient.getAssessments();
-            setAvailableAssessments(assessmentsResponse || []);
-            
+            // getAssessments returns an object with {assessments: [], total, page, etc.}
+            setAvailableAssessments(assessmentsResponse?.assessments || []);
+
             // For reports, we'll load them differently since they require assessment_id
             // For now, we'll just set empty reports and load them dynamically when needed
             setAvailableReports([]);
@@ -164,7 +222,7 @@ export default function ChatPage() {
     
     // Load reports for selected assessment
     const loadReportsForAssessment = async (assessmentId: string) => {
-        if (!assessmentId || !isAuthenticated) {
+        if (!assessmentId || !isUserLoggedInForced) {
             setAvailableReports([]);
             return;
         }
@@ -189,7 +247,7 @@ export default function ChatPage() {
     }, [isSending, currentConversation]);
     
     const loadConversations = async () => {
-        if (!isAuthenticated) return;
+        if (!isUserLoggedInForced) return;
         
         try {
             setIsLoading(true);
@@ -229,7 +287,7 @@ export default function ChatPage() {
             setError(null);
             
             // Check if user is authenticated before trying to create a conversation
-            if (!isAuthenticated) {
+            if (!isUserLoggedInForced) {
                 console.log('🚫 User not authenticated, cannot start conversation');
                 setError('Please log in to start a conversation, or use simple chat mode below.');
                 setNewChatDialog(false);
@@ -265,19 +323,19 @@ export default function ChatPage() {
             
             setNewChatDialog(false);
             setError(null);
-            console.log('✅ Conversation started successfully:', conversation.id);
+            console.log('Conversation started successfully:', conversation.id);
         } catch (error) {
-            console.error('❌ Failed to start conversation:', error);
-            
+            console.error('Failed to start conversation:', error);
+
             // Handle authentication errors gracefully
             if (error instanceof Error && (
-                error.message.includes('401') || 
-                error.message.includes('unauthorized') || 
+                error.message.includes('401') ||
+                error.message.includes('unauthorized') ||
                 error.message.includes('authentication')
             )) {
                 setError('Authentication required. Please log in to start conversations, or use simple chat mode below.');
             } else if (error instanceof Error && error.message.includes('AI Assistant feature is not yet available')) {
-                setError('🚧 AI Assistant is currently under development. This feature will be available soon! Please check back later.');
+                setError('AI Assistant is currently under development. This feature will be available soon. Please check back later.');
             } else {
                 setError('Failed to start new conversation. You can still use simple chat mode below.');
             }
@@ -287,7 +345,31 @@ export default function ChatPage() {
             setIsLoading(false);
         }
     };
-    
+
+    const handleDeleteConversation = async (conversationId: string) => {
+        if (!confirm('Are you sure you want to delete this conversation? This action cannot be undone.')) {
+            return;
+        }
+
+        try {
+            await apiClient.deleteConversation(conversationId);
+
+            // Remove from conversations list
+            setConversations(prev => prev.filter(conv => conv.id !== conversationId));
+
+            // If currently viewing this conversation, clear it
+            if (currentConversation?.id === conversationId) {
+                setCurrentConversation(null);
+                setMessages([]);
+            }
+
+            console.log('Conversation deleted successfully:', conversationId);
+        } catch (error) {
+            console.error('Failed to delete conversation:', error);
+            setError('Failed to delete conversation. Please try again.');
+        }
+    };
+
     const sendMessage = async () => {
         if (!newMessage.trim() || isSending) return;
         
@@ -315,7 +397,7 @@ export default function ChatPage() {
             let botResponse: ChatMessage;
             
             // If authenticated and has conversation, use conversation mode
-            if (isAuthenticated && currentConversation) {
+            if (isUserLoggedInForced && currentConversation) {
                 console.log('🗨️ Using conversation mode');
                 try {
                     const response = await apiClient.sendMessage(currentConversation.id, {
@@ -435,7 +517,7 @@ export default function ChatPage() {
             return;
         }
 
-        if (!isAuthenticated) {
+        if (!isUserLoggedInForced) {
             console.log('❌ User not authenticated, cannot end conversation');
             setError('Authentication required to end conversations');
             setEndChatDialog(false);
@@ -444,45 +526,58 @@ export default function ChatPage() {
 
         try {
             console.log('🔚 Ending conversation:', currentConversation.id);
+
+            // First, generate a title for the conversation if it doesn't have a meaningful one
+            let finalTitle = currentConversation.title;
+            if (!finalTitle || finalTitle === 'New Chat' || finalTitle.startsWith('Chat')) {
+                try {
+                    console.log('📝 Auto-generating title before ending conversation...');
+                    const titleResult = await apiClient.generateConversationTitle(currentConversation.id);
+                    finalTitle = titleResult.title;
+                    console.log(`✨ Generated title: "${finalTitle}"`);
+                } catch (titleError) {
+                    console.warn('⚠️ Failed to generate title, using default:', titleError);
+                    finalTitle = currentConversation.title; // Keep original title
+                }
+            }
+
+            // End the conversation with the generated/existing title
             const result = await apiClient.endConversation(currentConversation.id, satisfactionRating || undefined);
 
-            // Update conversation status and title if auto-generated
+            // Update conversation status and title
+            const updatedTitle = result.title || finalTitle || currentConversation.title;
+
+            // Update conversations list immediately
             setConversations(prev => prev.map(conv =>
                 conv.id === currentConversation.id
                     ? {
                         ...conv,
                         status: 'resolved',
-                        title: result.title || conv.title // Update with auto-generated title
+                        title: updatedTitle
                     }
                     : conv
             ));
 
-            // Show success message with generated title if available
-            if (result.title && result.title !== currentConversation.title) {
-                console.log(`✅ Conversation ended and saved with auto-generated title: "${result.title}"`);
-                // Show a temporary success message for title generation
-                const tempMessage = `Conversation saved as: "${result.title}"`;
-                setTimeout(() => {
-                    // Could implement a toast notification here
-                    console.log('💡 Title auto-generated successfully');
-                }, 1000);
-            } else {
-                console.log('ℹ️ Conversation ended with existing title');
-            }
+            // Update current conversation with new title and status
+            setCurrentConversation(prev => prev ? {
+                ...prev,
+                status: 'resolved',
+                title: updatedTitle
+            } : prev);
 
-            // Clear current conversation and messages
-            setCurrentConversation(null);
-            setMessages([]);
+            console.log(`✅ Conversation ended and saved with title: "${updatedTitle}"`);
 
             setEndChatDialog(false);
             setSatisfactionRating(null);
 
-            // Force a small delay to ensure UI updates properly
+            // Force a re-render to ensure the title is visible in the sidebar
+            // Clear current conversation and messages to show the updated title in history
             setTimeout(() => {
-                console.log('✅ Conversation ended successfully - UI should now show action buttons');
-            }, 100);
+                setCurrentConversation(null);
+                setMessages([]);
+                console.log('✅ Conversation ended successfully - title updated in sidebar');
+            }, 100); // Reduced timeout to show changes faster
 
-            console.log('✅ Conversation ended successfully');
         } catch (error) {
             console.error('❌ Failed to end conversation:', error);
 
@@ -512,7 +607,7 @@ export default function ChatPage() {
     
     const getContextIcon = (context: string) => {
         const contextConfig = CONVERSATION_CONTEXTS.find(c => c.value === context);
-        return contextConfig?.icon || '💬';
+        return contextConfig?.icon || '';
     };
     
     const getContextLabel = (context: string) => {
@@ -619,19 +714,19 @@ export default function ChatPage() {
                 )}
             </Box>
 
-            {conversations.length === 0 && isAuthenticated && (
+            {conversations.length === 0 && isUserLoggedInForced && (
                 <Alert severity="info" sx={{ mb: 2 }}>
                     No previous conversations yet. Start your first chat!
                 </Alert>
             )}
 
-            {!isAuthenticated && (
+            {!isUserLoggedInForced && (
                 <Alert severity="info" sx={{ mb: 2 }}>
                     Log in to save and continue your conversations across sessions.
                 </Alert>
             )}
             {conversations.map((conv) => (
-                <Box key={conv.id} sx={{ mb: 1 }}>
+                <Box key={conv.id} sx={{ mb: 1, position: 'relative' }}>
                     <Button
                         fullWidth
                         variant={currentConversation?.id === conv.id ? "contained" : "outlined"}
@@ -642,6 +737,7 @@ export default function ChatPage() {
                             flexDirection: 'column',
                             alignItems: 'flex-start',
                             p: 2,
+                            pr: 6,
                             height: 'auto',
                             '&:hover': {
                                 bgcolor: currentConversation?.id === conv.id ? 'primary.dark' : 'action.hover'
@@ -665,6 +761,26 @@ export default function ChatPage() {
                             />
                         )}
                     </Button>
+                    <IconButton
+                        size="small"
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleDeleteConversation(conv.id);
+                        }}
+                        sx={{
+                            position: 'absolute',
+                            right: 8,
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            color: 'error.main',
+                            '&:hover': {
+                                bgcolor: 'error.light',
+                                color: 'error.contrastText'
+                            }
+                        }}
+                    >
+                        <DeleteIcon fontSize="small" />
+                    </IconButton>
                 </Box>
             ))}
         </Box>
@@ -774,7 +890,7 @@ export default function ChatPage() {
                                                 Ask me anything about cloud infrastructure, DevOps, Kubernetes, AWS, Azure, GCP, and more!
                                             </Typography>
                                         </Box>
-                                        {!isAuthenticated && (
+                                        {!isUserLoggedInForced && (
                                             <Chip
                                                 label="Simple Chat Mode"
                                                 size="small"
@@ -787,45 +903,59 @@ export default function ChatPage() {
                                 )}
                             </Box>
                             
-                            {currentConversation && (
-                                <Box sx={{ display: 'flex', gap: 1 }}>
-                                    <TooltipButton
-                                        tooltip="Generate a title based on conversation content"
-                                        variant="text"
-                                        size="small"
-                                        onClick={async () => {
-                                            try {
-                                                const result = await apiClient.generateConversationTitle(currentConversation.id);
-                                                // Update the conversation title in state
-                                                setConversations(prev => prev.map(conv =>
-                                                    conv.id === currentConversation.id
-                                                        ? { ...conv, title: result.title }
-                                                        : conv
-                                                ));
-                                                setCurrentConversation(prev =>
-                                                    prev ? { ...prev, title: result.title } : prev
-                                                );
-                                                console.log(`✅ Title generated: "${result.title}"`);
-                                            } catch (error) {
-                                                console.error('Failed to generate title:', error);
-                                                setError('Failed to generate title');
-                                            }
-                                        }}
-                                        disabled={currentConversation.status === 'resolved'}
-                                        sx={{ minWidth: 'auto', px: 1 }}
-                                    >
-                                        ✨
-                                    </TooltipButton>
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                                {/* Always show New Chat button when authenticated */}
+                                {isUserLoggedInForced && (
                                     <Button
-                                        variant="outlined"
+                                        variant="contained"
                                         size="small"
-                                        onClick={() => setEndChatDialog(true)}
-                                        disabled={currentConversation.status === 'resolved'}
+                                        onClick={() => setNewChatDialog(true)}
+                                        startIcon={<AddIcon />}
                                     >
-                                        End Chat
+                                        New Chat
                                     </Button>
-                                </Box>
-                            )}
+                                )}
+
+                                {/* Show conversation-specific controls when there's an active conversation */}
+                                {currentConversation && (
+                                    <>
+                                        <TooltipButton
+                                            tooltip="Generate a title based on conversation content"
+                                            variant="text"
+                                            size="small"
+                                            onClick={async () => {
+                                                try {
+                                                    const result = await apiClient.generateConversationTitle(currentConversation.id);
+                                                    // Update the conversation title in state
+                                                    setConversations(prev => prev.map(conv =>
+                                                        conv.id === currentConversation.id
+                                                            ? { ...conv, title: result.title }
+                                                            : conv
+                                                    ));
+                                                    setCurrentConversation(prev =>
+                                                        prev ? { ...prev, title: result.title } : prev
+                                                    );
+                                                    console.log(`✅ Title generated: "${result.title}"`);
+                                                } catch (error) {
+                                                    console.error('Failed to generate title:', error);
+                                                    setError('Failed to generate title');
+                                                }
+                                            }}
+                                            disabled={currentConversation.status === 'resolved'}
+                                            sx={{ minWidth: 'auto', px: 1 }}
+                                        >
+                                        </TooltipButton>
+                                        <Button
+                                            variant="outlined"
+                                            size="small"
+                                            onClick={() => setEndChatDialog(true)}
+                                            disabled={false}
+                                        >
+                                            End Chat
+                                        </Button>
+                                    </>
+                                )}
+                            </Box>
                         </Paper>
                         
                         {/* Messages Area */}
@@ -913,8 +1043,8 @@ export default function ChatPage() {
                                     </Box>
 
                                     <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-                                        {/* Show Continue Chat button if user has conversations (regardless of isAuthenticated flag) */}
-                                        {(isAuthenticated || user) && conversations.length > 0 && (
+                                        {/* Show Continue Chat button if user has conversations */}
+                                        {isUserLoggedInForced && conversations.length > 0 && (
                                             <Button
                                                 variant="outlined"
                                                 size="large"
@@ -945,7 +1075,7 @@ export default function ChatPage() {
                                             size="large"
                                             startIcon={<AddIcon />}
                                             onClick={() => {
-                                                if (isAuthenticated || user) {
+                                                if (isUserLoggedInForced) {
                                                     setNewChatDialog(true);
                                                 } else {
                                                     // For non-authenticated users, just start typing
@@ -964,13 +1094,13 @@ export default function ChatPage() {
                                                 boxShadow: '0 4px 20px rgba(102, 126, 234, 0.3)',
                                             }}
                                         >
-                                            {(isAuthenticated || user) ? 'Start New Conversation' : 'Start Chatting'}
+                                            {isUserLoggedInForced ? 'Start New Conversation' : 'Start Chatting'}
                                         </Button>
                                     </Box>
                                     
-                                    {!isAuthenticated && (
+                                    {!isUserLoggedInForced && (
                                         <Typography variant="body2" color="text.secondary" sx={{ mt: 2, opacity: 0.8 }}>
-                                            💡 Simple chat mode - just type your question and press Enter!
+                                            Tip: Simple chat mode - just type your question and press Enter
                                         </Typography>
                                     )}
                                 </Box>
@@ -981,7 +1111,21 @@ export default function ChatPage() {
                                 </>
                             )}
                         </Box>
-                        {(!currentConversation || currentConversation.status !== 'resolved') && (
+                        {(() => {
+                            const shouldShowInput = true; // Always show input for better UX
+                            console.log('🎛️ Chat Input Visibility Debug:', {
+                                currentConversation: currentConversation ? {
+                                    id: currentConversation.id,
+                                    status: currentConversation.status,
+                                    title: currentConversation.title
+                                } : null,
+                                shouldShowInput,
+                                isUserLoggedInForced,
+                                conversationsCount: conversations.length,
+                                originalCondition: !currentConversation || currentConversation.status !== 'resolved'
+                            });
+                            return shouldShowInput;
+                        })() && (
                             <Paper
                                 elevation={0}
                                 sx={{
@@ -1039,7 +1183,7 @@ export default function ChatPage() {
                                 </Box>
                                 {!currentConversation && (
                                     <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                                        💡 You can ask general questions directly, or start a new conversation for more advanced features.
+                                        Tip: You can ask general questions directly, or start a new conversation for more advanced features.
                                     </Typography>
                                 )}
                             </Paper>
@@ -1232,7 +1376,7 @@ export default function ChatPage() {
                         
                         <Box sx={{ mb: 2, p: 2, bgcolor: 'info.light', borderRadius: 1 }}>
                             <Typography variant="body2" color="info.contrastText">
-                                💡 <strong>Tip:</strong> For the best experience, provide detailed context 
+                                <strong>Tip:</strong> For the best experience, provide detailed context
                                 about your infrastructure needs and requirements.
                             </Typography>
                         </Box>

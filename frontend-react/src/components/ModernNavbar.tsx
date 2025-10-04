@@ -59,6 +59,8 @@ import {
 } from '@mui/icons-material';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
+import { useSelector } from 'react-redux';
+import { RootState } from '../store';
 import EnhancedNotificationSystem from './EnhancedNotificationSystem';
 import RoleBasedNavigation from './RoleBasedNavigation';
 
@@ -155,6 +157,7 @@ const ModernNavbar = React.memo(function ModernNavbar({
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
     const pathname = usePathname();
     const router = useRouter();
+    const currentAssessment = useSelector((state: RootState) => state.assessment.currentAssessment);
 
     // Close mobile drawer when route changes
     useEffect(() => {
@@ -188,6 +191,29 @@ const ModernNavbar = React.memo(function ModernNavbar({
 
     const handleMoreMenuClose = () => {
         setMoreMenuAnchor(null);
+    };
+
+    // Helper function to navigate with assessment ID for feature pages
+    const navigateToPage = (path: string) => {
+        // List of feature pages that need assessment ID
+        const featurePages = [
+            '/performance',
+            '/compliance',
+            '/experiments',
+            '/quality',
+            '/approvals',
+            '/budget-forecasting',
+            '/executive-dashboard',
+            '/rollback',
+            '/vendor-lockin'
+        ];
+
+        // If it's a feature page and we have a current assessment, add the assessment ID
+        if (featurePages.includes(path) && currentAssessment?.id) {
+            router.push(`${path}?assessment_id=${currentAssessment.id}`);
+        } else {
+            router.push(path);
+        }
     };
 
     const isActiveRoute = (path: string) => {
@@ -560,7 +586,7 @@ const ModernNavbar = React.memo(function ModernNavbar({
                                     key={item.path}
                                     onClick={() => {
                                         handleMoreMenuClose();
-                                        router.push(item.path);
+                                        navigateToPage(item.path);
                                     }}
                                     startIcon={item.icon}
                                     variant="text"

@@ -295,17 +295,12 @@ async def _safe_create_index(collection, keys, **kwargs):
     except OperationFailure as e:
         error_code = e.details.get('code', 0)
         if error_code == 85:  # IndexOptionsConflict
-            logger.warning(f"Index '{index_name}' already exists with different options")
-            # Try to drop and recreate the index
-            try:
-                logger.info(f"Dropping existing index '{index_name}' and recreating...")
-                await collection.drop_index(index_name)
-                await collection.create_index(keys, **kwargs)
-                logger.info(f"Successfully recreated index '{index_name}'")
-                return True
-            except Exception as drop_error:
-                logger.error(f"Failed to drop and recreate index '{index_name}': {drop_error}")
-                return False
+            logger.debug(f"Index '{index_name}' already exists with different options - using existing index")
+            # Index exists with similar keys but different options - this is acceptable
+            return True
+        elif error_code == 86 or error_code == 68:  # IndexAlreadyExists or IndexKeySpecsConflict
+            logger.debug(f"Index '{index_name}' already exists - using existing index")
+            return True
         else:
             logger.warning(f"Failed to create index '{index_name}': {e}")
             return False

@@ -137,6 +137,10 @@ class Recommendation(Document):
     )
     
     # Implementation guidance
+    benefits: List[str] = Field(
+        default_factory=list,
+        description="Key benefits and advantages of this recommendation"
+    )
     implementation_steps: List[str] = Field(
         default_factory=list,
         description="Step-by-step implementation guidance"
@@ -148,6 +152,10 @@ class Recommendation(Document):
     risks_and_considerations: List[str] = Field(
         default_factory=list,
         description="Potential risks and important considerations"
+    )
+    risks: List[str] = Field(
+        default_factory=list,
+        description="Alias for risks_and_considerations for frontend compatibility"
     )
     
     # Validation and quality assurance

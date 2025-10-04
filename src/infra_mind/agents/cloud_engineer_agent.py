@@ -2231,15 +2231,26 @@ Respond in JSON format with structured guidance for each section."""
     
     def _get_fallback_service_recommendations(self, assessment_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Get fallback service recommendations when LLM fails."""
+        logger.warning("⚠️ Using fallback recommendations - LLM analysis failed. Results may be generic.")
         return [
             {
-                "title": "Compute Infrastructure",
-                "description": "Set up scalable compute infrastructure",
+                "title": "Compute Infrastructure [LLM Analysis Unavailable]",
+                "description": "Set up scalable compute infrastructure - This is a fallback recommendation",
                 "provider": "aws",
                 "category": "compute",
                 "services": ["EC2", "Auto Scaling"],
                 "priority": "high",
                 "estimated_monthly_cost": 200,
+                "benefits": [
+                    "On-demand scalability",
+                    "Pay-as-you-go pricing model",
+                    "Wide range of instance types"
+                ],
+                "risks": [
+                    "Generic recommendation - may not match specific requirements",
+                    "Cost optimization needed based on actual workload",
+                    "Requires proper sizing analysis"
+                ],
                 "implementation_steps": [
                     "Create VPC",
                     "Launch EC2 instances",
@@ -2247,13 +2258,23 @@ Respond in JSON format with structured guidance for each section."""
                 ]
             },
             {
-                "title": "Storage Solution",
-                "description": "Implement secure and scalable storage",
+                "title": "Storage Solution [LLM Analysis Unavailable]",
+                "description": "Implement secure and scalable storage - This is a fallback recommendation",
                 "provider": "aws",
-                "category": "storage", 
+                "category": "storage",
                 "services": ["S3", "EBS"],
                 "priority": "high",
                 "estimated_monthly_cost": 50,
+                "benefits": [
+                    "Highly durable object storage",
+                    "Automated lifecycle management",
+                    "Multiple storage tiers available"
+                ],
+                "risks": [
+                    "Generic recommendation - storage needs not analyzed",
+                    "May not address specific compliance requirements",
+                    "Transfer costs not estimated"
+                ],
                 "implementation_steps": [
                     "Create S3 buckets",
                     "Set up lifecycle policies",
@@ -2261,13 +2282,23 @@ Respond in JSON format with structured guidance for each section."""
                 ]
             },
             {
-                "title": "Database Services",
-                "description": "Deploy managed database solution",
+                "title": "Database Services [LLM Analysis Unavailable]",
+                "description": "Deploy managed database solution - This is a fallback recommendation",
                 "provider": "aws",
                 "category": "database",
                 "services": ["RDS"],
                 "priority": "high",
                 "estimated_monthly_cost": 150,
+                "benefits": [
+                    "Managed database service",
+                    "Automated backups",
+                    "Multi-AZ deployment option"
+                ],
+                "risks": [
+                    "Generic recommendation - database requirements not analyzed",
+                    "May not be optimal for workload type",
+                    "Vendor lock-in with managed service"
+                ],
                 "implementation_steps": [
                     "Create RDS instance",
                     "Configure backups",

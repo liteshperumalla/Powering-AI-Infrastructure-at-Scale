@@ -1676,6 +1676,10 @@ class AssessmentWorkflow(BaseWorkflow):
                     else:
                         confidence_level = RecommendationConfidence.LOW
                     
+                    # Extract benefits and risks from recommendation data
+                    benefits = rec_data.get("benefits", rec_data.get("advantages", []))
+                    risks = rec_data.get("risks", rec_data.get("risks_and_considerations", []))
+
                     recommendation = Recommendation(
                         assessment_id=str(assessment.id),
                         agent_name=agent_role,
@@ -1686,8 +1690,10 @@ class AssessmentWorkflow(BaseWorkflow):
                         recommendation_data=rec_data,
                         category=rec_data.get("category", agent_role),
                         business_impact=rec_data.get("impact", "medium"),
-                        implementation_steps=rec_data.get("implementation_steps", []),
-                        risks_and_considerations=rec_data.get("risks", []),
+                        benefits=benefits if isinstance(benefits, list) else [],
+                        implementation_steps=rec_data.get("implementation_steps", rec_data.get("actions", [])),
+                        risks_and_considerations=risks if isinstance(risks, list) else [],
+                        risks=risks if isinstance(risks, list) else [],  # Alias for frontend
                         tags=[agent_role, "ai_generated"]
                     )
                     
@@ -2389,9 +2395,11 @@ class AssessmentWorkflow(BaseWorkflow):
                         }],
                         cost_estimates={"total_monthly": rec_data.get("estimated_monthly_cost", 1000)},
                         total_estimated_monthly_cost=str(rec_data.get("estimated_monthly_cost", 1000)),
-                        implementation_steps=["Review recommendation", "Plan implementation", "Execute deployment"],
-                        prerequisites=["Cloud account setup", "Technical requirements review"],
-                        risks_and_considerations=["Cost implications", "Implementation complexity"],
+                        benefits=rec_data.get("benefits", ["Improved infrastructure efficiency", "Cost optimization", "Enhanced scalability"]),
+                        implementation_steps=rec_data.get("implementation_steps", ["Review recommendation", "Plan implementation", "Execute deployment"]),
+                        prerequisites=rec_data.get("prerequisites", ["Cloud account setup", "Technical requirements review"]),
+                        risks_and_considerations=rec_data.get("risks", ["Cost implications", "Implementation complexity"]),
+                        risks=rec_data.get("risks", ["Cost implications", "Implementation complexity"]),
                         business_impact="medium",
                         alignment_score=85,
                         tags=[agent_name, rec_data.get("category", "general")],

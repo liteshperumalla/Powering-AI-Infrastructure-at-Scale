@@ -37,15 +37,18 @@ import {
     CheckBox,
     CheckBoxOutlineBlank,
     Timeline as WorkflowIcon,
-    Close as CloseIcon
+    Close as CloseIcon,
+    Refresh as RefreshIcon
 } from '@mui/icons-material';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useDispatch } from 'react-redux';
 import { apiClient } from '../../services/api';
-import { Assessment } from '../../store/slices/assessmentSlice';
+import { Assessment, setCurrentAssessment } from '../../store/slices/assessmentSlice';
 import WorkflowProgress from '../../components/WorkflowProgress';
 import { useAppSelector } from '../../store/hooks';
 import ResponsiveLayout from '@/components/ResponsiveLayout';
 import ProtectedRoute from '@/components/ProtectedRoute';
+import { useAssessmentData } from '../../hooks/useFreshData';
 
 interface AssessmentsPageState {
     assessments: Assessment[];
@@ -58,7 +61,11 @@ interface AssessmentsPageState {
 
 const AssessmentsPage: React.FC = () => {
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const dispatch = useDispatch();
     const { isAuthenticated, loading: authLoading } = useAppSelector(state => state.auth);
+    const redirectTo = searchParams?.get('redirect');
+
     const [state, setState] = useState<AssessmentsPageState>({
         assessments: [],
         loading: true,
@@ -66,6 +73,16 @@ const AssessmentsPage: React.FC = () => {
         selectedAssessments: [],
         bulkOperationLoading: false,
         workflowViewAssessmentId: null
+    });
+
+    // Auto-refresh assessment data every 10 seconds
+    const { forceRefresh: refreshAssessments, isStale, lastRefresh } = useAssessmentData(undefined, {
+        autoRefresh: true,
+        refreshInterval: 10000, // 10 seconds
+        onRefresh: () => {
+            console.log('🔄 Auto-refreshing assessments data...');
+            loadAssessments();
+        }
     });
 
     useEffect(() => {
@@ -106,7 +123,18 @@ const AssessmentsPage: React.FC = () => {
     };
 
     const handleViewAssessment = (assessmentId: string) => {
-        router.push(`/dashboard?assessment=${assessmentId}`);
+        // Find the assessment and set it as current in Redux
+        const assessment = state.assessments.find(a => a.id === assessmentId);
+        if (assessment) {
+            dispatch(setCurrentAssessment(assessment));
+        }
+
+        // If there's a redirect parameter, go to that page instead of dashboard
+        if (redirectTo) {
+            router.push(`/${redirectTo}?assessment_id=${assessmentId}`);
+        } else {
+            router.push(`/dashboard?assessment=${assessmentId}`);
+        }
     };
 
     const handleEditAssessment = (assessmentId: string) => {
@@ -255,6 +283,13 @@ const AssessmentsPage: React.FC = () => {
 
     return (
         <Container maxWidth="lg" sx={{ py: 4 }}>
+            {/* Redirect Alert */}
+            {redirectTo && (
+                <Alert severity="info" sx={{ mb: 3 }}>
+                    Please select an assessment to view <strong>{redirectTo.replace(/-/g, ' ')}</strong>
+                </Alert>
+            )}
+
             {/* Header */}
             <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Box>
@@ -269,23 +304,42 @@ const AssessmentsPage: React.FC = () => {
                     >
                         Infrastructure Assessments
                     </Typography>
-                    <Typography
-                        variant="body1"
-                        sx={{
-                            color: 'text.secondary'
-                        }}
-                    >
-                        Manage and view your cloud infrastructure assessments
-                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography
+                            variant="body1"
+                            sx={{
+                                color: 'text.secondary'
+                            }}
+                        >
+                            Manage and view your cloud infrastructure assessments
+                        </Typography>
+                        <Chip
+                            label={isStale ? "Data may be outdated" : "Live data"}
+                            size="small"
+                            color={isStale ? "warning" : "success"}
+                            variant="outlined"
+                        />
+                    </Box>
                 </Box>
-                <Button
-                    variant="contained"
-                    startIcon={<AddIcon />}
-                    onClick={handleCreateAssessment}
-                    size="large"
-                >
-                    New Assessment
-                </Button>
+                <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Tooltip title={`Last updated: ${new Date(lastRefresh).toLocaleTimeString()}`}>
+                        <IconButton
+                            onClick={refreshAssessments}
+                            color="primary"
+                            size="large"
+                        >
+                            <RefreshIcon />
+                        </IconButton>
+                    </Tooltip>
+                    <Button
+                        variant="contained"
+                        startIcon={<AddIcon />}
+                        onClick={handleCreateAssessment}
+                        size="large"
+                    >
+                        New Assessment
+                    </Button>
+                </Box>
             </Box>
 
             {/* Error Alert */}

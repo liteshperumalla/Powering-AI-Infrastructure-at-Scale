@@ -167,24 +167,27 @@ class ProductionDataValidator:
                 errors.append(f"Recommendation title contains mock content: {recommendation.title}")
                 quality_score -= 25
             
-            # Check description
-            if not recommendation.description or len(recommendation.description) < self.MIN_DESCRIPTION_LENGTH:
+            # Check description (now in recommendation_data)
+            description = recommendation.recommendation_data.get('description', '')
+            if not description or len(description) < self.MIN_DESCRIPTION_LENGTH:
                 errors.append(f"Recommendation description too short or missing (minimum: {self.MIN_DESCRIPTION_LENGTH} chars)")
                 quality_score -= 30
-            elif self._contains_mock_content(recommendation.description):
+            elif self._contains_mock_content(description):
                 errors.append(f"Recommendation description contains mock content")
                 quality_score -= 20
-            
-            # Check cost
-            if recommendation.estimated_cost == 0:
+
+            # Check cost (now in recommendation_data)
+            estimated_cost = recommendation.recommendation_data.get('estimated_cost', 0)
+            if estimated_cost == 0:
                 warnings.append("Recommendation has no estimated cost")
                 quality_score -= 10
-            elif recommendation.estimated_cost in [1234, 9999, 75000]:  # Common mock values
-                errors.append(f"Recommendation has mock cost value: ${recommendation.estimated_cost}")
+            elif estimated_cost in [1234, 9999, 75000]:  # Common mock values
+                errors.append(f"Recommendation has mock cost value: ${estimated_cost}")
                 quality_score -= 15
             
-            # Check implementation time
-            if not recommendation.implementation_time or recommendation.implementation_time in ["TBD", "TODO", "Unknown"]:
+            # Check implementation time (now in recommendation_data)
+            implementation_time = recommendation.recommendation_data.get('implementation_time', '')
+            if not implementation_time or implementation_time in ["TBD", "TODO", "Unknown"]:
                 warnings.append("Recommendation missing implementation time")
                 quality_score -= 10
             

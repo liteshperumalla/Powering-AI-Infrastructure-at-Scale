@@ -98,24 +98,42 @@ export default function LoginPage() {
     };
 
     const handleGoogleSuccess = async (credentialResponse: any) => {
+        console.log('🔑 Google OAuth Success Callback Triggered');
+        console.log('📋 Credential Response:', {
+            hasCredential: !!credentialResponse?.credential,
+            credentialLength: credentialResponse?.credential?.length || 0,
+            fullResponse: credentialResponse
+        });
+
         try {
             if (!credentialResponse?.credential) {
+                console.error('❌ No credential received from Google');
                 throw new Error('No credential received from Google');
             }
 
+            console.log('🚀 Sending credential to backend...');
             const result = await dispatch(googleLogin({
                 credential: credentialResponse.credential
             })).unwrap();
 
+            console.log('✅ Google login successful:', result);
             router.push('/dashboard');
         } catch (error) {
-            console.error('Google login failed:', error);
+            console.error('❌ Google login failed:', error);
+            console.error('📊 Error details:', {
+                message: error instanceof Error ? error.message : error,
+                type: typeof error,
+                error: error
+            });
             // The error will be handled by the Redux slice and displayed via the error state
         }
     };
 
     const handleGoogleError = () => {
-        console.log('Google Login Failed');
+        console.error('Google OAuth Error Callback Triggered');
+        console.error('This means Google OAuth failed before getting a credential');
+        console.error('Possible causes: User cancelled, popup blocked, or OAuth configuration issue');
+
         // You can dispatch an error action here if needed
         dispatch(clearError());
         // Optionally show a custom error message
@@ -135,13 +153,13 @@ export default function LoginPage() {
             'Account disabled': 'Your account has been disabled. Please contact support for assistance.',
             'Too many login attempts': 'Too many failed login attempts. Please try again later.',
             'Network error': 'Unable to connect to the server. Please check your internet connection.',
-            'Server error. Please try again later.': '🔧 We\'re experiencing technical difficulties. Please try again in a few moments.',
+            'Server error. Please try again later.': 'We\'re experiencing technical difficulties. Please try again in a few moments.',
             'Google OAuth not configured': 'Google sign-in is temporarily unavailable. Please use email and password to sign in.',
             'Invalid Google credential': 'Google sign-in failed. Please try again or use email and password.',
             'Email not provided by Google': 'Google sign-in couldn\'t retrieve your email. Please try again or use email and password.',
             'Google authentication failed': 'Google sign-in encountered an error. Please try again or use email and password.',
             'Google login failed': 'Google sign-in failed. Please try again or use email and password.',
-            'Login failed: "Server error. Please try again later."': '🔧 Authentication service is temporarily unavailable. Please try again in a few moments.'
+            'Login failed: "Server error. Please try again later."': 'Authentication service is temporarily unavailable. Please try again in a few moments.'
         };
 
         return errorMap[error] || error;

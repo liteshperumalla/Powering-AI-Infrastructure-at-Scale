@@ -1,6 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../store';
 import ResponsiveLayout from '../../components/ResponsiveLayout';
 import {
   Container,
@@ -44,6 +47,7 @@ import {
   Stop,
 } from '@mui/icons-material';
 import { getExperiments, createExperiment, getExperimentDashboard, Experiment } from '../../services/experiments';
+import { apiClient } from '../../services/api';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -72,6 +76,13 @@ function TabPanel(props: TabPanelProps) {
 }
 
 export default function ExperimentsPage() {
+  const searchParams = useSearchParams();
+  const currentAssessment = useSelector((state: RootState) => state.assessment.currentAssessment);
+
+  // Priority: URL param > Redux state
+  const urlAssessmentId = searchParams?.get('assessment_id');
+  const assessmentId = urlAssessmentId || currentAssessment?.id;
+
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [dashboardData, setDashboardData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -88,22 +99,28 @@ export default function ExperimentsPage() {
     target_metric: 'conversion_rate',
   });
 
+  // Load data when assessment is available
   useEffect(() => {
-    loadData();
-  }, []);
+    if (assessmentId) {
+      loadData();
+    }
+  }, [assessmentId]);
 
   const loadData = async () => {
+    if (!assessmentId) return;
+
     try {
       setLoading(true);
-      const [experimentsData, dashData] = await Promise.all([
-        getExperiments().catch(() => []),
-        getExperimentDashboard().catch(() => null)
-      ]);
-      
-      setExperiments(experimentsData);
-      setDashboardData(dashData);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data');
+      const experimentsData = await apiClient.get<any>(`/features/assessment/${assessmentId}/experiments`);
+
+      // Map the API response
+      setExperiments(experimentsData.experiments || experimentsData.active_experiments || []);
+      setDashboardData(experimentsData.dashboard || experimentsData);
+      setError(null);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load experiments data');
+      setExperiments([]);
+      setDashboardData(null);
     } finally {
       setLoading(false);
     }

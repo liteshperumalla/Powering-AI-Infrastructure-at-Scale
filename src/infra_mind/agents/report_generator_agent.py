@@ -1231,6 +1231,7 @@ class ReportGeneratorAgent(BaseAgent):
         report = Report(
             title=template["title_template"].format(company_name=company_name),
             assessment_id=assessment.id,
+            user_id=assessment.user_id,
             report_type=report_type,
             metadata={
                 "company_name": company_name,

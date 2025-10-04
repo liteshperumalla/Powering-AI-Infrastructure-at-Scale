@@ -76,7 +76,7 @@ services:
       INFRA_MIND_SECRET_KEY: dev-secret-key-change-in-production
       JWT_SECRET_KEY: dev-jwt-secret-key-change-in-production
       REDIS_URL: redis://redis:6379
-      INFRA_MIND_CORS_ORIGINS: '["http://localhost:3000", "http://frontend:3000", "http://host.docker.internal:3000", "http://127.0.0.1:3000", "https://localhost:3000"]'
+      INFRA_MIND_CORS_ORIGINS: '["http://localhost:3000", "http://localhost:3001", "http://frontend:3000", "http://host.docker.internal:3000", "http://host.docker.internal:3001", "http://127.0.0.1:3000", "http://127.0.0.1:3001", "https://localhost:3000", "https://localhost:3001"]'
       
       # Authentication configuration
       ACCESS_TOKEN_EXPIRE_MINUTES: "480"  # 8 hours
@@ -110,7 +110,9 @@ services:
       - mongodb
       - redis
     volumes:
+      - ./src:/app/src
       - ./logs:/app/logs
+      - ./gcp-service-account.json:/app/gcp-service-account.json:ro
     networks:
       - infra_mind_network
     healthcheck:

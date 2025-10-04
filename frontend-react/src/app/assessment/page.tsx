@@ -48,7 +48,7 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import ProgressIndicator from '@/components/ProgressIndicator';
 import IntelligentFormField from '@/components/IntelligentFormField';
-import { useAppDispatch } from '@/store/hooks';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { addNotification } from '@/store/slices/uiSlice';
 import ProgressSaver from '@/components/ProgressSaver';
 import ResponsiveLayout from '@/components/ResponsiveLayout';
@@ -299,6 +299,7 @@ function AssessmentPageInner() {
     const router = useRouter();
     const searchParams = useSearchParams();
     const dispatch = useAppDispatch();
+    const { user } = useAppSelector(state => state.auth);
     const draftId = searchParams.get('draft');
     
     const [activeStep, setActiveStep] = useState(0);
@@ -331,18 +332,146 @@ function AssessmentPageInner() {
     useEffect(() => {
         const checkForDraft = async () => {
             setIsLoadingDraft(true);
-            
+
+            console.log('🔍 Draft loading process started');
+            console.log('🔍 draftId from URL:', draftId);
+            console.log('🔍 hasDraft() result:', hasDraft());
+            console.log('🔍 Current user:', user);
+
             // If there's a draft ID in URL, load that specific draft
             if (draftId) {
                 try {
                     const assessment = await apiClient.getAssessment(draftId);
-                    if (assessment && assessment.draft_data) {
-                        setFormData(assessment.draft_data as AssessmentFormData);
-                        setActiveStep(assessment.current_step || 0);
-                        setAssessmentId(assessment.id);
+                    console.log('🔍 Loaded assessment from URL:', assessment);
+                    console.log('🔍 Assessment draft_data:', assessment?.draft_data);
+                    console.log('🔍 Assessment current_step:', assessment?.current_step);
+
+                    if (assessment) {
+                        // Handle both draft_data and direct assessment data structures
+                        let formDataToLoad = null;
+                        let stepToLoad = 0;
+
+                        console.log('🔍 Processing assessment data structure...');
+                        console.log('🔍 Assessment keys:', Object.keys(assessment));
+                        console.log('🔍 Has draft_data:', !!assessment.draft_data, typeof assessment.draft_data);
+                        console.log('🔍 Has business_requirements:', !!assessment.business_requirements);
+                        console.log('🔍 Has technical_requirements:', !!assessment.technical_requirements);
+                        console.log('🔍 Assessment status:', assessment.status);
+                        console.log('🔍 Assessment current_step:', assessment.current_step);
+
+                        if (assessment.draft_data && typeof assessment.draft_data === 'object') {
+                            // Draft format: { draft_data: formData, current_step: step }
+                            formDataToLoad = assessment.draft_data;
+                            stepToLoad = assessment.current_step || 0;
+                        } else if (assessment.business_requirements || assessment.technical_requirements) {
+                            // Full assessment format: convert to form data
+                            const businessReq = assessment.business_requirements || {};
+                            const techReq = assessment.technical_requirements || {};
+
+                            // Enhanced data extraction with multiple fallback strategies
+                            formDataToLoad = {
+                                // Business Information - try multiple field names
+                                companyName: businessReq.company_name || businessReq.companyName ||
+                                           assessment.title?.replace(/Assessment|Draft|-|_/gi, '').trim() || '',
+                                industry: businessReq.industry || '',
+                                companySize: businessReq.company_size || businessReq.companySize || '',
+                                currentAIMaturity: techReq.current_ai_maturity || techReq.currentAIMaturity || '',
+                                businessGoal: assessment.business_goal || businessReq.business_goal || '',
+                                geographicRegions: businessReq.geographic_regions || businessReq.geographicRegions || [],
+                                customerBase: businessReq.customer_base_size || businessReq.customerBase || '',
+                                revenueModel: businessReq.revenue_model || businessReq.revenueModel || '',
+                                growthStage: businessReq.growth_stage || businessReq.growthStage || '',
+                                keyCompetitors: businessReq.key_competitors || businessReq.keyCompetitors || '',
+                                missionCriticalSystems: businessReq.mission_critical_systems || businessReq.missionCriticalSystems || [],
+
+                                // Current Infrastructure
+                                currentCloudProvider: techReq.current_cloud_providers || techReq.currentCloudProvider || [],
+                                currentServices: techReq.current_services || techReq.currentServices || [],
+                                monthlyBudget: businessReq.budget_constraints?.total_budget_range ||
+                                             businessReq.monthlyBudget || businessReq.budget_range || '',
+
+                                // Technical Architecture
+                                applicationTypes: techReq.workload_types || techReq.applicationTypes || [],
+                                programmingLanguages: techReq.preferred_programming_languages ||
+                                                    techReq.programmingLanguages || [],
+
+                                // AI Requirements
+                                aiUseCases: techReq.ai_use_cases || techReq.aiUseCases || [],
+                                expectedDataVolume: techReq.expected_data_volume || techReq.expectedDataVolume || '',
+                                dataTypes: techReq.data_types || techReq.dataTypes || [],
+                                realTimeRequirements: techReq.real_time_requirements || techReq.realTimeRequirements || '',
+
+                                // Try to extract any other fields that might be present
+                                ...businessReq,
+                                ...techReq
+                            };
+                            stepToLoad = assessment.current_step || 0;
+                        }
+
+                        if (formDataToLoad) {
+                            console.log('📝 Setting form data:', formDataToLoad);
+                            console.log('📝 Form data keys:', Object.keys(formDataToLoad));
+                            console.log('📝 Form data values preview:',
+                                Object.entries(formDataToLoad).slice(0, 5).map(([k, v]) => `${k}: ${v}`)
+                            );
+                            const mergedData = { ...initialFormData, ...formDataToLoad } as AssessmentFormData;
+                            console.log('📝 Merged data preview:',
+                                Object.entries(mergedData).slice(0, 5).map(([k, v]) => `${k}: ${v}`)
+                            );
+
+                            // Validate that we have at least some meaningful data
+                            const hasData = Object.keys(formDataToLoad).some(key => {
+                                const value = formDataToLoad[key];
+                                return value && (
+                                    (typeof value === 'string' && value.trim().length > 0) ||
+                                    (Array.isArray(value) && value.length > 0) ||
+                                    (typeof value !== 'string' && value !== null && value !== undefined)
+                                );
+                            });
+
+                            if (hasData) {
+                                console.log('✅ Valid form data found, populating form');
+                                setFormData(mergedData);
+                                setActiveStep(stepToLoad);
+                                setAssessmentId(assessment.id);
+                            } else {
+                                console.warn('⚠️ Form data exists but appears to be empty');
+                                // Still set the data but log the issue
+                                setFormData(mergedData);
+                                setActiveStep(stepToLoad);
+                                setAssessmentId(assessment.id);
+                            }
+                        } else {
+                            console.warn('⚠️ No valid form data found in assessment');
+                            console.log('🔍 Attempting fallback data extraction...');
+
+                            // Fallback: try to extract any meaningful data from the assessment
+                            const fallbackData: Record<string, unknown> = {};
+
+                            // Extract from title if it contains company info
+                            if (assessment.title && assessment.title !== 'Test Draft Assessment') {
+                                fallbackData.companyName = assessment.title.replace(/Assessment|Draft|-|\s+/gi, ' ').trim();
+                            }
+
+                            // Check for any nested data structures
+                            if (assessment.metadata && typeof assessment.metadata === 'object') {
+                                Object.assign(fallbackData, assessment.metadata);
+                            }
+
+                            if (Object.keys(fallbackData).length > 0) {
+                                console.log('📝 Using fallback data:', fallbackData);
+                                setFormData({ ...initialFormData, ...fallbackData } as AssessmentFormData);
+                                setActiveStep(stepToLoad);
+                                setAssessmentId(assessment.id);
+                            } else {
+                                console.warn('⚠️ No extractable data found');
+                            }
+                        }
+                    } else {
+                        console.warn('⚠️ No assessment data received');
                     }
                 } catch (error) {
-                    console.error('Failed to load draft from URL:', error);
+                    console.error('❌ Failed to load draft from URL:', error);
                 }
             } else if (hasDraft()) {
                 // Show restore dialog for localStorage drafts
@@ -353,7 +482,7 @@ function AssessmentPageInner() {
         };
         
         checkForDraft();
-    }, [draftId, hasDraft]);
+    }, [draftId, hasDraft, user]);
 
     // Set up auto-save functionality
     useEffect(() => {
@@ -371,13 +500,20 @@ function AssessmentPageInner() {
     const handleRestoreDraft = async () => {
         try {
             const draft = await loadDraft();
-            if (draft) {
-                setFormData(draft.formData as AssessmentFormData);
-                setActiveStep(draft.currentStep);
+            console.log('🔍 Loaded draft from hook:', draft);
+            console.log('🔍 Draft formData:', draft?.formData);
+            console.log('🔍 Draft currentStep:', draft?.currentStep);
+
+            if (draft && draft.formData) {
+                console.log('📝 Setting form data from draft:', draft.formData);
+                setFormData({ ...initialFormData, ...draft.formData } as AssessmentFormData);
+                setActiveStep(draft.currentStep || 0);
                 setAssessmentId(draft.assessmentId);
+            } else {
+                console.warn('⚠️ No valid draft data found');
             }
         } catch (error) {
-            console.error('Failed to restore draft:', error);
+            console.error('❌ Failed to restore draft:', error);
         } finally {
             setShowRestoreDialog(false);
         }
@@ -992,122 +1128,121 @@ function AssessmentPageInner() {
                             onGetContextualHelp={getContextualHelp}
                         />
 
-                        <FormControl fullWidth error={!!errors.industry}>
-                            <InputLabel>Industry *</InputLabel>
-                            <Select
-                                value={formData.industry}
-                                onChange={(e) => handleIndustryChange(e.target.value)}
-                                label="Industry *"
-                            >
-                                <MenuItem value="technology">Technology</MenuItem>
-                                <MenuItem value="healthcare">Healthcare</MenuItem>
-                                <MenuItem value="finance">Finance</MenuItem>
-                                <MenuItem value="retail">Retail</MenuItem>
-                                <MenuItem value="manufacturing">Manufacturing</MenuItem>
-                                <MenuItem value="education">Education</MenuItem>
-                                <MenuItem value="government">Government</MenuItem>
-                                <MenuItem value="nonprofit">Non-Profit</MenuItem>
-                                <MenuItem value="other">Other</MenuItem>
-                            </Select>
-                            {errors.industry && (
-                                <Typography variant="caption" color="error" sx={{ mt: 1 }}>
-                                    {errors.industry}
-                                </Typography>
-                            )}
-                            {formData.industry === 'other' && formData.industryOther && (
-                                <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
-                                    Custom industry: {formData.industryOther}
-                                </Typography>
-                            )}
-                        </FormControl>
-
-                        <FormControl error={!!errors.companySize}>
-                            <FormLabel>Company Size</FormLabel>
-                            <RadioGroup
-                                value={formData.companySize}
-                                onChange={(e) => handleInputChange('companySize', e.target.value)}
-                            >
-                                <FormControlLabel value="startup" control={<Radio />} label="Startup (1-50 employees)" />
-                                <FormControlLabel value="small" control={<Radio />} label="Small (51-200 employees)" />
-                                <FormControlLabel value="medium" control={<Radio />} label="Medium (201-1000 employees)" />
-                                <FormControlLabel value="large" control={<Radio />} label="Large (1000+ employees)" />
-                                <FormControlLabel value="other" control={<Radio />} label="Other" />
-                            </RadioGroup>
-                            {formData.companySize === 'other' && (
-                                <TextField
-                                    fullWidth
-                                    label="Please specify company size"
-                                    value={formData.companySizeOther}
-                                    onChange={(e) => handleInputChange('companySizeOther', e.target.value)}
-                                    sx={{ mt: 2 }}
-                                    size="small"
-                                />
-                            )}
-                        </FormControl>
-
-                        <FormControl error={!!errors.currentAIMaturity}>
-                            <FormLabel>Current AI Maturity Level</FormLabel>
-                            <RadioGroup
-                                value={formData.currentAIMaturity}
-                                onChange={(e) => handleInputChange('currentAIMaturity', e.target.value)}
-                            >
-                                <FormControlLabel value="none" control={<Radio />} label="No AI implementation" />
-                                <FormControlLabel value="pilot" control={<Radio />} label="Pilot projects" />
-                                <FormControlLabel value="production" control={<Radio />} label="Production AI systems" />
-                                <FormControlLabel value="advanced" control={<Radio />} label="Advanced AI operations" />
-                                <FormControlLabel value="other" control={<Radio />} label="Other" />
-                            </RadioGroup>
-                            {formData.currentAIMaturity === 'other' && (
-                                <TextField
-                                    fullWidth
-                                    label="Please specify AI maturity level"
-                                    value={formData.currentAIMaturityOther}
-                                    onChange={(e) => handleInputChange('currentAIMaturityOther', e.target.value)}
-                                    sx={{ mt: 2 }}
-                                    size="small"
-                                />
-                            )}
-                        </FormControl>
-
-                        <TextField
-                            fullWidth
-                            label="Primary Business Goal"
-                            multiline
-                            rows={3}
-                            value={formData.businessGoal}
-                            onChange={(e) => handleInputChange('businessGoal', e.target.value)}
-                            error={!!errors.businessGoal}
-                            helperText={errors.businessGoal || "Describe your primary business objective for this infrastructure assessment"}
-                            placeholder="e.g., Reduce infrastructure costs by 30%, Scale to handle 10x user growth, Improve system reliability and uptime"
+                        <IntelligentFormField
+                            name="industry"
+                            label="Industry"
+                            type="select"
+                            value={formData.industry}
+                            onChange={(value) => handleIndustryChange(value as string)}
+                            required
+                            error={errors.industry}
+                            options={[
+                                { value: "technology", label: "Technology" },
+                                { value: "healthcare", label: "Healthcare" },
+                                { value: "finance", label: "Finance" },
+                                { value: "retail", label: "Retail" },
+                                { value: "manufacturing", label: "Manufacturing" },
+                                { value: "education", label: "Education" },
+                                { value: "government", label: "Government" },
+                                { value: "nonprofit", label: "Non-Profit" },
+                                { value: "other", label: "Other" }
+                            ]}
+                            allowTextInput={true}
+                            textInputLabel="Please specify industry"
+                            textInputPlaceholder="Enter your industry"
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
                         />
 
-                        <FormControl>
-                            <FormLabel>Geographic Regions (Select all that apply)</FormLabel>
-                            <FormGroup>
-                                {['North America', 'Europe', 'Asia Pacific', 'Latin America', 'Middle East & Africa', 'Global', 'Other'].map((region) => (
-                                    <FormControlLabel
-                                        key={region}
-                                        control={
-                                            <Checkbox
-                                                checked={formData.geographicRegions.includes(region)}
-                                                onChange={(e) => handleArrayChange('geographicRegions', region, e.target.checked)}
-                                            />
-                                        }
-                                        label={region}
-                                    />
-                                ))}
-                            </FormGroup>
-                            {formData.geographicRegions.includes('Other') && (
-                                <TextField
-                                    fullWidth
-                                    label="Please specify other regions"
-                                    value={formData.geographicRegionsOther}
-                                    onChange={(e) => handleInputChange('geographicRegionsOther', e.target.value)}
-                                    sx={{ mt: 2 }}
-                                    size="small"
-                                />
-                            )}
-                        </FormControl>
+                        <IntelligentFormField
+                            name="companySize"
+                            label="Company Size"
+                            type="select"
+                            value={formData.companySize}
+                            onChange={(value) => handleInputChange('companySize', value as string)}
+                            required
+                            error={errors.companySize}
+                            options={[
+                                { value: "startup", label: "Startup (1-50 employees)" },
+                                { value: "small", label: "Small (51-200 employees)" },
+                                { value: "medium", label: "Medium (201-1000 employees)" },
+                                { value: "large", label: "Large (1000+ employees)" },
+                                { value: "other", label: "Other" }
+                            ]}
+                            allowTextInput={true}
+                            textInputLabel="Please specify company size"
+                            textInputPlaceholder="Enter your company size"
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
+                        />
+
+                        <IntelligentFormField
+                            name="currentAIMaturity"
+                            label="Current AI Maturity Level"
+                            type="select"
+                            value={formData.currentAIMaturity}
+                            onChange={(value) => handleInputChange('currentAIMaturity', value as string)}
+                            required
+                            error={errors.currentAIMaturity}
+                            options={[
+                                { value: "none", label: "No AI implementation" },
+                                { value: "pilot", label: "Pilot projects" },
+                                { value: "production", label: "Production AI systems" },
+                                { value: "advanced", label: "Advanced AI operations" },
+                                { value: "other", label: "Other" }
+                            ]}
+                            allowTextInput={true}
+                            textInputLabel="Please specify AI maturity level"
+                            textInputPlaceholder="Enter your AI maturity level"
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
+                        />
+
+                        <IntelligentFormField
+                            name="businessGoal"
+                            label="Primary Business Goal"
+                            type="textarea"
+                            value={formData.businessGoal}
+                            onChange={(value) => handleInputChange('businessGoal', value as string)}
+                            error={errors.businessGoal}
+                            placeholder="e.g., Reduce infrastructure costs by 30%, Scale to handle 10x user growth, Improve system reliability and uptime"
+                            multiline={true}
+                            rows={3}
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
+                        />
+
+                        <IntelligentFormField
+                            name="geographicRegions"
+                            label="Geographic Regions (Select all that apply)"
+                            type="multiselect"
+                            value={formData.geographicRegions}
+                            onChange={(value) => handleInputChange('geographicRegions', value as string[])}
+                            options={[
+                                { value: "North America", label: "North America" },
+                                { value: "Europe", label: "Europe" },
+                                { value: "Asia Pacific", label: "Asia Pacific" },
+                                { value: "Latin America", label: "Latin America" },
+                                { value: "Middle East & Africa", label: "Middle East & Africa" },
+                                { value: "Global", label: "Global" },
+                                { value: "Other", label: "Other" }
+                            ]}
+                            allowTextInput={true}
+                            textInputLabel="Please specify other regions"
+                            textInputPlaceholder="Enter additional regions"
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
+                        />
 
                         <FormControl fullWidth>
                             <InputLabel>Customer Base Size</InputLabel>
@@ -1204,157 +1339,180 @@ function AssessmentPageInner() {
                         </Typography>
                         <ErrorSummary step={1} />
 
-                        <FormControl error={!!errors.currentCloudProvider}>
-                            <FormLabel>Current Cloud Providers (Select all that apply)</FormLabel>
-                            <FormGroup>
-                                {['AWS', 'Azure', 'Google Cloud', 'IBM Cloud', 'Alibaba Cloud', 'On-premises', 'Other'].map((provider) => (
-                                    <FormControlLabel
-                                        key={provider}
-                                        control={
-                                            <Checkbox
-                                                checked={formData.currentCloudProvider.includes(provider)}
-                                                onChange={(e) => handleArrayChange('currentCloudProvider', provider, e.target.checked)}
-                                            />
-                                        }
-                                        label={provider}
-                                    />
-                                ))}
-                            </FormGroup>
-                            {formData.currentCloudProvider.includes('Other') && (
-                                <TextField
-                                    fullWidth
-                                    label="Please specify other cloud provider"
-                                    value={formData.currentCloudProviderOther}
-                                    onChange={(e) => handleInputChange('currentCloudProviderOther', e.target.value)}
-                                    sx={{ mt: 2 }}
-                                    size="small"
-                                />
-                            )}
-                        </FormControl>
-
-                        <FormControl fullWidth>
-                            <FormLabel>Current Services (Select all that apply)</FormLabel>
-                            <FormGroup>
-                                {['Compute (VMs/Containers)', 'Storage', 'Databases', 'ML/AI Services', 'Analytics', 'Networking', 'Other'].map((service) => (
-                                    <FormControlLabel
-                                        key={service}
-                                        control={
-                                            <Checkbox
-                                                checked={formData.currentServices.includes(service)}
-                                                onChange={(e) => handleArrayChange('currentServices', service, e.target.checked)}
-                                            />
-                                        }
-                                        label={service}
-                                    />
-                                ))}
-                            </FormGroup>
-                            {formData.currentServices.includes('Other') && (
-                                <TextField
-                                    fullWidth
-                                    label="Please specify other services"
-                                    value={formData.currentServicesOther}
-                                    onChange={(e) => handleInputChange('currentServicesOther', e.target.value)}
-                                    sx={{ mt: 2 }}
-                                    size="small"
-                                />
-                            )}
-                        </FormControl>
-
-                        <FormControl fullWidth error={!!errors.monthlyBudget}>
-                            <InputLabel>Monthly Cloud Budget</InputLabel>
-                            <Select
-                                value={formData.monthlyBudget}
-                                onChange={(e) => handleInputChange('monthlyBudget', e.target.value)}
-                                label="Monthly Cloud Budget"
-                            >
-                                <MenuItem value="under-1k">Under $1,000</MenuItem>
-                                <MenuItem value="1k-5k">$1,000 - $5,000</MenuItem>
-                                <MenuItem value="5k-25k">$5,000 - $25,000</MenuItem>
-                                <MenuItem value="25k-100k">$25,000 - $100,000</MenuItem>
-                                <MenuItem value="over-100k">Over $100,000</MenuItem>
-                            </Select>
-                        </FormControl>
-
-                        <TextField
-                            fullWidth
-                            label="Technical Team Size"
-                            type="number"
-                            value={formData.technicalTeamSize}
-                            onChange={(e) => handleInputChange('technicalTeamSize', e.target.value)}
+                        <IntelligentFormField
+                            name="currentCloudProvider"
+                            label="Current Cloud Providers"
+                            type="multiselect"
+                            value={formData.currentCloudProvider}
+                            onChange={(value) => handleInputChange('currentCloudProvider', value as string[])}
+                            error={errors.currentCloudProvider}
+                            options={[
+                                { value: "AWS", label: "AWS" },
+                                { value: "Azure", label: "Azure" },
+                                { value: "Google Cloud", label: "Google Cloud" },
+                                { value: "IBM Cloud", label: "IBM Cloud" },
+                                { value: "Alibaba Cloud", label: "Alibaba Cloud" },
+                                { value: "On-premises", label: "On-premises" },
+                                { value: "Other", label: "Other" }
+                            ]}
+                            allowTextInput={true}
+                            textInputLabel="Please specify other cloud provider"
+                            textInputPlaceholder="Enter other cloud provider"
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
                         />
 
-                        <FormControl fullWidth>
-                            <InputLabel>Infrastructure Age</InputLabel>
-                            <Select
-                                value={formData.infrastructureAge}
-                                onChange={(e) => handleInputChange('infrastructureAge', e.target.value)}
-                                label="Infrastructure Age"
-                            >
-                                <MenuItem value="new">Less than 1 year</MenuItem>
-                                <MenuItem value="recent">1-3 years</MenuItem>
-                                <MenuItem value="established">3-5 years</MenuItem>
-                                <MenuItem value="legacy">5+ years</MenuItem>
-                            </Select>
-                        </FormControl>
+                        <IntelligentFormField
+                            name="currentServices"
+                            label="Current Services"
+                            type="multiselect"
+                            value={formData.currentServices}
+                            onChange={(value) => handleInputChange('currentServices', value as string[])}
+                            error={errors.currentServices}
+                            options={[
+                                { value: "Compute (VMs/Containers)", label: "Compute (VMs/Containers)" },
+                                { value: "Storage", label: "Storage" },
+                                { value: "Databases", label: "Databases" },
+                                { value: "ML/AI Services", label: "ML/AI Services" },
+                                { value: "Analytics", label: "Analytics" },
+                                { value: "Networking", label: "Networking" },
+                                { value: "Other", label: "Other" }
+                            ]}
+                            allowTextInput={true}
+                            textInputLabel="Please specify other services"
+                            textInputPlaceholder="Enter other services"
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
+                        />
 
-                        <FormControl fullWidth>
-                            <InputLabel>Current Architecture Pattern</InputLabel>
-                            <Select
-                                value={formData.currentArchitecture}
-                                onChange={(e) => handleInputChange('currentArchitecture', e.target.value)}
-                                label="Current Architecture Pattern"
-                            >
-                                <MenuItem value="monolithic">Monolithic</MenuItem>
-                                <MenuItem value="microservices">Microservices</MenuItem>
-                                <MenuItem value="serverless">Serverless</MenuItem>
-                                <MenuItem value="hybrid">Hybrid</MenuItem>
-                                <MenuItem value="soa">Service-Oriented Architecture (SOA)</MenuItem>
-                                <MenuItem value="other">Other</MenuItem>
-                            </Select>
-                        </FormControl>
+                        <IntelligentFormField
+                            name="monthlyBudget"
+                            label="Monthly Cloud Budget"
+                            type="select"
+                            value={formData.monthlyBudget}
+                            onChange={(value) => handleInputChange('monthlyBudget', value as string)}
+                            required
+                            error={errors.monthlyBudget}
+                            options={[
+                                { value: "under-1k", label: "Under $1,000" },
+                                { value: "1k-5k", label: "$1,000 - $5,000" },
+                                { value: "5k-25k", label: "$5,000 - $25,000" },
+                                { value: "25k-100k", label: "$25,000 - $100,000" },
+                                { value: "over-100k", label: "Over $100,000" }
+                            ]}
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
+                        />
 
-                        <FormControl>
-                            <FormLabel>Data Storage Solutions (Select all that apply)</FormLabel>
-                            <FormGroup>
-                                {['Relational databases (MySQL, PostgreSQL)', 'NoSQL databases (MongoDB, DynamoDB)', 'Data warehouses (Snowflake, BigQuery)', 'Object storage (S3, Blob)', 'File systems', 'Cache systems (Redis, Memcached)', 'Time-series databases', 'Graph databases', 'Other'].map((storage) => (
-                                    <FormControlLabel
-                                        key={storage}
-                                        control={
-                                            <Checkbox
-                                                checked={formData.dataStorageSolution.includes(storage)}
-                                                onChange={(e) => handleArrayChange('dataStorageSolution', storage, e.target.checked)}
-                                            />
-                                        }
-                                        label={storage}
-                                    />
-                                ))}
-                            </FormGroup>
-                            {formData.dataStorageSolution.includes('Other') && (
-                                <TextField
-                                    fullWidth
-                                    label="Please specify other data storage solutions"
-                                    value={formData.dataStorageSolutionOther || ''}
-                                    onChange={(e) => handleInputChange('dataStorageSolutionOther', e.target.value)}
-                                    margin="normal"
-                                />
-                            )}
-                        </FormControl>
+                        <IntelligentFormField
+                            name="technicalTeamSize"
+                            label="Technical Team Size"
+                            type="text"
+                            value={formData.technicalTeamSize}
+                            onChange={(value) => handleInputChange('technicalTeamSize', value as string)}
+                            placeholder="e.g., 5 developers, 2 DevOps engineers"
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
+                        />
 
-                        <FormControl fullWidth>
-                            <InputLabel>Network Setup</InputLabel>
-                            <Select
-                                value={formData.networkSetup}
-                                onChange={(e) => handleInputChange('networkSetup', e.target.value)}
-                                label="Network Setup"
-                            >
-                                <MenuItem value="public-cloud">Public cloud default</MenuItem>
-                                <MenuItem value="vpc">Virtual Private Cloud (VPC)</MenuItem>
-                                <MenuItem value="hybrid">Hybrid (on-premise + cloud)</MenuItem>
-                                <MenuItem value="multi-cloud">Multi-cloud</MenuItem>
-                                <MenuItem value="on-premise">On-premise only</MenuItem>
-                                <MenuItem value="edge">Edge computing</MenuItem>
-                            </Select>
-                        </FormControl>
+                        <IntelligentFormField
+                            name="infrastructureAge"
+                            label="Infrastructure Age"
+                            type="select"
+                            value={formData.infrastructureAge}
+                            onChange={(value) => handleInputChange('infrastructureAge', value as string)}
+                            error={errors.infrastructureAge}
+                            options={[
+                                { value: "new", label: "Less than 1 year" },
+                                { value: "recent", label: "1-3 years" },
+                                { value: "established", label: "3-5 years" },
+                                { value: "legacy", label: "5+ years" }
+                            ]}
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
+                        />
+
+                        <IntelligentFormField
+                            name="currentArchitecture"
+                            label="Current Architecture Pattern"
+                            type="select"
+                            value={formData.currentArchitecture}
+                            onChange={(value) => handleInputChange('currentArchitecture', value as string)}
+                            error={errors.currentArchitecture}
+                            options={[
+                                { value: "monolithic", label: "Monolithic" },
+                                { value: "microservices", label: "Microservices" },
+                                { value: "serverless", label: "Serverless" },
+                                { value: "hybrid", label: "Hybrid" },
+                                { value: "soa", label: "Service-Oriented Architecture (SOA)" },
+                                { value: "other", label: "Other" }
+                            ]}
+                            allowTextInput={true}
+                            textInputLabel="Please specify architecture pattern"
+                            textInputPlaceholder="Enter your architecture pattern"
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
+                        />
+
+                        <IntelligentFormField
+                            name="dataStorageSolution"
+                            label="Data Storage Solutions"
+                            type="multiselect"
+                            value={formData.dataStorageSolution}
+                            onChange={(value) => handleInputChange('dataStorageSolution', value as string[])}
+                            error={errors.dataStorageSolution}
+                            options={[
+                                { value: "Relational databases (MySQL, PostgreSQL)", label: "Relational databases (MySQL, PostgreSQL)" },
+                                { value: "NoSQL databases (MongoDB, DynamoDB)", label: "NoSQL databases (MongoDB, DynamoDB)" },
+                                { value: "Data warehouses (Snowflake, BigQuery)", label: "Data warehouses (Snowflake, BigQuery)" },
+                                { value: "Object storage (S3, Blob)", label: "Object storage (S3, Blob)" },
+                                { value: "File systems", label: "File systems" },
+                                { value: "Cache systems (Redis, Memcached)", label: "Cache systems (Redis, Memcached)" },
+                                { value: "Time-series databases", label: "Time-series databases" },
+                                { value: "Graph databases", label: "Graph databases" },
+                                { value: "Other", label: "Other" }
+                            ]}
+                            allowTextInput={true}
+                            textInputLabel="Please specify other data storage solutions"
+                            textInputPlaceholder="Enter other storage solutions"
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
+                        />
+
+                        <IntelligentFormField
+                            name="networkSetup"
+                            label="Network Setup"
+                            type="select"
+                            value={formData.networkSetup}
+                            onChange={(value) => handleInputChange('networkSetup', value as string)}
+                            error={errors.networkSetup}
+                            options={[
+                                { value: "public-cloud", label: "Public cloud default" },
+                                { value: "vpc", label: "Virtual Private Cloud (VPC)" },
+                                { value: "hybrid", label: "Hybrid (on-premise + cloud)" },
+                                { value: "multi-cloud", label: "Multi-cloud" },
+                                { value: "on-premise", label: "On-premise only" },
+                                { value: "edge", label: "Edge computing" }
+                            ]}
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
+                        />
 
                         <FormControl fullWidth>
                             <InputLabel>Disaster Recovery Setup</InputLabel>
@@ -1621,90 +1779,102 @@ function AssessmentPageInner() {
                         </Typography>
                         <ErrorSummary step={3} />
 
-                        <FormControl error={!!errors.aiUseCases}>
-                            <FormLabel>AI Use Cases (Select all that apply)</FormLabel>
-                            <FormGroup>
-                                {['Natural Language Processing', 'Computer Vision', 'Machine Learning Models', 'Predictive Analytics', 'Recommendation Systems', 'Fraud Detection', 'Chatbots/Virtual Assistants', 'Data Analytics', 'Automation', 'Other'].map((useCase) => (
-                                    <FormControlLabel
-                                        key={useCase}
-                                        control={
-                                            <Checkbox
-                                                checked={formData.aiUseCases.includes(useCase)}
-                                                onChange={(e) => handleArrayChange('aiUseCases', useCase, e.target.checked)}
-                                            />
-                                        }
-                                        label={useCase}
-                                    />
-                                ))}
-                            </FormGroup>
-                            {formData.aiUseCases.includes('Other') && (
-                                <TextField
-                                    fullWidth
-                                    label="Please specify other AI use cases"
-                                    value={formData.aiUseCasesOther}
-                                    onChange={(e) => handleInputChange('aiUseCasesOther', e.target.value)}
-                                    sx={{ mt: 2 }}
-                                    size="small"
-                                />
-                            )}
-                        </FormControl>
+                        <IntelligentFormField
+                            name="aiUseCases"
+                            label="AI Use Cases"
+                            type="multiselect"
+                            value={formData.aiUseCases}
+                            onChange={(value) => handleInputChange('aiUseCases', value as string[])}
+                            required
+                            error={errors.aiUseCases}
+                            options={[
+                                { value: "Natural Language Processing", label: "Natural Language Processing" },
+                                { value: "Computer Vision", label: "Computer Vision" },
+                                { value: "Machine Learning Models", label: "Machine Learning Models" },
+                                { value: "Predictive Analytics", label: "Predictive Analytics" },
+                                { value: "Recommendation Systems", label: "Recommendation Systems" },
+                                { value: "Fraud Detection", label: "Fraud Detection" },
+                                { value: "Chatbots/Virtual Assistants", label: "Chatbots/Virtual Assistants" },
+                                { value: "Data Analytics", label: "Data Analytics" },
+                                { value: "Automation", label: "Automation" },
+                                { value: "Other", label: "Other" }
+                            ]}
+                            allowTextInput={true}
+                            textInputLabel="Please specify other AI use cases"
+                            textInputPlaceholder="Enter other AI use cases"
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
+                        />
 
-                        <FormControl fullWidth error={!!errors.expectedDataVolume}>
-                            <InputLabel>Expected Data Volume</InputLabel>
-                            <Select
-                                value={formData.expectedDataVolume}
-                                onChange={(e) => handleInputChange('expectedDataVolume', e.target.value)}
-                                label="Expected Data Volume"
-                            >
-                                <MenuItem value="1TB">Up to 1TB</MenuItem>
-                                <MenuItem value="10TB">1TB - 10TB</MenuItem>
-                                <MenuItem value="100TB">10TB - 100TB</MenuItem>
-                                <MenuItem value="500TB">100TB - 500TB</MenuItem>
-                                <MenuItem value="1PB+">500TB - 1PB+</MenuItem>
-                            </Select>
-                        </FormControl>
+                        <IntelligentFormField
+                            name="expectedDataVolume"
+                            label="Expected Data Volume"
+                            type="select"
+                            value={formData.expectedDataVolume}
+                            onChange={(value) => handleInputChange('expectedDataVolume', value as string)}
+                            required
+                            error={errors.expectedDataVolume}
+                            options={[
+                                { value: "1TB", label: "Up to 1TB" },
+                                { value: "10TB", label: "1TB - 10TB" },
+                                { value: "100TB", label: "10TB - 100TB" },
+                                { value: "500TB", label: "100TB - 500TB" },
+                                { value: "1PB+", label: "500TB - 1PB+" }
+                            ]}
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
+                        />
 
-                        <FormControl>
-                            <FormLabel>Data Types (Select all that apply)</FormLabel>
-                            <FormGroup>
-                                {['Text', 'Images', 'Videos', 'Audio', 'Time Series', 'User Behavior', 'Financial Data', 'IoT Sensor Data', 'Geospatial Data', 'Other'].map((dataType) => (
-                                    <FormControlLabel
-                                        key={dataType}
-                                        control={
-                                            <Checkbox
-                                                checked={formData.dataTypes.includes(dataType)}
-                                                onChange={(e) => handleArrayChange('dataTypes', dataType, e.target.checked)}
-                                            />
-                                        }
-                                        label={dataType}
-                                    />
-                                ))}
-                            </FormGroup>
-                            {formData.dataTypes.includes('Other') && (
-                                <TextField
-                                    fullWidth
-                                    label="Please specify other data types"
-                                    value={formData.dataTypesOther}
-                                    onChange={(e) => handleInputChange('dataTypesOther', e.target.value)}
-                                    sx={{ mt: 2 }}
-                                    size="small"
-                                />
-                            )}
-                        </FormControl>
+                        <IntelligentFormField
+                            name="dataTypes"
+                            label="Data Types"
+                            type="multiselect"
+                            value={formData.dataTypes}
+                            onChange={(value) => handleInputChange('dataTypes', value as string[])}
+                            error={errors.dataTypes}
+                            options={[
+                                { value: "Text", label: "Text" },
+                                { value: "Images", label: "Images" },
+                                { value: "Videos", label: "Videos" },
+                                { value: "Audio", label: "Audio" },
+                                { value: "Time Series", label: "Time Series" },
+                                { value: "User Behavior", label: "User Behavior" },
+                                { value: "Financial Data", label: "Financial Data" },
+                                { value: "IoT Sensor Data", label: "IoT Sensor Data" },
+                                { value: "Geospatial Data", label: "Geospatial Data" },
+                                { value: "Other", label: "Other" }
+                            ]}
+                            allowTextInput={true}
+                            textInputLabel="Please specify other data types"
+                            textInputPlaceholder="Enter other data types"
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
+                        />
 
-                        <FormControl fullWidth>
-                            <InputLabel>Real-time Requirements</InputLabel>
-                            <Select
-                                value={formData.realTimeRequirements}
-                                onChange={(e) => handleInputChange('realTimeRequirements', e.target.value)}
-                                label="Real-time Requirements"
-                            >
-                                <MenuItem value="batch">Batch processing only</MenuItem>
-                                <MenuItem value="near_real_time">Near real-time (seconds)</MenuItem>
-                                <MenuItem value="real_time">Real-time (milliseconds)</MenuItem>
-                                <MenuItem value="ultra_low_latency">Ultra low latency (microseconds)</MenuItem>
-                            </Select>
-                        </FormControl>
+                        <IntelligentFormField
+                            name="realTimeRequirements"
+                            label="Real-time Requirements"
+                            type="select"
+                            value={formData.realTimeRequirements}
+                            onChange={(value) => handleInputChange('realTimeRequirements', value as string)}
+                            error={errors.realTimeRequirements}
+                            options={[
+                                { value: "batch", label: "Batch processing only" },
+                                { value: "near_real_time", label: "Near real-time (seconds)" },
+                                { value: "real_time", label: "Real-time (milliseconds)" },
+                                { value: "ultra_low_latency", label: "Ultra low latency (microseconds)" }
+                            ]}
+                            formContext={formData}
+                            onGetSmartDefaults={getSmartDefaults}
+                            onGetSuggestions={getSuggestions}
+                            onGetContextualHelp={getContextualHelp}
+                        />
 
                         <FormControl>
                             <FormLabel>ML Model Types (Select all that apply)</FormLabel>

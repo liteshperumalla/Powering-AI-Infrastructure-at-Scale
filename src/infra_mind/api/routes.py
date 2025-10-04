@@ -6,7 +6,7 @@ Supports API versioning for backward compatibility and evolution.
 """
 
 from fastapi import APIRouter, HTTPException, status
-from .endpoints import auth, assessments, recommendations, reports, monitoring, webhooks, admin, testing, resilience, compliance, integrations, compliance_dashboard, business_tools, performance_monitoring, forms, cloud_services, chat, advanced_analytics, scenarios, validation, dashboard, experiments, feedback, quality, vendor_lockin, rollback, budget_forecasting, change_impact, gitops, approval_workflows
+from .endpoints import auth, assessments, recommendations, reports, monitoring, webhooks, admin, testing, resilience, compliance, integrations, compliance_dashboard, business_tools, performance_monitoring, forms, cloud_services, chat, advanced_analytics, scenarios, validation, dashboard, experiments, feedback, quality, vendor_lockin, rollback, budget_forecasting, change_impact, gitops, approval_workflows, executive, assessment_features
 from .documentation import get_api_integration_guide
 
 # Create versioned API routers
@@ -302,6 +302,25 @@ api_v2_router.include_router(
     approval_workflows.router,
     prefix="/approval-workflows",
     tags=["Approval Workflows"]
+)
+
+api_v2_router.include_router(
+    executive.router,
+    prefix="/executive",
+    tags=["Executive Dashboard"]
+)
+
+# Assessment Features - Unified additional features endpoint
+api_v1_router.include_router(
+    assessment_features.router,
+    prefix="/features",
+    tags=["Additional Features"]
+)
+
+api_v2_router.include_router(
+    assessment_features.router,
+    prefix="/features",
+    tags=["Additional Features"]
 )
 
 # Documentation endpoints are now included directly in main api_router

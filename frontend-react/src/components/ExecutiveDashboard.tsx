@@ -85,7 +85,11 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-const ExecutiveDashboard: React.FC = () => {
+interface ExecutiveDashboardProps {
+  assessmentId?: string;
+}
+
+const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ assessmentId }) => {
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,21 +118,57 @@ const ExecutiveDashboard: React.FC = () => {
   const loadExecutiveData = async () => {
     setLoading(true);
     try {
-      const [
-        metricsData,
-        kpiData,
-        summaryData,
-        initiativesData,
-        riskData,
-        businessUnitsData
-      ] = await Promise.all([
-        executiveService.getExecutiveMetrics('30d'),
-        executiveService.getKPIDashboard(),
-        executiveService.getExecutiveSummary('monthly'),
-        executiveService.getStrategicInitiatives(),
-        executiveService.getRiskDashboard().then(r => r.top_risks),
-        executiveService.getBusinessUnits(),
-      ]);
+      // Load data with individual error handling instead of Promise.all
+      let metricsData: ExecutiveMetric[] = [];
+      let kpiData: KPICard[] = [];
+      let summaryData: any = null;
+      let initiativesData: StrategicInitiative[] = [];
+      let riskData: RiskFactor[] = [];
+      let businessUnitsData: BusinessUnit[] = [];
+
+      // Load each data source individually with try-catch
+      try {
+        metricsData = await executiveService.getExecutiveMetrics('30d');
+      } catch (error) {
+        console.warn('Failed to load executive metrics, using fallback data:', error);
+        metricsData = [];
+      }
+
+      try {
+        kpiData = await executiveService.getKPIDashboard();
+      } catch (error) {
+        console.warn('Failed to load KPI dashboard, using fallback data:', error);
+        kpiData = [];
+      }
+
+      try {
+        summaryData = await executiveService.getExecutiveSummary('monthly');
+      } catch (error) {
+        console.warn('Failed to load executive summary, using fallback data:', error);
+        summaryData = null;
+      }
+
+      try {
+        initiativesData = await executiveService.getStrategicInitiatives();
+      } catch (error) {
+        console.warn('Failed to load strategic initiatives, using fallback data:', error);
+        initiativesData = [];
+      }
+
+      try {
+        const riskDashboard = await executiveService.getRiskDashboard();
+        riskData = riskDashboard.top_risks || [];
+      } catch (error) {
+        console.warn('Failed to load risk dashboard, using fallback data:', error);
+        riskData = [];
+      }
+
+      try {
+        businessUnitsData = await executiveService.getBusinessUnits();
+      } catch (error) {
+        console.warn('Failed to load business units, using fallback data:', error);
+        businessUnitsData = [];
+      }
 
       setExecutiveMetrics(metricsData);
       setKpiCards(kpiData);
@@ -610,6 +650,17 @@ const ExecutiveDashboard: React.FC = () => {
       </Grid>
     </Grid>
   );
+
+  if (!assessmentId) {
+    const AssessmentSelector = require('./AssessmentSelector').default;
+    return (
+      <AssessmentSelector
+        redirectPath="/executive-dashboard"
+        title="Select Assessment for Executive Dashboard"
+        description="Choose an assessment to view executive dashboard data"
+      />
+    );
+  }
 
   return (
     <Box sx={{ p: 3 }}>

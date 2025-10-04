@@ -30,7 +30,9 @@ import SecurityIcon from '@mui/icons-material/Security';
 import MonetizationOnIcon from '@mui/icons-material/MonetizationOn';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import InfoIcon from '@mui/icons-material/Info';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import { apiClient } from '../../services/api';
+import { useRecommendationsData } from '../../hooks/useFreshData';
 
 interface Recommendation {
   _id: string;
@@ -73,74 +75,86 @@ function RecommendationsPageContent() {
 
   const assessmentId = searchParams.get('assessment_id');
 
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        let finalAssessmentId = assessmentId;
+  const fetchData = async () => {
+    try {
+      let finalAssessmentId = assessmentId;
 
-        // If no assessment ID provided, try to get the first available assessment
-        if (!assessmentId) {
-          console.log('🔍 No assessment ID provided, fetching available assessments...');
-          try {
-            const assessmentsResponse = await apiClient.getAssessments();
-            const availableAssessments = assessmentsResponse?.assessments || [];
+      // If no assessment ID provided, try to get the first available assessment
+      if (!assessmentId) {
+        console.log('🔍 No assessment ID provided, fetching available assessments...');
+        try {
+          const assessmentsResponse = await apiClient.getAssessments();
+          const availableAssessments = assessmentsResponse?.assessments || [];
 
-            if (availableAssessments.length > 0) {
-              // Use the first completed assessment with recommendations, or the first one
-              const completedAssessment = availableAssessments.find(a =>
-                a.status === 'completed' && a.recommendations_generated
-              ) || availableAssessments[0];
+          if (availableAssessments.length > 0) {
+            // Use the first completed assessment with recommendations, or the first one
+            const completedAssessment = availableAssessments.find(a =>
+              a.status === 'completed' && a.recommendations_generated
+            ) || availableAssessments[0];
 
-              finalAssessmentId = completedAssessment.id;
-              console.log('✅ Auto-selected assessment:', finalAssessmentId);
+            finalAssessmentId = completedAssessment.id;
+            console.log('✅ Auto-selected assessment:', finalAssessmentId);
 
-              // Update URL to reflect the selected assessment
-              router.replace(`/recommendations?assessment_id=${finalAssessmentId}`);
-            } else {
-              setError('No assessments available. Please create an assessment first.');
-              setLoading(false);
-              return;
-            }
-          } catch (err) {
-            console.error('❌ Failed to fetch assessments:', err);
-            setError('Assessment ID is required');
+            // Update URL to reflect the selected assessment
+            router.replace(`/recommendations?assessment_id=${finalAssessmentId}`);
+          } else {
+            setError('No assessments available. Please create an assessment first.');
             setLoading(false);
             return;
           }
-        }
-
-        if (!finalAssessmentId) {
+        } catch (err) {
+          console.error('❌ Failed to fetch assessments:', err);
           setError('Assessment ID is required');
           setLoading(false);
           return;
         }
-
-        setLoading(true);
-        setError(null);
-
-        console.log('🔍 Fetching recommendations for assessment:', finalAssessmentId);
-
-        // Fetch both assessment info and recommendations
-        const [assessmentData, recommendationsData] = await Promise.all([
-          apiClient.getAssessment(finalAssessmentId),
-          apiClient.getRecommendations(finalAssessmentId)
-        ]);
-
-        console.log('📊 Assessment data:', assessmentData);
-        console.log('💡 Recommendations data:', recommendationsData);
-
-        setAssessment(assessmentData);
-        // Handle different API response formats
-        const recs = recommendationsData?.recommendations || recommendationsData || [];
-        setRecommendations(Array.isArray(recs) ? recs : []);
-      } catch (err: any) {
-        console.error('❌ Error fetching data:', err);
-        setError(err.message || 'Failed to load recommendations');
-      } finally {
-        setLoading(false);
       }
-    };
 
+      if (!finalAssessmentId) {
+        setError('Assessment ID is required');
+        setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+
+      console.log('🔍 Fetching recommendations for assessment:', finalAssessmentId);
+
+      // Fetch both assessment info and recommendations
+      const [assessmentData, recommendationsData] = await Promise.all([
+        apiClient.getAssessment(finalAssessmentId),
+        apiClient.getRecommendations(finalAssessmentId)
+      ]);
+
+      console.log('📊 Assessment data:', assessmentData);
+      console.log('💡 Recommendations data:', recommendationsData);
+
+      setAssessment(assessmentData);
+      // Handle different API response formats
+      const recs = recommendationsData?.recommendations || recommendationsData || [];
+      setRecommendations(Array.isArray(recs) ? recs : []);
+    } catch (err: any) {
+      console.error('❌ Error fetching data:', err);
+      setError(err.message || 'Failed to load recommendations');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Auto-refresh recommendations data every 15 seconds
+  const { forceRefresh: refreshRecommendations, isStale, lastRefresh } = useRecommendationsData(assessmentId || '', {
+    autoRefresh: true,
+    refreshInterval: 15000, // 15 seconds
+    onRefresh: () => {
+      console.log('🔄 Auto-refreshing recommendations data...');
+      if (assessmentId) {
+        fetchData();
+      }
+    }
+  });
+
+  useEffect(() => {
     fetchData();
   }, [assessmentId]);
 
@@ -267,14 +281,32 @@ function RecommendationsPageContent() {
           Back to Assessment
         </Button>
         
-        <Typography variant="h4" gutterBottom>
-          <RecommendIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
-          Recommendations
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="h4" gutterBottom>
+            <RecommendIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+            Recommendations
+          </Typography>
+          <Tooltip title={`Last updated: ${new Date(lastRefresh).toLocaleTimeString()}`}>
+            <IconButton
+              onClick={refreshRecommendations}
+              color="primary"
+              size="large"
+            >
+              <RefreshIcon />
+            </IconButton>
+          </Tooltip>
+        </Box>
         
         {assessment && (
           <Typography variant="h6" color="text.secondary" gutterBottom>
-            For {assessment.title} - {assessment.company_name || 'Unknown Company'}
+            For {assessment.title} - {assessment.company_name || 'Unknown Company'} •
+            <Chip
+              label={isStale ? "Data may be outdated" : "Live data"}
+              size="small"
+              color={isStale ? "warning" : "success"}
+              variant="outlined"
+              sx={{ ml: 1 }}
+            />
           </Typography>
         )}
 
@@ -371,68 +403,67 @@ function RecommendationsPageContent() {
 
                   {/* Key Metrics */}
                   <Grid container spacing={2} sx={{ mb: 3 }}>
-                    {rec.estimated_cost_savings > 0 && (
-                      <Grid item xs={12} sm={6} md={3} key={`cost-savings-${rec._id}`}>
-                        <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'success.light', color: 'success.contrastText' }}>
-                          <MonetizationOnIcon sx={{ mb: 1 }} />
-                          <Typography variant="h6">
-                            ${rec.estimated_cost_savings.toLocaleString()}
-                          </Typography>
-                          <Typography variant="caption">
-                            Estimated Savings
-                          </Typography>
-                        </Paper>
-                      </Grid>
-                    )}
-
-                    <Grid item xs={12} sm={6} md={3} key={`implementation-effort-${rec._id}`}>
-                      <Paper sx={{ p: 2, textAlign: 'center' }}>
-                        <TrendingUpIcon sx={{ mb: 1 }} />
-                        <Typography variant="h6">
-                          {rec.implementation_effort}
-                        </Typography>
-                        <Typography variant="caption">
-                          Implementation Effort
-                        </Typography>
-                      </Paper>
-                    </Grid>
-
-                    {rec.estimated_implementation_time && (
-                      <Grid item xs={12} sm={6} md={3} key={`timeline-${rec._id}`}>
+                    {[
+                      rec.estimated_cost_savings > 0 && (
+                        <Grid item xs={12} sm={6} md={3} key={`cost-savings-${rec._id}`}>
+                          <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'success.light', color: 'success.contrastText' }}>
+                            <MonetizationOnIcon sx={{ mb: 1 }} />
+                            <Typography variant="h6">
+                              ${rec.estimated_cost_savings.toLocaleString()}
+                            </Typography>
+                            <Typography variant="caption">
+                              Estimated Savings
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                      ),
+                      <Grid item xs={12} sm={6} md={3} key={`implementation-effort-${rec._id}`}>
                         <Paper sx={{ p: 2, textAlign: 'center' }}>
+                          <TrendingUpIcon sx={{ mb: 1 }} />
                           <Typography variant="h6">
-                            {rec.estimated_implementation_time}
+                            {rec.implementation_effort}
                           </Typography>
                           <Typography variant="caption">
-                            Timeline
+                            Implementation Effort
                           </Typography>
                         </Paper>
-                      </Grid>
-                    )}
-
-                    {rec.cloud_provider && (
-                      <Grid item xs={12} sm={6} md={3} key={`cloud-provider-${rec._id}`}>
-                        <Paper sx={{ p: 2, textAlign: 'center' }}>
-                          <CloudIcon sx={{ mb: 1 }} />
-                          <Typography variant="h6">
-                            {rec.cloud_provider.toUpperCase()}
-                          </Typography>
-                          <Typography variant="caption">
-                            Cloud Provider
-                          </Typography>
-                        </Paper>
-                      </Grid>
-                    )}
+                      </Grid>,
+                      rec.estimated_implementation_time && (
+                        <Grid item xs={12} sm={6} md={3} key={`timeline-${rec._id}`}>
+                          <Paper sx={{ p: 2, textAlign: 'center' }}>
+                            <Typography variant="h6">
+                              {rec.estimated_implementation_time}
+                            </Typography>
+                            <Typography variant="caption">
+                              Timeline
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                      ),
+                      rec.cloud_provider && (
+                        <Grid item xs={12} sm={6} md={3} key={`cloud-provider-${rec._id}`}>
+                          <Paper sx={{ p: 2, textAlign: 'center' }}>
+                            <CloudIcon sx={{ mb: 1 }} />
+                            <Typography variant="h6">
+                              {rec.cloud_provider.toUpperCase()}
+                            </Typography>
+                            <Typography variant="caption">
+                              Cloud Provider
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                      )
+                    ].filter(Boolean)}
                   </Grid>
 
                   {/* Benefits */}
-                  {rec.benefits && rec.benefits.length > 0 && (
+                  {Array.isArray(rec.benefits) && rec.benefits.length > 0 && (
                     <Box sx={{ mb: 3 }}>
                       <Typography variant="subtitle2" gutterBottom>
                         Key Benefits:
                       </Typography>
                       <Stack spacing={1}>
-                        {rec.benefits.map((benefit, idx) => (
+                        {(rec.benefits || []).map((benefit, idx) => (
                           <Typography key={`benefit-${rec._id}-${idx}`} variant="body2" sx={{ display: 'flex', alignItems: 'center' }}>
                             • {benefit}
                           </Typography>
@@ -442,13 +473,13 @@ function RecommendationsPageContent() {
                   )}
 
                   {/* Implementation Steps */}
-                  {rec.implementation_steps && rec.implementation_steps.length > 0 && (
+                  {Array.isArray(rec.implementation_steps) && rec.implementation_steps.length > 0 && (
                     <Box sx={{ mb: 3 }}>
                       <Typography variant="subtitle2" gutterBottom>
                         Implementation Steps:
                       </Typography>
                       <Stack spacing={1}>
-                        {rec.implementation_steps.map((step, idx) => (
+                        {(rec.implementation_steps || []).map((step, idx) => (
                           <Typography key={`step-${rec._id}-${idx}`} variant="body2" sx={{ display: 'flex', alignItems: 'flex-start' }}>
                             {idx + 1}. {step}
                           </Typography>
@@ -458,13 +489,13 @@ function RecommendationsPageContent() {
                   )}
 
                   {/* Risks */}
-                  {rec.risks && rec.risks.length > 0 && (
+                  {Array.isArray(rec.risks) && rec.risks.length > 0 && (
                     <Box>
                       <Typography variant="subtitle2" gutterBottom color="error">
                         Potential Risks:
                       </Typography>
                       <Stack spacing={1}>
-                        {rec.risks.map((risk, idx) => (
+                        {(rec.risks || []).map((risk, idx) => (
                           <Typography key={`risk-${rec._id}-${idx}`} variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
                             ⚠️ {risk}
                           </Typography>

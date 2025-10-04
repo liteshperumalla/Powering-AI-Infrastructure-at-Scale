@@ -25,9 +25,16 @@ export default function ProtectedRoute({
     useEffect(() => {
         console.log('ProtectedRoute: initializeAuth effect', { isAuthenticated, user: !!user });
         const initializeAuth = async () => {
-            // Check for stored token
-            const storedToken = localStorage.getItem('auth_token');
+            // Check for stored token in all possible locations
+            const storedToken = localStorage.getItem('auth_token') ||
+                              localStorage.getItem('token') ||
+                              localStorage.getItem('access_token');
             console.log('ProtectedRoute: storedToken exists:', !!storedToken);
+            console.log('ProtectedRoute: checking token sources:', {
+                auth_token: !!localStorage.getItem('auth_token'),
+                token: !!localStorage.getItem('token'),
+                access_token: !!localStorage.getItem('access_token')
+            });
 
             if (storedToken && !isAuthenticated) {
                 // Set token and fetch user data
@@ -38,8 +45,10 @@ export default function ProtectedRoute({
                     console.log('ProtectedRoute: getCurrentUser success');
                 } catch (error) {
                     console.error('ProtectedRoute: getCurrentUser failed:', error);
-                    // Token is invalid, remove it
+                    // Token is invalid, remove all possible tokens
                     localStorage.removeItem('auth_token');
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('access_token');
                     dispatch(setToken(null));
                 }
             }

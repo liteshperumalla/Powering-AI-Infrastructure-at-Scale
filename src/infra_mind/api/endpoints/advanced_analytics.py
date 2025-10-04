@@ -17,6 +17,7 @@ from ...models.user import User
 from ...models.assessment import Assessment
 from ...models.recommendation import Recommendation
 from ...models.report import Report
+from ...schemas.base import AssessmentStatus
 from ...core.database import get_database
 from ...services.security_audit import SecurityAuditService
 from ...services.iac_generator import IaCGeneratorService, IaCPlatform, CloudProvider
@@ -85,9 +86,31 @@ async def get_advanced_analytics_dashboard(
     - Predictive modeling for capacity planning
     """
     try:
-        # Get user's assessments for analytics
-        user_assessments = await Assessment.find({"user_id": str(current_user.id)}).to_list()
-        
+        # Calculate date range based on timeframe
+        from datetime import timedelta
+        now = datetime.utcnow()
+
+        # Map timeframe enum to days
+        timeframe_days = {
+            AnalyticsTimeframe.HOUR: 1 / 24,  # 1 hour
+            AnalyticsTimeframe.DAY: 1,  # 24 hours
+            AnalyticsTimeframe.WEEK: 7,
+            AnalyticsTimeframe.MONTH: 30,
+            AnalyticsTimeframe.QUARTER: 90
+        }
+
+        days = timeframe_days.get(timeframe, 7)  # Default to 7 days
+        start_date = now - timedelta(days=days)
+
+        # Get user's assessments for analytics within the timeframe
+        user_assessments = await Assessment.find({
+            "user_id": str(current_user.id),
+            "completed_at": {"$gte": start_date}  # Filter by completion date within timeframe
+        }).to_list()
+
+        # Filter to only completed assessments for meaningful analytics
+        completed_assessments = [a for a in user_assessments if a.status == AssessmentStatus.COMPLETED]
+
         if not user_assessments:
             # Return empty dashboard structure but with real schema
             return {
@@ -110,26 +133,49 @@ async def get_advanced_analytics_dashboard(
                 "predictive_insights": {"cost_predictions": {}, "capacity_planning": {}, "optimization_predictions": {}},
                 "optimization_opportunities": []
             }
+
+        if not completed_assessments:
+            # Return empty analytics for draft assessments
+            return {
+                "timestamp": datetime.utcnow().isoformat(),
+                "timeframe": timeframe,
+                "user_id": str(current_user.id),
+                "message": f"Complete your assessments ({len(user_assessments)} draft{'s' if len(user_assessments) != 1 else ''}) to see detailed analytics",
+                "analytics": {
+                    "cost_modeling": {"current_analysis": {"total_monthly_cost": 0, "assessments_analyzed": len(user_assessments)}, "predictions": []},
+                    "scaling_simulations": {"simulations": [], "global_recommendations": []},
+                    "performance_benchmarks": {"benchmarks": {}, "recommendations": []},
+                    "multi_cloud_analysis": {"global_strategy": {}, "assessment_strategies": []},
+                    "security_analytics": {"global_security": {}, "assessment_security": []},
+                    "recommendation_trends": {}
+                },
+                "visualizations": {
+                    "d3js_charts": {},
+                    "interactive_dashboards": {}
+                },
+                "predictive_insights": {"cost_predictions": {}, "capacity_planning": {}, "optimization_predictions": {}},
+                "optimization_opportunities": []
+            }
         
-        # Generate comprehensive analytics
+        # Generate comprehensive analytics using only completed assessments
         dashboard_data = {
             "timestamp": datetime.utcnow().isoformat(),
             "timeframe": timeframe,
             "user_id": str(current_user.id),
             "analytics": {
-                "cost_modeling": await asyncio.wait_for(_generate_predictive_cost_modeling(user_assessments, timeframe), timeout=30),
-                "scaling_simulations": await asyncio.wait_for(_generate_infrastructure_scaling_simulations(user_assessments), timeout=30),
-                "performance_benchmarks": await asyncio.wait_for(_generate_performance_benchmarking(user_assessments), timeout=30),
-                "multi_cloud_analysis": await asyncio.wait_for(_generate_multi_cloud_analysis(user_assessments), timeout=30),
-                "security_analytics": await asyncio.wait_for(_generate_security_analytics(user_assessments), timeout=30),
-                "recommendation_trends": await asyncio.wait_for(_generate_recommendation_trends(user_assessments, timeframe), timeout=30)
+                "cost_modeling": await asyncio.wait_for(_generate_predictive_cost_modeling(completed_assessments, timeframe), timeout=30),
+                "scaling_simulations": await asyncio.wait_for(_generate_infrastructure_scaling_simulations(completed_assessments), timeout=30),
+                "performance_benchmarks": await asyncio.wait_for(_generate_performance_benchmarking(completed_assessments), timeout=30),
+                "multi_cloud_analysis": await asyncio.wait_for(_generate_multi_cloud_analysis(completed_assessments), timeout=30),
+                "security_analytics": await asyncio.wait_for(_generate_security_analytics(completed_assessments), timeout=30),
+                "recommendation_trends": await asyncio.wait_for(_generate_recommendation_trends(completed_assessments, timeframe), timeout=30)
             },
             "visualizations": {
-                "d3js_charts": await asyncio.wait_for(_generate_d3js_visualizations(user_assessments, timeframe), timeout=20),
-                "interactive_dashboards": await asyncio.wait_for(_generate_interactive_dashboards(user_assessments), timeout=20)
+                "d3js_charts": await asyncio.wait_for(_generate_d3js_visualizations(completed_assessments, timeframe), timeout=20),
+                "interactive_dashboards": await asyncio.wait_for(_generate_interactive_dashboards(completed_assessments), timeout=20)
             },
-            "predictive_insights": await asyncio.wait_for(_generate_predictive_insights(user_assessments), timeout=30),
-            "optimization_opportunities": await asyncio.wait_for(_identify_optimization_opportunities(user_assessments), timeout=30)
+            "predictive_insights": await asyncio.wait_for(_generate_predictive_insights(completed_assessments), timeout=30),
+            "optimization_opportunities": await asyncio.wait_for(_identify_optimization_opportunities(completed_assessments), timeout=30)
         }
         
         return dashboard_data

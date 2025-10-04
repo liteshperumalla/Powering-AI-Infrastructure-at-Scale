@@ -147,14 +147,26 @@ class DatabaseOptimizer:
             return created_indexes
             
         except Exception as e:
-            logger.error(f"Failed to create indexes: {str(e)}")
-            self.optimization_log.append({
-                "timestamp": datetime.utcnow(),
-                "action": "create_indexes",
-                "status": "error",
-                "error": str(e)
-            })
-            raise
+            # Check if it's an index conflict error (acceptable in production)
+            error_str = str(e)
+            if "IndexOptionsConflict" in error_str or "IndexAlreadyExists" in error_str:
+                logger.debug(f"Index conflicts detected (acceptable): {error_str}")
+                self.optimization_log.append({
+                    "timestamp": datetime.utcnow(),
+                    "action": "create_indexes",
+                    "status": "warning",
+                    "message": "Some indexes already exist with different options"
+                })
+                return created_indexes
+            else:
+                logger.error(f"Failed to create indexes: {str(e)}")
+                self.optimization_log.append({
+                    "timestamp": datetime.utcnow(),
+                    "action": "create_indexes",
+                    "status": "error",
+                    "error": str(e)
+                })
+                raise
     
     async def analyze_slow_queries(self, duration_minutes: int = 60) -> Dict[str, Any]:
         """Analyze slow queries from the database profiler."""

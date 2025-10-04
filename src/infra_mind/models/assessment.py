@@ -75,6 +75,16 @@ class Assessment(Document):
         description="Current progress state"
     )
     
+    # Draft data for in-progress assessments
+    draft_data: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Raw form data for draft assessments"
+    )
+    current_step: int = Field(
+        default=0,
+        description="Current step in the assessment form (0-indexed)"
+    )
+
     # Results tracking
     recommendations_generated: bool = Field(
         default=False,
@@ -143,11 +153,15 @@ class Assessment(Document):
         self.progress["progress_percentage"] = percentage
         self.progress["current_step"] = current_step
         
-        # Auto-update status based on progress
-        if percentage >= 100.0:
-            self.status = AssessmentStatus.COMPLETED
-            self.completed_at = datetime.utcnow()
-        elif percentage > 0.0:
+        # Auto-update status based on progress - but only if we're not already completed
+        if percentage >= 100.0 and self.status != AssessmentStatus.COMPLETED:
+            # Only auto-complete if all required sections are filled
+            if (self.business_requirements and
+                self.technical_requirements and
+                self.current_infrastructure):
+                self.status = AssessmentStatus.COMPLETED
+                self.completed_at = datetime.utcnow()
+        elif percentage > 0.0 and self.status == AssessmentStatus.DRAFT:
             self.status = AssessmentStatus.IN_PROGRESS
             if not self.started_at:
                 self.started_at = datetime.utcnow()

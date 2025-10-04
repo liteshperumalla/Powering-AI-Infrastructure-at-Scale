@@ -128,7 +128,7 @@ def _get_unified_client() -> UnifiedCloudClient:
             ibm_api_key=os.getenv('INFRA_MIND_IBM_API_KEY'),
             ibm_account_id=os.getenv('INFRA_MIND_IBM_ACCOUNT_ID')
         )
-        logger.info("Created singleton UnifiedCloudClient")
+        logger.info(f"Created singleton UnifiedCloudClient with {len(_unified_client.clients)} clients: {list(_unified_client.clients.keys())}")
     return _unified_client
 
 
@@ -165,9 +165,12 @@ async def _get_cached_or_fetch_services(
     if provider and provider in provider_mapping:
         providers_to_query = [provider_mapping[provider]]
     else:
-        # Only query available providers
-        providers_to_query = [p for p in provider_mapping.values() if p in [k for k in unified_client.clients.keys()]]
-    
+        # Query all providers when no specific provider requested
+        # The individual client methods will handle missing credentials gracefully
+        providers_to_query = list(provider_mapping.values())
+
+    logger.info(f"Providers to query: {providers_to_query}")
+
     all_services = []
     
     # Query services with optimized concurrent execution and shorter timeouts
@@ -176,27 +179,27 @@ async def _get_cached_or_fetch_services(
         try:
             if service_category == BaseServiceCategory.COMPUTE:
                 response = await asyncio.wait_for(
-                    unified_client.get_compute_services(base_provider), timeout=3.0
+                    unified_client.get_compute_services(base_provider), timeout=1.0
                 )
             elif service_category == BaseServiceCategory.STORAGE:
                 response = await asyncio.wait_for(
-                    unified_client.get_storage_services(base_provider), timeout=3.0
+                    unified_client.get_storage_services(base_provider), timeout=1.0
                 )
             elif service_category == BaseServiceCategory.DATABASE:
                 response = await asyncio.wait_for(
-                    unified_client.get_database_services(base_provider), timeout=3.0
+                    unified_client.get_database_services(base_provider), timeout=1.0
                 )
             elif service_category == BaseServiceCategory.MACHINE_LEARNING:
                 response = await asyncio.wait_for(
-                    unified_client.get_ai_services(base_provider), timeout=3.0
+                    unified_client.get_ai_services(base_provider), timeout=1.0
                 )
             elif service_category == BaseServiceCategory.ANALYTICS:
                 response = await asyncio.wait_for(
-                    unified_client.get_analytics_services(base_provider), timeout=3.0
+                    unified_client.get_analytics_services(base_provider), timeout=1.0
                 )
             elif service_category == BaseServiceCategory.MONITORING:
                 response = await asyncio.wait_for(
-                    unified_client.get_management_services(base_provider), timeout=3.0
+                    unified_client.get_management_services(base_provider), timeout=1.0
                 )
             else:
                 return []
@@ -278,8 +281,9 @@ async def _get_cached_or_fetch_services(
             tasks.append(query_with_context())
     
     try:
-        # Overall timeout reduced to 8 seconds
-        results = await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=8.0)
+        # Overall timeout - allow more time when querying multiple providers
+        timeout = 5.0 if provider else 10.0
+        results = await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=timeout)
         
         for result in results:
             if isinstance(result, list):

@@ -37,19 +37,24 @@ export function useAssessmentPersistence() {
 
         try {
             setIsLoading(true);
+            console.log('💾 Saving draft - assessmentId:', assessmentId);
+            console.log('💾 Form data to save:', formData);
+            console.log('💾 Current step:', currentStep);
 
             // Save to localStorage for immediate persistence
             localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
-            
+
             // Save to API for cross-device persistence
             if (assessmentId) {
-                // Update existing draft assessment
-                await apiClient.updateAssessment(assessmentId, {
+                console.log('💾 Updating existing draft assessment:', assessmentId);
+                // Update existing draft assessment using specialized method
+                const result = await apiClient.updateDraftAssessment(assessmentId, {
                     draft_data: formData,
-                    current_step: currentStep,
-                    status: 'draft'
+                    current_step: currentStep
                 });
+                console.log('💾 Update result:', result);
             } else {
+                console.log('💾 Creating new draft assessment');
                 // Create new draft assessment
                 const response = await apiClient.createDraftAssessment({
                     title: `Draft Assessment - ${new Date().toLocaleDateString()}`,
@@ -57,7 +62,8 @@ export function useAssessmentPersistence() {
                     current_step: currentStep,
                     status: 'draft'
                 });
-                
+                console.log('💾 Create result:', response);
+
                 // Update the draft with the new assessment ID
                 draft.assessmentId = response.id;
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(draft));
@@ -134,13 +140,21 @@ export function useAssessmentPersistence() {
 
             // Clear from API if we have an assessment ID
             if (assessmentId) {
-                await apiClient.deleteAssessment(assessmentId);
+                try {
+                    await apiClient.deleteAssessment(assessmentId);
+                } catch (apiError: any) {
+                    // Don't log "not found" errors as they mean the draft was already deleted
+                    if (apiError?.message?.includes('not found') || apiError?.message?.includes('404')) {
+                        console.log('✅ Draft already deleted from API');
+                    } else {
+                        console.warn('Failed to clear draft from API:', apiError);
+                    }
+                }
             }
 
             setLastSaved(null);
         } catch (error) {
-            console.warn('Failed to clear draft from API:', error);
-            // localStorage is still cleared
+            console.warn('Failed to clear draft from localStorage:', error);
         }
     }, []);
 

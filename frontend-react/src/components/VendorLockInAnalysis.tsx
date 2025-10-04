@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useFreshData } from '../hooks/useFreshData';
 import {
   Box,
   Card,
@@ -98,11 +99,25 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-const VendorLockInAnalysis: React.FC = () => {
+interface VendorLockInAnalysisProps {
+  assessmentId?: string;
+}
+
+const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentId }) => {
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lockInService] = useState(() => getVendorLockInAnalysisService());
+
+  // Auto-refresh vendor lock-in analysis data every 60 seconds
+  const { forceRefresh: refreshVendorData, isStale, lastRefresh } = useFreshData('vendor_lockin', {
+    autoRefresh: true,
+    refreshInterval: 60000, // 60 seconds
+    onRefresh: () => {
+      console.log('🔄 Auto-refreshing vendor lock-in analysis data...');
+      loadVendorLockInData();
+    }
+  });
 
   // State for different sections
   const [assessments, setAssessments] = useState<VendorLockInAssessment[]>([]);
@@ -133,32 +148,24 @@ const VendorLockInAnalysis: React.FC = () => {
 
   useEffect(() => {
     loadLockInData();
-  }, []);
+  }, [assessmentId]);
 
   const loadLockInData = async () => {
+    if (!assessmentId) return;
+
     setLoading(true);
     try {
-      const [
-        assessmentsData,
-        strategiesData,
-        contractsData,
-      ] = await Promise.all([
-        lockInService.getLockInAssessments(),
-        lockInService.getMultiCloudStrategies(),
-        lockInService.getContractAnalyses(),
-      ]);
+      // Use apiClient for authenticated requests
+      const { apiClient } = await import('../services/api');
+      const vendorData = await apiClient.get<any>(`/features/assessment/${assessmentId}/vendor-lockin`);
 
-      // Ensure all data is arrays
-      setAssessments(Array.isArray(assessmentsData) ? assessmentsData : []);
-      setMultiCloudStrategies(Array.isArray(strategiesData) ? strategiesData : []);
-      setContractAnalyses(Array.isArray(contractsData) ? contractsData : []);
+      // Map the API response to component state
+      setAssessments(vendorData.assessments || []);
+      setServiceAnalyses(vendorData.services_analyzed || []);
+      setMigrationScenarios(vendorData.migration_scenarios || vendorData.mitigation_strategies || []);
+      setMultiCloudStrategies(vendorData.strategies || []);
+      setContractAnalyses(vendorData.contracts || []);
 
-      // Load service analyses for first assessment if available
-      if (assessmentsData.length > 0) {
-        const firstAssessment = assessmentsData[0];
-        setServiceAnalyses(firstAssessment.services_analyzed);
-        setMigrationScenarios(firstAssessment.migration_scenarios);
-      }
     } catch (error) {
       setError('Failed to load vendor lock-in analysis data');
       console.error('Error loading lock-in data:', error);
@@ -848,14 +855,45 @@ const VendorLockInAnalysis: React.FC = () => {
     </Box>
   );
 
+  if (!assessmentId) {
+    const AssessmentSelector = require('./AssessmentSelector').default;
+    return (
+      <AssessmentSelector
+        redirectPath="/vendor-lockin"
+        title="Select Assessment for Vendor Lock-in Analysis"
+        description="Choose an assessment to view vendor lock-in analysis"
+      />
+    );
+  }
+
   return (
     <Box>
-      <Typography variant="h4" gutterBottom>
-        Vendor Lock-in Risk Analysis
-      </Typography>
-      <Typography variant="subtitle1" color="text.secondary" mb={3}>
-        Multi-cloud migration complexity assessment and risk mitigation
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+        <Box>
+          <Typography variant="h4" gutterBottom>
+            Vendor Lock-in Risk Analysis
+          </Typography>
+          <Typography variant="subtitle1" color="text.secondary">
+            Multi-cloud migration complexity assessment and risk mitigation •
+            <Chip
+              label={isStale ? "Data may be outdated" : "Live data"}
+              size="small"
+              color={isStale ? "warning" : "success"}
+              variant="outlined"
+              sx={{ ml: 1 }}
+            />
+          </Typography>
+        </Box>
+        <Tooltip title={`Last updated: ${new Date(lastRefresh).toLocaleTimeString()}`}>
+          <IconButton
+            onClick={refreshVendorData}
+            color="primary"
+            size="large"
+          >
+            <Refresh />
+          </IconButton>
+        </Tooltip>
+      </Box>
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>

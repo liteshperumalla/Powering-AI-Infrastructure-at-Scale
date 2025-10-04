@@ -131,8 +131,11 @@ export const initializeAuth = createAsyncThunk(
     'auth/initialize',
     async (_, { dispatch }) => {
         try {
-            // Check if there's a stored token
-            const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+            // Check if there's a stored token in any location
+            const token = typeof window !== 'undefined' ?
+                localStorage.getItem('auth_token') ||
+                localStorage.getItem('token') ||
+                localStorage.getItem('access_token') : null;
             if (token) {
                 // Set the token in Redux state, which will trigger the middleware to sync with API client
                 dispatch(setToken(token));
@@ -143,9 +146,11 @@ export const initializeAuth = createAsyncThunk(
             }
             return null;
         } catch (error) {
-            // Token is invalid, clear it
+            // Token is invalid, clear all possible tokens
             if (typeof window !== 'undefined') {
                 localStorage.removeItem('auth_token');
+                localStorage.removeItem('token');
+                localStorage.removeItem('access_token');
             }
             dispatch(clearAuth());
             return null;

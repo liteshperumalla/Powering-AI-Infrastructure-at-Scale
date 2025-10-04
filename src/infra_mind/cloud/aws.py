@@ -44,16 +44,16 @@ class AWSClient(BaseCloudClient):
         """
         super().__init__(CloudProvider.AWS, region)
         
-        # Configure boto3 with production settings
+        # Configure boto3 with fast timeouts for responsive UI
         self.boto_config = Config(
             region_name=region,
             retries={
-                'max_attempts': 3,
-                'mode': 'adaptive'
+                'max_attempts': 1,  # Reduced retries for faster response
+                'mode': 'standard'
             },
             max_pool_connections=50,
-            read_timeout=60,
-            connect_timeout=10
+            read_timeout=2,  # 2 second read timeout
+            connect_timeout=2  # 2 second connect timeout
         )
         
         # Store credentials for service clients

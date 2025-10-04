@@ -218,14 +218,36 @@ class BaseCloudClient(ABC):
         from ..core.advanced_rate_limiter import advanced_rate_limiter, RateLimitExceeded
         
         if not self.cache_enabled:
-            return await fetch_func()
+            # Call fetch_func - it might be async or sync
+            import inspect
+            import asyncio
+
+            result = fetch_func()
+            # Check if the result is a coroutine (from lambda that calls async function)
+            if inspect.iscoroutine(result):
+                return await result
+            # Check if result is awaitable but not yet called
+            elif inspect.iscoroutinefunction(fetch_func):
+                return await fetch_func()
+            else:
+                # Synchronous function - we already called it
+                return result
         
         # Get unified cache manager
         unified_cache = await get_unified_cache_manager()
         if not unified_cache:
             # Fallback to direct API call if cache not available
             logger.warning("Unified cache manager not available, calling API directly")
-            return await fetch_func()
+            import inspect
+            import asyncio
+
+            result = fetch_func()
+            if inspect.iscoroutine(result):
+                return await result
+            elif inspect.iscoroutinefunction(fetch_func):
+                return await fetch_func()
+            else:
+                return result
         
         # Map service names to ServiceType enum
         service_type_mapping = {
@@ -313,7 +335,16 @@ class BaseCloudClient(ABC):
                     
                     # Fetch fresh data from API
                     logger.info(f"Fetching fresh data for {self.provider.value}:{service}:{region}")
-                    fresh_data = await fetch_func()
+                    import inspect
+                    import asyncio
+
+                    result = fetch_func()
+                    if inspect.iscoroutine(result):
+                        fresh_data = await result
+                    elif inspect.iscoroutinefunction(fetch_func):
+                        fresh_data = await fetch_func()
+                    else:
+                        fresh_data = result
                     
                     # Cache the fresh data using unified cache
                     if unified_cache:

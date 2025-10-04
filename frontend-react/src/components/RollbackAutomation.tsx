@@ -96,7 +96,11 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-const RollbackAutomation: React.FC = () => {
+interface RollbackAutomationProps {
+  assessmentId?: string;
+}
+
+const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId }) => {
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -138,29 +142,25 @@ const RollbackAutomation: React.FC = () => {
 
   useEffect(() => {
     loadInitialData();
-  }, []);
+  }, [assessmentId]);
 
   const loadInitialData = async () => {
+    if (!assessmentId) return;
+
     setLoading(true);
     try {
-      const [deploymentsData, plansData, executionsData, healthData, triggersData, templatesData, metricsData] = await Promise.all([
-        rollbackService.getDeployments(),
-        rollbackService.getRollbackPlans(),
-        rollbackService.getRollbackExecutions(),
-        rollbackService.getHealthChecks(),
-        rollbackService.getAutoTriggers(),
-        rollbackService.getTemplates(),
-        rollbackService.getMetrics('7d'),
-      ]);
+      // Use apiClient for authenticated requests
+      const { apiClient } = await import('../services/api');
+      const rollbackData = await apiClient.get<any>(`/features/assessment/${assessmentId}/rollback`);
 
-      // Ensure all data is in array format
-      setDeployments(Array.isArray(deploymentsData) ? deploymentsData : []);
-      setRollbackPlans(Array.isArray(plansData) ? plansData : []);
-      setExecutions(Array.isArray(executionsData) ? executionsData : []);
-      setHealthChecks(Array.isArray(healthData) ? healthData : []);
-      setAutoTriggers(Array.isArray(triggersData) ? triggersData : []);
-      setTemplates(Array.isArray(templatesData) ? templatesData : []);
-      setMetrics(metricsData || {});
+      // Map the API response to component state
+      setDeployments(Array.isArray(rollbackData.deployments) ? rollbackData.deployments : []);
+      setRollbackPlans(Array.isArray(rollbackData.plans) ? rollbackData.plans : []);
+      setExecutions(Array.isArray(rollbackData.executions) ? rollbackData.executions : []);
+      setHealthChecks(Array.isArray(rollbackData.health_checks) ? rollbackData.health_checks : []);
+      setAutoTriggers(Array.isArray(rollbackData.auto_triggers) ? rollbackData.auto_triggers : []);
+      setTemplates(Array.isArray(rollbackData.templates) ? rollbackData.templates : []);
+      setMetrics(rollbackData.metrics || null);
     } catch (error) {
       setError('Failed to load rollback data');
       console.error('Error loading rollback data:', error);
@@ -668,6 +668,17 @@ const RollbackAutomation: React.FC = () => {
       )}
     </Grid>
   );
+
+  if (!assessmentId) {
+    const AssessmentSelector = require('./AssessmentSelector').default;
+    return (
+      <AssessmentSelector
+        redirectPath="/rollback"
+        title="Select Assessment for Rollback Automation"
+        description="Choose an assessment to view rollback automation data"
+      />
+    );
+  }
 
   return (
     <Box>

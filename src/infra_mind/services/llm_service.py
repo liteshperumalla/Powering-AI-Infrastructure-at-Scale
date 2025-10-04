@@ -61,7 +61,7 @@ class LLMService:
         Generate intelligent field suggestions using LLM (fast mode)
         """
         if not self.client:
-            return self._get_fallback_suggestions(field_name, query, context)
+            return []
 
         try:
             # Create context-aware prompt
@@ -85,10 +85,10 @@ class LLMService:
 
         except asyncio.TimeoutError:
             logger.error(f"⏰ LLM suggestion generation timed out for field '{field_name}' after retries")
-            return self._get_fallback_suggestions(field_name, query, context)
+            return []
         except Exception as e:
             logger.error(f"❌ LLM suggestion generation failed for field '{field_name}': {e}")
-            return self._get_fallback_suggestions(field_name, query, context)
+            return []
 
     async def generate_workflow_response(
         self,
@@ -300,39 +300,6 @@ Generate {num_suggestions} suggestions as JSON array:"""
         # Return empty list if parsing fails
         return []
 
-    def _get_fallback_suggestions(self, field_name: str, query: str, context: Dict[str, Any]) -> List[SuggestionItem]:
-        """Fallback suggestions when LLM is not available"""
-        if not query or len(query) < 2:
-            return []
-
-        # Very basic fallback - return validated SuggestionItem objects
-        fallback_suggestions = []
-
-        try:
-            # Primary suggestion
-            primary = SuggestionItem(
-                value=query.lower().replace(" ", "-"),
-                label=query.title(),
-                description=f"Use '{query}' as specified",
-                confidence=0.6
-            )
-            fallback_suggestions.append(primary)
-
-            # Alternative suggestion if query has spaces
-            if " " in query:
-                alternative = SuggestionItem(
-                    value=query.lower(),
-                    label=query.lower(),
-                    description=f"Lowercase version of '{query}'",
-                    confidence=0.5
-                )
-                fallback_suggestions.append(alternative)
-
-        except Exception as e:
-            logger.warning(f"Failed to create fallback suggestions: {e}")
-            return []
-
-        return fallback_suggestions
 
 # Global instance
 llm_service = LLMService()

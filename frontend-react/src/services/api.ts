@@ -13,45 +13,20 @@ const getApiBaseUrl = () => {
     // Always prefer the public API URL for consistency between SSR and client-side
     const envUrl = process.env.NEXT_PUBLIC_API_URL;
     if (envUrl) {
-        console.log('🔧 Using NEXT_PUBLIC_API_URL from env:', envUrl);
         return envUrl;
     }
 
     // Fallback to localhost for development
-    const fallbackUrl = 'http://localhost:8000';
-    console.log('🔧 Using hardcoded fallback URL:', fallbackUrl);
-    return fallbackUrl;
+    return 'http://localhost:8000';
 };
 
 const API_BASE_URL = getApiBaseUrl();
 const API_VERSION = 'v1';
 const API_PREFIX = `/api/v1`; // Use v1 prefix to match backend
 
-// Debug environment variables with fallback check
-const debugEnvVars = {
-    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-    API_URL: process.env.API_URL,
-    NODE_ENV: process.env.NODE_ENV,
-    // Check if env vars are available at all
-    processEnvKeys: typeof process !== 'undefined' && process.env ? Object.keys(process.env).filter(k => k.startsWith('NEXT_PUBLIC')).slice(0, 5) : 'process.env not available'
-};
-
-console.log('🔧 API Client Initialization:', {
-    API_BASE_URL,
-    environment: typeof window !== 'undefined' ? 'client' : 'server',
-    envVars: debugEnvVars,
-    // Alternative ways to get API URL for debugging
-    alternatives: {
-        hardcoded_localhost: 'http://localhost:8000',
-        from_getApiBaseUrl: getApiBaseUrl(),
-        window_location: typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:8000` : 'N/A'
-    }
-});
-
 // If env vars are missing, log a warning
 if (!process.env.NEXT_PUBLIC_API_URL) {
     console.warn('⚠️ NEXT_PUBLIC_API_URL is not set! This may cause connection issues.');
-    console.log('🔍 Available environment variables:', typeof process !== 'undefined' && process.env ? Object.keys(process.env).filter(k => k.startsWith('NEXT')).slice(0, 10) : 'None');
 }
 
 // Cache busting utilities
@@ -358,6 +333,11 @@ class ApiClient {
                     case 403:
                         throw new Error('Access denied. Please check your permissions.');
                     case 404:
+                        // For delete operations, 404 might be expected (already deleted)
+                        if (config.method === 'DELETE') {
+                            console.log('✅ Resource already deleted (404)');
+                            return null; // Return null for successful deletion of non-existent resource
+                        }
                         throw new Error('Resource not found.');
                     case 429:
                         throw new Error('Too many requests. Please try again later.');
@@ -402,25 +382,16 @@ class ApiClient {
                     throw new Error('Request timeout. Please try again.');
                 }
 
-                // Handle network connectivity issues
-                if (error.message.includes('fetch') || error.message.includes('NetworkError') || error.message.includes('Failed to fetch')) {
-                    const currentApiUrl = this.baseURL.replace('/api/v1', '');
-                    const debugInfo = {
-                        attemptedUrl: url,
-                        baseURL: this.baseURL,
-                        actualApiUrl: currentApiUrl,
-                        environment: typeof window !== 'undefined' ? 'client' : 'server',
-                        envVars: {
-                            NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-                            API_URL: process.env.API_URL,
-                            NODE_ENV: process.env.NODE_ENV
-                        },
-                        errorMessage: error.message,
-                        errorName: error.name,
-                        timestamp: new Date().toISOString()
-                    };
-                    console.error('API Connection Details:', debugInfo);
-                    throw new Error(`Connection failed - API server not reachable at ${currentApiUrl}. Check if the server is running and network connectivity is available.`);
+                // Handle actual network connectivity issues (not HTTP error responses)
+                if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError') || error.name === 'TypeError') {
+                    console.error(`Network request failed: ${config.method || 'GET'} ${endpoint}`, error);
+                    console.error('Full error details:', {
+                        message: error.message,
+                        name: error.name,
+                        stack: error.stack,
+                        url: url
+                    });
+                    throw new Error(`API request failed: ${error.message}. Check browser console for details.`);
                 }
 
                 console.error(`API request failed: ${config.method || 'GET'} ${endpoint}`, error);
@@ -543,6 +514,33 @@ class ApiClient {
 
         console.log('🔍 Connection debug complete:', debugInfo);
         return debugInfo;
+    }
+
+    // Generic HTTP methods
+    async get<T>(endpoint: string): Promise<T> {
+        return this.request<T>(endpoint, {
+            method: 'GET'
+        });
+    }
+
+    async post<T>(endpoint: string, data?: any): Promise<T> {
+        return this.request<T>(endpoint, {
+            method: 'POST',
+            body: JSON.stringify(data)
+        });
+    }
+
+    async put<T>(endpoint: string, data?: any): Promise<T> {
+        return this.request<T>(endpoint, {
+            method: 'PUT',
+            body: JSON.stringify(data)
+        });
+    }
+
+    async delete<T>(endpoint: string): Promise<T> {
+        return this.request<T>(endpoint, {
+            method: 'DELETE'
+        });
     }
 
     // Authentication methods
@@ -772,13 +770,23 @@ class ApiClient {
         draft_data: Record<string, unknown>;
         current_step: number;
     }): Promise<Assessment> {
+        const payload = {
+            draft_data: draftData.draft_data,
+            current_step: draftData.current_step,
+            status: 'draft'
+        };
+        console.log('💾 updateDraftAssessment payload:', payload);
+        console.log('💾 draft_data keys:', Object.keys(draftData.draft_data));
+
         return this.request<Assessment>(`/assessments/${id}`, {
             method: 'PUT',
-            body: JSON.stringify({
-                draft_data: draftData.draft_data,
-                current_step: draftData.current_step,
-                status: 'draft'
-            }),
+            body: JSON.stringify(payload),
+        });
+    }
+
+    async deleteAssessment(id: string): Promise<void> {
+        await this.request<void>(`/assessments/${id}`, {
+            method: 'DELETE',
         });
     }
 
@@ -887,7 +895,7 @@ class ApiClient {
         if (assessmentId) {
             return this.request<Report>(`/reports/assessment/${assessmentId}/reports/${reportId}`);
         }
-        // Fallback - try to get assessment ID from the report itself or use generic endpoint
+        // Fallback - use the generic endpoint
         return this.request<Report>(`/reports/${reportId}`);
     }
 
@@ -1542,7 +1550,6 @@ class ApiClient {
             session_id: sessionId || `simple_${Date.now()}`
         };
 
-        console.log('🔧 SendSimpleMessage called:', { url, payload, API_BASE_URL });
 
         try {
             // Use direct fetch to avoid authentication and complex headers
@@ -1554,7 +1561,6 @@ class ApiClient {
                 body: JSON.stringify(payload)
             });
 
-            console.log('🔧 Response status:', response.status, response.statusText);
 
             if (!response.ok) {
                 const errorText = await response.text();
@@ -1689,14 +1695,15 @@ class ApiClient {
         source: string;
     }[]> {
         try {
-            return await this.request('/forms/smart-defaults', {
+            const response = await this.request('/forms/smart-defaults', {
                 method: 'POST',
                 body: JSON.stringify({ field_name: fieldName, context })
             });
+            // Extract the defaults array from the API response
+            return response.defaults || [];
         } catch (error) {
-            // Fallback to basic defaults if API fails
-            console.warn('Smart defaults API failed, using fallbacks:', error);
-            return this.getFallbackDefaults(fieldName);
+            console.error('Smart defaults API failed:', error);
+            return [];
         }
     }
 
@@ -1707,14 +1714,15 @@ class ApiClient {
         confidence: number;
     }[]> {
         try {
-            return await this.request('/forms/suggestions', {
+            const response = await this.request('/forms/suggestions', {
                 method: 'POST',
                 body: JSON.stringify({ field_name: fieldName, query, context })
             });
+            // Extract the suggestions array from the API response
+            return response.suggestions || [];
         } catch (error) {
-            // Fallback to basic suggestions if API fails
-            console.warn('Field suggestions API failed, using fallbacks:', error);
-            return this.getFallbackSuggestions(fieldName, query);
+            console.error('Field suggestions API failed:', error);
+            return [];
         }
     }
 
@@ -1732,95 +1740,11 @@ class ApiClient {
                 body: JSON.stringify({ field_name: fieldName, context })
             });
         } catch (error) {
-            // Fallback to basic help if API fails
-            console.warn('Contextual help API failed, using fallbacks:', error);
-            return this.getFallbackHelp(fieldName);
+            console.error('Contextual help API failed:', error);
+            return null;
         }
     }
 
-    // Fallback methods for when intelligent form APIs are not available
-    private getFallbackDefaults(fieldName: string): {
-        value: any;
-        confidence: number;
-        reason: string;
-        source: string;
-    }[] {
-        const defaults: Record<string, any[]> = {
-            industry: [
-                { value: 'technology', confidence: 0.6, reason: 'Most common industry in our user base', source: 'usage_patterns' }
-            ],
-            companySize: [
-                { value: 'small', confidence: 0.5, reason: 'Common starting point for assessments', source: 'industry_patterns' }
-            ],
-            monthlyBudget: [
-                { value: '5k-25k', confidence: 0.4, reason: 'Typical budget range for small to medium companies', source: 'size_patterns' }
-            ]
-        };
-        return defaults[fieldName] || [];
-    }
-
-    private getFallbackSuggestions(fieldName: string, query: string): {
-        value: string;
-        label: string;
-        description?: string;
-        confidence: number;
-    }[] {
-        const suggestions: Record<string, any[]> = {
-            companyName: [
-                { value: 'TechCorp', label: 'TechCorp', description: 'Technology company', confidence: 0.6 },
-                { value: 'InnovateLabs', label: 'InnovateLabs', description: 'Innovation laboratory', confidence: 0.5 }
-            ]
-        };
-
-        const fieldSuggestions = suggestions[fieldName] || [];
-        return fieldSuggestions.filter(s =>
-            s.value.toLowerCase().includes(query.toLowerCase()) ||
-            s.label.toLowerCase().includes(query.toLowerCase())
-        );
-    }
-
-    private getFallbackHelp(fieldName: string): {
-        title: string;
-        content: string;
-        examples?: string[];
-        tips?: string[];
-        related_fields?: string[];
-        help_type: 'tooltip' | 'modal' | 'inline';
-    } | null {
-        const help: Record<string, any> = {
-            companySize: {
-                title: 'Company Size',
-                content: 'Select the size category that best matches your organization.',
-                examples: [
-                    'Startup: 1-50 employees, early stage',
-                    'Small: 51-200 employees, established',
-                    'Medium: 201-1000 employees, multiple departments'
-                ],
-                tips: [
-                    'Consider total employee count, not just technical team',
-                    'This affects budget recommendations and complexity levels'
-                ],
-                related_fields: ['monthlyBudget', 'technicalTeamSize'],
-                help_type: 'tooltip'
-            },
-            industry: {
-                title: 'Industry',
-                content: 'Select the industry that best describes your business.',
-                examples: [
-                    'Technology: Software, hardware, IT services',
-                    'Healthcare: Medical, pharmaceutical, health services',
-                    'Finance: Banking, insurance, fintech'
-                ],
-                tips: [
-                    'This affects compliance requirements and service recommendations',
-                    'Choose the primary industry if you operate in multiple sectors'
-                ],
-                related_fields: ['complianceRequirements'],
-                help_type: 'tooltip'
-            }
-        };
-        return help[fieldName] || null;
-    }
 
     // Workflow control methods
     async getAssessmentWorkflowStatus(assessmentId: string): Promise<{

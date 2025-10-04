@@ -229,22 +229,13 @@ class BudgetForecastingService {
         this.token = typeof window !== 'undefined' ? typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null : null;
     }
 
-    private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
-        // Map budget forecasting endpoints to available ones
+    private async makeRequest(endpoint: string, options: RequestInit = {}, assessmentId?: string): Promise<any> {
+        // Map budget forecasting endpoints to new features API
         let mappedEndpoint = endpoint;
-        
-        if (endpoint.startsWith('/api/budget-forecasting/')) {
-            if (endpoint.includes('/forecasts')) {
-                mappedEndpoint = '/api/admin/analytics/dashboard-summary';
-            } else if (endpoint.includes('/models')) {
-                mappedEndpoint = '/api/advanced-analytics/dashboard';
-            } else if (endpoint.includes('/scenarios')) {
-                mappedEndpoint = '/api/dashboard/analytics/advanced';
-            } else if (endpoint.includes('/spending-patterns')) {
-                mappedEndpoint = '/api/admin/analytics/comprehensive';
-            } else {
-                mappedEndpoint = '/api/dashboard/overview';
-            }
+
+        if (endpoint.startsWith('/api/budget-forecasting/') && assessmentId) {
+            // Route all budget forecasting requests to the features API
+            mappedEndpoint = `/api/v1/features/assessment/${assessmentId}/budget`;
         }
 
         try {
@@ -397,7 +388,7 @@ class BudgetForecastingService {
 
     async getScenarios(filters?: { scenario_type?: string; probability_threshold?: number }): Promise<ForecastScenario[]> {
         const params = new URLSearchParams();
-        if (filters) {
+        if (filters && typeof filters === 'object') {
             Object.entries(filters).forEach(([key, value]) => {
                 if (value !== undefined) {
                     params.append(key, value.toString());
@@ -463,7 +454,7 @@ class BudgetForecastingService {
         department?: string;
     }): Promise<OptimizationOpportunity[]> {
         const params = new URLSearchParams();
-        if (filters) {
+        if (filters && typeof filters === 'object') {
             Object.entries(filters).forEach(([key, value]) => {
                 if (value !== undefined) {
                     params.append(key, value.toString());
@@ -503,7 +494,7 @@ class BudgetForecastingService {
     // Alerting and Monitoring
     async getBudgetAlerts(filters?: { severity?: string; acknowledged?: boolean }): Promise<BudgetAlert[]> {
         const params = new URLSearchParams();
-        if (filters) {
+        if (filters && typeof filters === 'object') {
             Object.entries(filters).forEach(([key, value]) => {
                 if (value !== undefined) {
                     params.append(key, value.toString());

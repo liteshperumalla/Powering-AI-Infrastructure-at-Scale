@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useFreshData } from '../hooks/useFreshData';
 import {
   Box,
   Card,
@@ -86,11 +87,25 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-const BudgetForecasting: React.FC = () => {
+interface BudgetForecastingProps {
+  assessmentId?: string;
+}
+
+const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) => {
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [forecastService] = useState(() => getBudgetForecastingService());
+
+  // Auto-refresh budget forecasting data every 45 seconds
+  const { forceRefresh: refreshBudgetData, isStale, lastRefresh } = useFreshData('budget_forecasting', {
+    autoRefresh: true,
+    refreshInterval: 45000, // 45 seconds
+    onRefresh: () => {
+      console.log('🔄 Auto-refreshing budget forecasting data...');
+      loadForecastingData();
+    }
+  });
 
   // State for different sections
   const [forecasts, setForecasts] = useState<CostForecast[]>([]);
@@ -126,33 +141,26 @@ const BudgetForecasting: React.FC = () => {
 
   useEffect(() => {
     loadForecastingData();
-  }, []);
+  }, [assessmentId]);
 
   const loadForecastingData = async () => {
+    if (!assessmentId) return;
+
     setLoading(true);
     try {
-      const [
-        forecastsData,
-        allocationsData,
-        opportunitiesData,
-        modelsData,
-        alertsData,
-        spendingData,
-      ] = await Promise.all([
-        forecastService.getCostForecasts(),
-        forecastService.getBudgetAllocations(),
-        forecastService.getOptimizationOpportunities(),
-        forecastService.getCostModels(),
-        forecastService.getBudgetAlerts(),
-        forecastService.getCurrentSpending(),
-      ]);
+      // Use apiClient for authenticated requests
+      const { apiClient } = await import('../services/api');
+      const budgetData = await apiClient.get<any>(`/features/assessment/${assessmentId}/budget`);
 
-      setForecasts(forecastsData);
-      setBudgetAllocations(allocationsData);
-      setOptimizationOpportunities(opportunitiesData);
-      setCostModels(modelsData);
-      setBudgetAlerts(alertsData);
-      setCurrentSpending(spendingData);
+      // Map the API response to component state
+      // The API returns budget forecasting data in the format we need
+      setCurrentSpending(budgetData.summary || {});
+      setOptimizationOpportunities(budgetData.recommendations || []);
+      setBudgetAllocations(budgetData.breakdown || []);
+      setForecasts(budgetData.forecasts || []);
+      setCostModels(budgetData.models || []);
+      setBudgetAlerts(budgetData.alerts || []);
+
     } catch (error) {
       setError('Failed to load budget forecasting data');
       console.error('Error loading forecasting data:', error);
@@ -602,14 +610,45 @@ const BudgetForecasting: React.FC = () => {
     </Box>
   );
 
+  if (!assessmentId) {
+    const AssessmentSelector = require('./AssessmentSelector').default;
+    return (
+      <AssessmentSelector
+        redirectPath="/budget-forecasting"
+        title="Select Assessment for Budget Forecasting"
+        description="Choose an assessment to view budget forecasting data"
+      />
+    );
+  }
+
   return (
     <Box sx={{ mt: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Budget Forecasting
-      </Typography>
-      <Typography variant="subtitle1" color="text.secondary" mb={3}>
-        AI-powered infrastructure cost predictions and optimization
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+        <Box>
+          <Typography variant="h4" gutterBottom>
+            Budget Forecasting
+          </Typography>
+          <Typography variant="subtitle1" color="text.secondary">
+            AI-powered infrastructure cost predictions and optimization •
+            <Chip
+              label={isStale ? "Data may be outdated" : "Live data"}
+              size="small"
+              color={isStale ? "warning" : "success"}
+              variant="outlined"
+              sx={{ ml: 1 }}
+            />
+          </Typography>
+        </Box>
+        <Tooltip title={`Last updated: ${new Date(lastRefresh).toLocaleTimeString()}`}>
+          <IconButton
+            onClick={refreshBudgetData}
+            color="primary"
+            size="large"
+          >
+            <Refresh />
+          </IconButton>
+        </Tooltip>
+      </Box>
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>

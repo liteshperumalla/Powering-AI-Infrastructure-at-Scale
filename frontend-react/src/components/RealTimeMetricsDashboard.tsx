@@ -533,7 +533,7 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
                                 Agent Performance
                             </Typography>
 
-                            {Object.entries(workflowMetrics.agent_performance).map(([agentName, performance]) => (
+                            {Object.entries(workflowMetrics.agent_performance || {}).map(([agentName, performance]) => (
                                 <Box key={agentName} sx={{ mb: 2 }}>
                                     <Stack direction="row" justifyContent="space-between" alignItems="center">
                                         <Typography variant="body1">{agentName}</Typography>

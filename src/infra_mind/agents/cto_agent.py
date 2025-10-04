@@ -81,7 +81,17 @@ class CTOAgent(BaseAgent):
         ]
         
         logger.info("CTO Agent initialized with strategic planning capabilities")
-    
+
+    def _clean_json_response(self, response: str) -> str:
+        """Clean LLM response by removing markdown code blocks."""
+        import re
+        cleaned = response.strip()
+        if cleaned.startswith("```"):
+            # Extract JSON from markdown code block
+            cleaned = re.sub(r'^```(?:json)?\s*\n', '', cleaned)
+            cleaned = re.sub(r'\n```\s*$', '', cleaned)
+        return cleaned
+
     async def analyze_requirements(self, workflow_data: Dict[str, Any]) -> Dict[str, Any]:
         """
         Analyze business requirements from a CTO perspective.
@@ -145,7 +155,7 @@ class CTOAgent(BaseAgent):
             
             import json
             try:
-                strategic_fit = json.loads(response)
+                strategic_fit = json.loads(self._clean_json_response(response))
                 strategic_fit["llm_powered"] = True
                 return strategic_fit
             except json.JSONDecodeError:
@@ -198,7 +208,7 @@ class CTOAgent(BaseAgent):
             
             import json
             try:
-                financial_impact = json.loads(response)
+                financial_impact = json.loads(self._clean_json_response(response))
                 financial_impact["market_data_included"] = True
                 financial_impact["analysis_date"] = datetime.now(timezone.utc).isoformat()
                 return financial_impact
@@ -256,7 +266,7 @@ class CTOAgent(BaseAgent):
             
             import json
             try:
-                risk_assessment = json.loads(response)
+                risk_assessment = json.loads(self._clean_json_response(response))
                 risk_assessment["comprehensive_analysis"] = True
                 risk_assessment["assessment_date"] = datetime.now(timezone.utc).isoformat()
                 return risk_assessment
@@ -327,7 +337,7 @@ class CTOAgent(BaseAgent):
             
             import json
             try:
-                recommendations = json.loads(response)
+                recommendations = json.loads(self._clean_json_response(response))
                 if isinstance(recommendations, list):
                     return recommendations
                 elif isinstance(recommendations, dict) and "recommendations" in recommendations:
@@ -455,7 +465,7 @@ Respond in JSON format with structured analysis for each section."""
             # Parse LLM response
             import json
             try:
-                business_context = json.loads(response)
+                business_context = json.loads(self._clean_json_response(response))
                 
                 # Add fallback data and validation
                 if not isinstance(business_context, dict):
@@ -489,11 +499,11 @@ Respond in JSON format with structured analysis for each section."""
             if isinstance(value, dict):
                 formatted.append(f"  {key.replace('_', ' ').title()}:")
                 for sub_key, sub_value in value.items():
-                    formatted.append(f"    - {sub_key.replace('_', ' ').title()}: {sub_value}")
+                    formatted.append(f"    - {sub_key.replace('_', ' ').title()}: {sub_value or 'N/A'}")
             elif isinstance(value, list):
-                formatted.append(f"  {key.replace('_', ' ').title()}: {', '.join(str(v) for v in value)}")
+                formatted.append(f"  {key.replace('_', ' ').title()}: {', '.join(str(v or 'N/A') for v in value)}")
             else:
-                formatted.append(f"  {key.replace('_', ' ').title()}: {value}")
+                formatted.append(f"  {key.replace('_', ' ').title()}: {value or 'N/A'}")
         
         return "\n".join(formatted)
     
@@ -616,7 +626,7 @@ Respond now with valid JSON only:"""
             logger.info(f"🔍 RAW LLM RESPONSE (strategic alignment): {response[:500]}...")
             print(f"🔍 RAW LLM RESPONSE (strategic alignment): {response[:500]}...")
             try:
-                alignment_result = json.loads(response)
+                alignment_result = json.loads(self._clean_json_response(response))
                 
                 # Handle nested JSON structure (if LLM wraps response in strategic_alignment key)
                 if isinstance(alignment_result, dict) and "strategic_alignment" in alignment_result:
@@ -791,7 +801,7 @@ Respond now with valid JSON only:"""
             logger.info(f"🔍 RAW LLM RESPONSE (financial analysis): {response[:500]}...")
             print(f"🔍 RAW LLM RESPONSE (financial analysis): {response[:500]}...")
             try:
-                financial_result = json.loads(response)
+                financial_result = json.loads(self._clean_json_response(response))
                 
                 # Validate and enhance the result
                 if not isinstance(financial_result, dict):
@@ -990,23 +1000,55 @@ Respond now with valid JSON only:"""
             
             # Parse LLM response
             import json
+            import re
             try:
-                risk_result = json.loads(response)
-                
+                # Clean response - remove markdown code blocks if present
+                cleaned_response = response.strip()
+                if cleaned_response.startswith("```"):
+                    # Extract JSON from markdown code block
+                    cleaned_response = re.sub(r'^```(?:json)?\s*\n', '', cleaned_response)
+                    cleaned_response = re.sub(r'\n```\s*$', '', cleaned_response)
+
+                risk_result = json.loads(cleaned_response)
+
                 # Validate and enhance the result
                 if not isinstance(risk_result, dict):
+                    logger.warning("Risk result is not a dict, using text parsing")
                     risk_result = self._parse_risk_text(response)
-                
+
                 # Add computed analysis
                 risks = risk_result.get("identified_risks", [])
+                logger.debug(f"Processing {len(risks)} risks from LLM")
+
+                try:
+                    risk_matrix = self._create_risk_matrix(risks)
+                    logger.debug("Risk matrix created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create risk matrix: {e}")
+                    risk_matrix = {"high_impact_high_prob": [], "high_impact_low_prob": [], "low_impact_high_prob": [], "low_impact_low_prob": []}
+
+                try:
+                    mitigation_priorities = self._prioritize_risk_mitigation(risks)
+                    logger.debug("Mitigation priorities created successfully")
+                except Exception as e:
+                    logger.error(f"Failed to create mitigation priorities: {e}")
+                    mitigation_priorities = []
+
+                try:
+                    overall_risk_level = self._calculate_overall_risk_level(risks)
+                    logger.debug("Overall risk level calculated successfully")
+                except Exception as e:
+                    logger.error(f"Failed to calculate overall risk level: {e}")
+                    overall_risk_level = "Medium"
+
                 risk_result.update({
-                    "risk_matrix": self._create_risk_matrix(risks),
-                    "mitigation_priorities": self._prioritize_risk_mitigation(risks),
-                    "overall_risk_level": self._calculate_overall_risk_level(risks),
+                    "risk_matrix": risk_matrix,
+                    "mitigation_priorities": mitigation_priorities,
+                    "overall_risk_level": overall_risk_level,
                     "llm_powered": True,
                     "analysis_confidence": 0.85
                 })
-                
+
                 return risk_result
                 
             except json.JSONDecodeError:
@@ -1238,7 +1280,7 @@ Respond in JSON format with an array of strategic recommendations."""
             # Parse LLM response
             import json
             try:
-                recommendations_result = json.loads(response)
+                recommendations_result = json.loads(self._clean_json_response(response))
                 
                 # Validate and enhance the result
                 if isinstance(recommendations_result, dict) and "recommendations" in recommendations_result:
@@ -1313,29 +1355,19 @@ Respond in JSON format with an array of strategic recommendations."""
                 }
                 recommendations.append(recommendation)
         
-        # Ensure we have at least 3 recommendations
-        while len(recommendations) < 3:
-            recommendations.append({
-                "category": "general",
-                "priority": "medium",
-                "title": f"Strategic Initiative {len(recommendations) + 1}",
-                "description": "Additional strategic recommendation based on analysis",
-                "rationale": "Supports overall infrastructure strategy",
-                "actions": ["Evaluate options", "Plan implementation", "Execute strategy"],
-                "business_impact": "Contributes to business objectives",
-                "timeline": "3-6 months",
-                "investment_required": "Medium",
-                "llm_generated": True
-            })
-        
+        # DO NOT pad with placeholder recommendations - return only real LLM-generated ones
+        # If LLM didn't generate enough recommendations, that's a sign we need better prompts,
+        # not placeholder data that misleads users
+        logger.info(f"Generated {len(recommendations)} strategic recommendations from LLM")
+
         return recommendations[:5]  # Limit to 5 recommendations
     
-    async def _fallback_strategic_recommendations(self, business_analysis: Dict[str, Any], 
+    async def _fallback_strategic_recommendations(self, business_analysis: Dict[str, Any],
                                                 strategic_alignment: Dict[str, Any],
                                                 financial_analysis: Dict[str, Any],
                                                 risk_assessment: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Fallback strategic recommendations when LLM fails."""
-        logger.info("Using fallback strategic recommendations")
+        logger.warning("⚠️ Using fallback strategic recommendations - LLM analysis failed. Results may be generic.")
         
         recommendations = []
         
@@ -1345,10 +1377,25 @@ Respond in JSON format with an array of strategic recommendations."""
             recommendations.append({
                 "category": "strategic_alignment",
                 "priority": "high",
-                "title": "Improve Strategic Alignment",
-                "description": "Current infrastructure plans show limited alignment with business goals",
+                "title": "Improve Strategic Alignment [Fallback Recommendation]",
+                "description": "Current infrastructure plans show limited alignment with business goals - Generic fallback recommendation",
                 "rationale": f"Alignment score of {alignment_score:.1f} indicates strategic gaps",
+                "benefits": [
+                    "Better alignment between IT and business objectives",
+                    "Improved resource allocation efficiency",
+                    "Clearer success metrics and accountability"
+                ],
+                "risks": [
+                    "Generic recommendation without detailed context",
+                    "May not address specific organizational challenges",
+                    "Requires stakeholder buy-in and time commitment"
+                ],
                 "actions": [
+                    "Conduct stakeholder alignment workshop",
+                    "Revise infrastructure priorities to match business objectives",
+                    "Establish clear success metrics tied to business outcomes"
+                ],
+                "implementation_steps": [
                     "Conduct stakeholder alignment workshop",
                     "Revise infrastructure priorities to match business objectives",
                     "Establish clear success metrics tied to business outcomes"
@@ -1387,7 +1434,7 @@ Respond in JSON format with an array of strategic recommendations."""
                 "title": "Address High-Impact Risks",
                 "description": f"Identified {len(high_risks)} high-impact risks requiring immediate attention",
                 "rationale": "High-impact risks could significantly affect project success",
-                "actions": [risk["mitigation"] for risk in high_risks[:3]],  # Top 3 mitigations
+                "actions": [risk.get("mitigation", "Implement appropriate controls") for risk in high_risks[:3]],  # Top 3 mitigations
                 "business_impact": "Reduces project risk and increases success probability",
                 "timeline": "Immediate - 2 months",
                 "investment_required": "Variable (depends on specific risks)"
@@ -1448,7 +1495,7 @@ Respond in JSON format with an array of strategic recommendations."""
                 "ROI optimization opportunities identified"
             ],
             "strategic_priorities": [
-                rec["title"] for rec in high_priority_recs[:3]
+                rec.get("title", "Strategic recommendation") for rec in high_priority_recs[:3]
             ],
             "investment_summary": {
                 "total_recommendations": len(recommendations),
@@ -1705,35 +1752,48 @@ Respond in JSON format with an array of strategic recommendations."""
             "low_impact_high_prob": [],
             "low_impact_low_prob": []
         }
-        
-        for risk in risks:
-            impact = risk.get("impact", "medium")
-            probability = risk.get("probability", "medium")
-            
-            if impact == "high" and probability in ["high", "medium"]:
-                matrix["high_impact_high_prob"].append(risk["risk"])
-            elif impact == "high" and probability == "low":
-                matrix["high_impact_low_prob"].append(risk["risk"])
-            elif impact in ["medium", "low"] and probability in ["high", "medium"]:
-                matrix["low_impact_high_prob"].append(risk["risk"])
-            else:
-                matrix["low_impact_low_prob"].append(risk["risk"])
-        
+
+        try:
+            for risk in risks:
+                if not isinstance(risk, dict):
+                    continue
+                impact = risk.get("impact", "medium")
+                probability = risk.get("probability", "medium")
+                risk_desc = risk.get("risk", risk.get("description", "Unknown risk"))
+
+                if impact == "high" and probability in ["high", "medium"]:
+                    matrix["high_impact_high_prob"].append(risk_desc)
+                elif impact == "high" and probability == "low":
+                    matrix["high_impact_low_prob"].append(risk_desc)
+                elif impact in ["medium", "low"] and probability in ["high", "medium"]:
+                    matrix["low_impact_high_prob"].append(risk_desc)
+                else:
+                    matrix["low_impact_low_prob"].append(risk_desc)
+        except Exception as e:
+            logger.warning(f"Error creating risk matrix: {e}")
+
         return matrix
     
     def _prioritize_risk_mitigation(self, risks: List[Dict[str, Any]]) -> List[str]:
         """Prioritize risk mitigation efforts."""
-        # Sort risks by impact and probability
-        high_priority = [r for r in risks if r.get("impact") == "high"]
-        medium_priority = [r for r in risks if r.get("impact") == "medium"]
-        
         priorities = []
-        for risk in high_priority[:3]:  # Top 3 high-impact risks
-            priorities.append(f"Address {risk['risk']}: {risk['mitigation']}")
-        
-        for risk in medium_priority[:2]:  # Top 2 medium-impact risks
-            priorities.append(f"Monitor {risk['risk']}: {risk['mitigation']}")
-        
+        try:
+            # Sort risks by impact and probability
+            high_priority = [r for r in risks if isinstance(r, dict) and r.get("impact") == "high"]
+            medium_priority = [r for r in risks if isinstance(r, dict) and r.get("impact") == "medium"]
+
+            for risk in high_priority[:3]:  # Top 3 high-impact risks
+                risk_desc = risk.get("risk", risk.get("description", "Unknown risk"))
+                mitigation = risk.get("mitigation", "Implement appropriate controls")
+                priorities.append(f"Address {risk_desc}: {mitigation}")
+
+            for risk in medium_priority[:2]:  # Top 2 medium-impact risks
+                risk_desc = risk.get("risk", risk.get("description", "Unknown risk"))
+                mitigation = risk.get("mitigation", "Monitor and review regularly")
+                priorities.append(f"Monitor {risk_desc}: {mitigation}")
+        except Exception as e:
+            logger.warning(f"Error prioritizing risk mitigation: {e}")
+
         return priorities
     
     def _calculate_overall_risk_level(self, risks: List[Dict[str, Any]]) -> str:

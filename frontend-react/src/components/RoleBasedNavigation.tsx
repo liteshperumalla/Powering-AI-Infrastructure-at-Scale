@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { useAppSelector } from '@/store/hooks';
+import { useRouter } from 'next/navigation';
 import {
   List,
   ListItem,
@@ -40,7 +41,6 @@ import {
   CompareArrows as VendorIcon,
   MonitorHeart as SystemStatusIcon
 } from '@mui/icons-material';
-import Link from 'next/link';
 
 interface NavigationItem {
   path: string;
@@ -85,11 +85,37 @@ interface RoleBasedNavigationProps {
 
 const RoleBasedNavigation: React.FC<RoleBasedNavigationProps> = ({ onItemClick }) => {
   const { user, isAuthenticated } = useAppSelector(state => state.auth);
+  const currentAssessment = useAppSelector(state => state.assessment.currentAssessment);
+  const router = useRouter();
   const userRole = user?.role || 'user';
 
   const hasAccess = (item: NavigationItem): boolean => {
     if (!isAuthenticated) return item.roles.includes('*') && item.category === 'user';
     return item.roles.includes('*') || item.roles.includes(userRole);
+  };
+
+  // Feature pages that need assessment ID
+  const featurePages = [
+    '/performance',
+    '/compliance',
+    '/experiments',
+    '/quality',
+    '/approvals',
+    '/budget-forecasting',
+    '/executive-dashboard',
+    '/rollback',
+    '/vendor-lockin'
+  ];
+
+  const handleNavigation = (path: string) => {
+    if (onItemClick) onItemClick();
+
+    // If it's a feature page and we have a current assessment, add the assessment ID
+    if (featurePages.includes(path) && currentAssessment?.id) {
+      router.push(`${path}?assessment_id=${currentAssessment.id}`);
+    } else {
+      router.push(path);
+    }
   };
 
   const userItems = navigationItems.filter(item =>
@@ -114,9 +140,7 @@ const RoleBasedNavigation: React.FC<RoleBasedNavigationProps> = ({ onItemClick }
           {items.map((item) => (
             <ListItem key={item.path} disablePadding>
               <ListItemButton
-                component={Link}
-                href={item.path}
-                onClick={onItemClick}
+                onClick={() => handleNavigation(item.path)}
                 sx={{
                   borderRadius: 1,
                   mx: 1,

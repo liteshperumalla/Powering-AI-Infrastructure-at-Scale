@@ -160,7 +160,7 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
         sections: Array.isArray(report.sections) ? report.sections : [],
         keyFindings: Array.isArray(report.keyFindings) ? report.keyFindings : [],
         recommendations: Array.isArray(report.recommendations) ? report.recommendations : [],
-        estimatedSavings: report.estimatedSavings || 0,
+        estimatedSavings: report.estimatedSavings || null,
         complianceScore: report.complianceScore || 0,
         versions: Array.isArray(report.versions) ? report.versions : [],
         sharedWith: Array.isArray(report.sharedWith) ? report.sharedWith : [],
@@ -196,16 +196,27 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                 <Divider sx={{ my: 2 }} />
 
                 {/* Key Metrics */}
-                {(safeReport.estimatedSavings || safeReport.complianceScore) && (
+                {(safeReport.estimatedSavings !== null || safeReport.complianceScore) && (
                     <Box sx={{ display: 'flex', gap: 2, mb: 2 }}>
-                        {safeReport.estimatedSavings && (
+                        {safeReport.estimatedSavings !== null ? (
                             <Card variant="outlined" sx={{ flex: 1 }}>
                                 <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
                                     <Typography variant="body2" color="text.secondary">
                                         Estimated Savings
                                     </Typography>
                                     <Typography variant="h6" color="success.main">
-                                        ${safeReport.estimatedSavings.toLocaleString()}
+                                        ${typeof safeReport.estimatedSavings === 'number' ? safeReport.estimatedSavings.toLocaleString() : 'Calculating...'}
+                                    </Typography>
+                                </CardContent>
+                            </Card>
+                        ) : (
+                            <Card variant="outlined" sx={{ flex: 1 }}>
+                                <CardContent sx={{ p: 2, '&:last-child': { pb: 2 } }}>
+                                    <Typography variant="body2" color="text.secondary">
+                                        Estimated Savings
+                                    </Typography>
+                                    <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                                        Complete assessments to see savings data
                                     </Typography>
                                 </CardContent>
                             </Card>

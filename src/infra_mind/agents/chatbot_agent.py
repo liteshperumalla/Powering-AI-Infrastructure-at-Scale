@@ -291,7 +291,7 @@ class ChatbotAgent(BaseAgent):
             )
             
             # Parse response and map to enum
-            intent_text = response.content.strip().lower()
+            intent_text = response.strip().lower() if isinstance(response, str) else str(response).strip().lower()
             
             # Map common variations
             intent_mapping = {
@@ -462,8 +462,9 @@ class ChatbotAgent(BaseAgent):
                     "response_time": (datetime.now() - start_time).total_seconds()
                 }
         
-        # Build system prompt based on context
-        system_prompt = self._build_system_prompt(context, intent)
+        # Build system prompt based on context with assessment data if available
+        assessment_data = additional_context.get("assessment_data") if additional_context else None
+        system_prompt = self._build_system_prompt(context, intent, assessment_data)
         
         # Build conversation context
         conversation_context = ""
@@ -583,69 +584,158 @@ class ChatbotAgent(BaseAgent):
                 "error": str(e)
             }
     
-    def _build_system_prompt(self, context: ConversationContext, intent: IntentType) -> str:
+    def _build_system_prompt(self, context: ConversationContext, intent: IntentType, assessment_data: Optional[Dict[str, Any]] = None) -> str:
         """
-        Build system prompt based on conversation context and intent.
-        
+        Build system prompt based on conversation context, intent, and assessment data.
+
         Args:
             context: Conversation context
             intent: User intent
-            
+            assessment_data: Optional assessment data for personalized context
+
         Returns:
             System prompt string
         """
-        base_prompt = """
-        You are an intelligent customer service assistant for Infra Mind, an AI-powered 
-        infrastructure advisory platform. You help businesses plan, simulate, and scale 
-        their AI infrastructure across AWS, Azure, and GCP.
-        
-        Your role is to:
-        - Provide helpful and accurate information about the platform
-        - Guide users through features and capabilities
-        - Assist with technical questions and troubleshooting
-        - Offer professional customer service
-        - Know when to escalate complex issues to human agents
-        
-        Platform capabilities include:
-        - AI infrastructure assessments and recommendations
-        - Multi-cloud cost analysis and optimization
-        - Compliance mapping (GDPR, HIPAA, CCPA)
-        - Infrastructure scaling simulations
-        - Professional strategy reports
-        - Multi-agent AI system for specialized expertise
-        """
-        
-        # Add context-specific guidance
+        base_prompt = """You are an expert AI infrastructure consultant and analyst for Infra Mind, an advanced AI-powered infrastructure advisory platform. You help businesses plan, simulate, optimize, and scale their AI infrastructure across AWS, Azure, and GCP.
+
+Your role is to provide accurate, personalized, and professional assistance by:
+- Analyzing and explaining assessment results, recommendations, and reports in detail
+- Providing data-driven insights based on actual analytics and metrics
+- Answering technical questions about infrastructure, cloud providers, and implementation strategies
+- Explaining the decision-making process and reasoning behind AI agent recommendations
+- Offering professional guidance on cost optimization, performance, security, and scalability
+- Knowing when to escalate complex issues requiring human expertise
+
+IMPORTANT GUIDELINES:
+- NEVER use emojis in your responses
+- Base all answers on actual data provided in the context
+- Be specific and reference actual numbers, metrics, and recommendations when available
+- If data is missing or unavailable, clearly state this limitation
+- Provide validation and quality checks for accuracy
+- Maintain a professional, technical, and authoritative tone
+
+Platform capabilities include:
+- Multi-agent AI infrastructure assessments with specialized expertise
+- Comprehensive recommendations with benefits, risks, and implementation steps
+- Advanced analytics including cost analysis, performance predictions, and risk assessment
+- Quality metrics and confidence scoring for recommendations
+- Multi-cloud strategy and optimization
+- Compliance mapping and security analysis
+- Professional reports and decision-making support"""
+
+        # Add context-specific guidance with assessment data integration
         context_prompts = {
             ConversationContext.TECHNICAL_SUPPORT: """
-            Focus on technical troubleshooting and problem-solving. Be methodical
-            in diagnosing issues and provide step-by-step solutions when possible.
-            """,
-            
+Focus on technical troubleshooting and problem-solving. Be methodical in diagnosing issues and provide step-by-step solutions. Reference platform features, APIs, and integrations accurately.""",
+
             ConversationContext.ASSESSMENT_HELP: """
-            Help users understand the assessment process, explain different types
-            of requirements, and guide them through creating comprehensive evaluations.
-            """,
-            
+Help users understand their specific assessment results comprehensively. When assessment data is provided:
+- Reference the actual business requirements, goals, and constraints
+- Explain each recommendation in detail including benefits, risks, estimated costs
+- Discuss the AI agents involved and their specialized expertise
+- Analyze quality metrics and confidence scores
+- Provide context on decision factors and trade-offs
+- Compare different approaches and alternatives mentioned in recommendations
+- Reference actual analytics data like cost projections, performance analysis, and risk assessment""",
+
             ConversationContext.PLATFORM_GUIDANCE: """
-            Provide clear explanations of platform features, walk users through
-            workflows, and help them understand how to get the most value from the system.
-            """,
-            
+Provide clear explanations of platform features and workflows. Guide users through the system systematically, explaining how different components work together.""",
+
             ConversationContext.BILLING_SUPPORT: """
-            Handle billing inquiries professionally and accurately. For complex
-            billing issues, be prepared to escalate to the appropriate team.
-            """,
-            
+Handle billing inquiries professionally. Explain cost structures, pricing models, and optimization opportunities. Reference actual cost data when available.""",
+
             ConversationContext.GENERAL_INQUIRY: """
-            Be welcoming and helpful for general questions. Provide overview
-            information and guide users to more specific resources as needed.
-            """
+Be welcoming and provide overview information. Guide users to specific resources and features relevant to their needs."""
         }
-        
-        context_addition = context_prompts.get(context)
-        
-        return f"{base_prompt}\n\n{context_addition}"
+
+        # Build comprehensive prompt with assessment context
+        prompt_parts = [base_prompt]
+
+        # Add context-specific guidance
+        if context in context_prompts:
+            prompt_parts.append(f"\n\nCONTEXT-SPECIFIC GUIDANCE:\n{context_prompts[context]}")
+
+        # Add assessment data context if available
+        if assessment_data and not assessment_data.get("error"):
+            prompt_parts.append(self._format_assessment_context(assessment_data))
+
+        return "\n".join(prompt_parts)
+
+    def _format_assessment_context(self, assessment_data: Dict[str, Any]) -> str:
+        """Format assessment data into context for the LLM."""
+        context_parts = ["\n\nCURRENT ASSESSMENT CONTEXT:"]
+
+        # Basic info
+        context_parts.append(f"""
+Assessment: {assessment_data.get('title', 'Unknown')}
+Status: {assessment_data.get('status', 'Unknown')}
+Completion: {assessment_data.get('completion_percentage', 0)}%""")
+
+        # Business requirements
+        if biz_req := assessment_data.get('business_requirements'):
+            context_parts.append(f"""
+Business Profile:
+- Company: {biz_req.get('company_name', 'Not specified')}
+- Industry: {biz_req.get('industry', 'Not specified')}
+- Size: {biz_req.get('company_size', 'Not specified')}
+- Budget: {biz_req.get('budget_range', 'Not specified')}
+- Goals: {', '.join(biz_req.get('business_goals', [])[:5]) if biz_req.get('business_goals') else 'Not specified'}""")
+
+        # Recommendations summary
+        if recs := assessment_data.get('recommendations'):
+            context_parts.append(f"""
+Recommendations: {recs.get('count', 0)} total
+Average Confidence: {assessment_data.get('decision_factors', {}).get('average_confidence', 0):.0%}
+High Priority Items: {assessment_data.get('decision_factors', {}).get('high_priority_items', 0)}
+Total Estimated Cost: ${assessment_data.get('decision_factors', {}).get('total_estimated_cost', 0):,.2f}/month""")
+
+            if recs.get('summary'):
+                context_parts.append("\nKey Recommendations:")
+                for i, rec in enumerate(recs['summary'][:5], 1):
+                    context_parts.append(f"""
+{i}. {rec.get('title', 'Unknown')}
+   - Category: {rec.get('category', 'N/A')}
+   - Confidence: {rec.get('confidence_score', 0):.0%}
+   - Provider: {rec.get('cloud_provider', 'N/A')}
+   - Cost: {rec.get('estimated_cost', 'N/A')}
+   - Benefits: {len(rec.get('benefits', []))} listed
+   - Risks: {len(rec.get('risks', []))} identified""")
+
+        # Analytics summary
+        if analytics := assessment_data.get('analytics'):
+            if cost_analysis := analytics.get('cost_analysis'):
+                context_parts.append(f"""
+Cost Analysis:
+- Current Monthly: ${cost_analysis.get('current_monthly_cost', 0):,.2f}
+- Projected Monthly: ${cost_analysis.get('projected_monthly_cost', 0):,.2f}
+- Potential Savings: ${cost_analysis.get('potential_savings', 0):,.2f}
+- ROI: {cost_analysis.get('roi_projection', {}).get('twelve_months', 0):,.2f} (12 months)""")
+
+            if perf_analysis := analytics.get('performance_analysis'):
+                context_parts.append(f"""
+Performance Analysis:
+- Current Response Time: {perf_analysis.get('current_response_time_ms', 0)}ms
+- Target Response Time: {perf_analysis.get('target_response_time_ms', 0)}ms
+- Scalability Score: {perf_analysis.get('scalability_score', 0):.0%}
+- Reliability Score: {perf_analysis.get('reliability_score', 0):.0%}""")
+
+        # Quality metrics
+        if quality := assessment_data.get('quality_metrics'):
+            if quality.get('overall_score'):
+                context_parts.append(f"""
+Quality Metrics:
+- Overall Score: {quality.get('overall_score', 0):.0%}
+- Completeness: {quality.get('completeness', 0):.0%}
+- Accuracy: {quality.get('accuracy', 0):.0%}
+- Confidence: {quality.get('confidence', 0):.0%}""")
+
+        # Agents involved
+        if agents := assessment_data.get('agents_involved'):
+            context_parts.append(f"\nAI Agents Involved: {', '.join(agents)}")
+
+        context_parts.append("\n\nUSE THIS CONTEXT to provide specific, data-driven answers. Reference actual numbers and recommendations from this assessment.")
+
+        return "\n".join(context_parts)
     
     async def _check_faq(self, message: str, context: ConversationContext) -> Optional[Dict[str, Any]]:
         """

@@ -66,7 +66,7 @@ import AdvancedReportExport from '@/components/AdvancedReportExport';
 import ScenarioComparison from '@/components/ScenarioComparison';
 import ProgressIndicator, { useProgressSteps } from '@/components/ProgressIndicator';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { fetchAssessments } from '@/store/slices/assessmentSlice';
+import { fetchAssessments, updateAssessment } from '@/store/slices/assessmentSlice';
 import { fetchReports } from '@/store/slices/reportSlice';
 import { fetchScenarios } from '@/store/slices/scenarioSlice';
 import { openModal, closeModal, addNotification } from '@/store/slices/uiSlice';
@@ -591,12 +591,34 @@ export default function DashboardPage() {
                             // Refresh all data when assessment completes
                             cacheBuster.clearAllCache();
                             clearAssessmentCache(message.assessment_id);
+
+                            // Explicitly ensure assessment status is updated to completed using Redux
+                            try {
+                                if (message.assessment_id) {
+                                    await dispatch(updateAssessment({
+                                        id: message.assessment_id,
+                                        updates: {
+                                            status: 'completed',
+                                            completion_percentage: 100,
+                                            completed_at: new Date().toISOString(),
+                                            updated_at: new Date().toISOString()
+                                        }
+                                    })).unwrap();
+                                    console.log(`✅ Assessment ${message.assessment_id} status updated to completed via Redux`);
+                                }
+                            } catch (statusUpdateError) {
+                                console.warn('⚠️ Failed to update assessment status via Redux:', statusUpdateError);
+                                // Continue with refresh even if status update fails
+                            }
+
                             dispatch(fetchAssessments());
                             dispatch(fetchReports());
                             // Force refresh dashboard data with new visualizations
                             await loadDashboardData(true);
                             // Refresh reports after assessment completion
                             dispatch(fetchReports());
+                            // Refresh draft assessments to show updated status
+                            await loadDraftAssessments();
                             // Trigger advanced analytics refresh if user navigates there
                             if (typeof window !== 'undefined') {
                                 window.dispatchEvent(new CustomEvent('assessment-completed', {
@@ -1090,26 +1112,26 @@ export default function DashboardPage() {
         try {
             if (Array.isArray(assessments) && assessments.length > 0) {
                 const latestAssessment = assessments[0];
-                
+
                 try {
                     // Force clear assessment-specific cache to ensure fresh data
                     clearAssessmentCache(latestAssessment.id);
-                    
+
                     console.log('📊 Loading assessment results with fresh data for:', {
                         assessmentId: latestAssessment.id,
                         title: latestAssessment.title,
                         status: latestAssessment.status,
                         progress: latestAssessment.progress?.progress_percentage || 0
                     });
-                    
-                    // Only show results for completed assessments - get from backend API only
+
+                    // Only show results for completed assessments
                     if (latestAssessment.status === 'completed' || latestAssessment.status === 'processing') {
                         try {
                             const visualizationResponse = await apiClient.getAssessmentVisualizationData(latestAssessment.id);
-                            
-                            if (visualizationResponse && 
-                                visualizationResponse.data && 
-                                visualizationResponse.data.assessment_results && 
+
+                            if (visualizationResponse &&
+                                visualizationResponse.data &&
+                                visualizationResponse.data.assessment_results &&
                                 visualizationResponse.data.assessment_results.length > 0) {
                                 // Use only real backend data
                                 setAssessmentResults(visualizationResponse.data.assessment_results);
@@ -1129,7 +1151,6 @@ export default function DashboardPage() {
                     }
                 } catch (fallbackError) {
                     console.error('Failed to calculate assessment results:', fallbackError);
-                    // Show empty results only if both methods fail
                     setAssessmentResults([]);
                 }
             } else {
@@ -1138,7 +1159,6 @@ export default function DashboardPage() {
             }
         } catch (error) {
             console.error('Failed to load assessment results:', error);
-            // Only show real data - no demo data fallback
             setAssessmentResults([]);
         }
         setLoadingAssessmentResults(false);
@@ -1177,107 +1197,28 @@ export default function DashboardPage() {
 
                         // Convert API recommendations to table format - use backend data directly
                         const tableData = uniqueRecommendations.slice(0, 5).map((rec: any, index: number) => {
-                            const provider = rec.recommendation_data?.provider || 'multi_cloud';
+                            // Get provider from recommendation data or cloud_provider field
+                            const provider = rec.cloud_provider || rec.recommendation_data?.provider || rec.recommendation_data?.cloud_provider || 'GENERAL';
 
                             return {
                                 id: rec.id, // Use the ID provided by the backend
                                 serviceName: rec.title || `Recommendation ${index + 1}`,
-                                provider: provider.toUpperCase() as 'AWS' | 'Azure' | 'GCP' | 'Alibaba' | 'IBM' | 'MULTI_CLOUD',
+                                provider: provider.toUpperCase() as 'AWS' | 'Azure' | 'GCP' | 'Alibaba' | 'IBM' | 'MULTI_CLOUD' | 'GENERAL',
                                 serviceType: rec.category || 'Service',
                                 costEstimate: rec.cost_estimates?.monthly_cost || parseFloat(rec.total_estimated_monthly_cost) || 0,
                                 confidenceScore: Math.round((rec.confidence_score || 0.8) * 100),
                                 businessAlignment: Math.round((rec.business_alignment || rec.alignment_score || 0.85) * 100),
                                 implementationComplexity: (rec.recommendation_data?.complexity || 'medium') as 'low' | 'medium' | 'high',
-                                pros: rec.pros || (() => {
-                                    const defaultPros = [];
-                                    
-                                    // Add cost benefits
-                                    const monthlyCost = rec.cost_estimates?.monthly_cost || 0;
-                                    const annualSavings = rec.cost_estimates?.roi_projection?.annual_savings || 0;
-                                    if (annualSavings > 0) {
-                                        defaultPros.push(`$${annualSavings.toLocaleString()} annual savings projected`);
-                                    } else if (monthlyCost > 0) {
-                                        defaultPros.push(`$${monthlyCost.toLocaleString()}/month competitive pricing`);
-                                    }
-                                    
-                                    // Add timeline benefits
-                                    const timeline = rec.recommendation_data?.implementation_timeline || rec.recommendation_data?.estimated_timeline;
-                                    if (timeline) {
-                                        defaultPros.push(`${timeline} implementation timeline`);
-                                    }
-                                    
-                                    // Add efficiency improvements
-                                    const efficiency = rec.cost_estimates?.roi_projection?.efficiency_improvement;
-                                    if (efficiency) {
-                                        defaultPros.push(`${efficiency} efficiency improvement`);
-                                    }
-                                    
-                                    // Add high confidence as a pro
-                                    const confidence = rec.confidence_score || 0;
-                                    if (confidence >= 0.8) {
-                                        defaultPros.push(`${Math.round(confidence * 100)}% AI confidence score`);
-                                    }
-                                    
-                                    // Add provider-specific benefits
-                                    const provider = rec.recommendation_data?.provider;
-                                    if (provider) {
-                                        const providerBenefits = {
-                                            'aws': 'Proven enterprise scalability',
-                                            'azure': 'Seamless Microsoft integration',  
-                                            'gcp': 'Advanced AI/ML capabilities',
-                                            'multi_cloud': 'Vendor lock-in avoidance'
-                                        };
-                                        const benefit = providerBenefits[provider.toLowerCase()];
-                                        if (benefit) defaultPros.push(benefit);
-                                    }
-                                    
-                                    return defaultPros.length > 0 ? defaultPros : ['AI-optimized recommendation', 'Industry best practices'];
-                                })(),
-                                cons: rec.cons || rec.risks_and_considerations || (() => {
-                                    const defaultCons = [];
-                                    
-                                    // Add complexity concerns
-                                    const complexity = rec.recommendation_data?.implementation_complexity || rec.recommendation_data?.complexity;
-                                    if (complexity === 'high') {
-                                        defaultCons.push('High implementation complexity');
-                                    } else if (complexity === 'medium') {
-                                        defaultCons.push('Moderate setup complexity');
-                                    }
-                                    
-                                    // Add setup cost concerns
-                                    const setupCost = rec.cost_estimates?.setup_cost || 0;
-                                    if (setupCost > 20000) {
-                                        defaultCons.push(`$${setupCost.toLocaleString()} initial setup investment`);
-                                    } else if (setupCost > 0) {
-                                        defaultCons.push(`$${setupCost.toLocaleString()} setup cost required`);
-                                    }
-                                    
-                                    // Add timeline concerns
-                                    const timeline = rec.recommendation_data?.implementation_timeline || rec.recommendation_data?.estimated_timeline;
-                                    if (timeline && (timeline.includes('16') || timeline.includes('20') || timeline.includes('24'))) {
-                                        defaultCons.push('Extended implementation timeline');
-                                    }
-                                    
-                                    // Add risk considerations from actual data
-                                    if (Array.isArray(rec.risks_and_considerations)) {
-                                        defaultCons.push(...rec.risks_and_considerations.slice(0, 2));
-                                    }
-                                    
-                                    // Add provider-specific concerns
-                                    const provider = rec.recommendation_data?.provider;
-                                    if (provider) {
-                                        const providerConcerns = {
-                                            'aws': 'Learning curve for team',
-                                            'azure': 'Licensing complexity',
-                                            'gcp': 'Limited enterprise support',
-                                            'multi_cloud': 'Increased management overhead'
-                                        };
-                                        const concern = providerConcerns[provider.toLowerCase()];
-                                        if (concern) defaultCons.push(concern);
-                                    }
-                                    
-                                    return defaultCons.length > 0 ? defaultCons : ['Migration effort required', 'Team training needed'];
-                                })(),
+                                // Use benefits from backend if available, otherwise show placeholder
+                                pros: rec.benefits && rec.benefits.length > 0
+                                    ? rec.benefits
+                                    : ['No detailed benefits provided - LLM analysis pending'],
+                                // Use risks from backend if available, otherwise show placeholder
+                                cons: rec.risks && rec.risks.length > 0
+                                    ? rec.risks
+                                    : (rec.risks_and_considerations && rec.risks_and_considerations.length > 0
+                                        ? rec.risks_and_considerations
+                                        : ['No detailed risks provided - LLM analysis pending']),
                                 status: rec.status === 'approved' || rec.confidence_score >= 0.8 ? 'recommended' as const : 'alternative' as const
                             };
                         });
@@ -2392,7 +2333,7 @@ export default function DashboardPage() {
                                         sections: Array.isArray(reports[0]?.sections) ? reports[0].sections : [],
                                         keyFindings: Array.isArray(reports[0]?.key_findings) ? reports[0].key_findings : [],
                                         recommendations: Array.isArray(reports[0]?.recommendations) ? reports[0].recommendations : [],
-                                        estimatedSavings: reports[0]?.estimated_savings || 0,
+                                        estimatedSavings: typeof reports[0]?.estimated_savings === 'number' ? reports[0].estimated_savings : null, // Show null only when no data, preserve 0 as valid
                                         complianceScore: reports[0]?.compliance_score || undefined,
                                         versions: Array.isArray(reports[0]?.versions) ? reports[0].versions : [],
                                         sharedWith: Array.isArray(reports[0]?.shared_with) ? reports[0].shared_with : [],

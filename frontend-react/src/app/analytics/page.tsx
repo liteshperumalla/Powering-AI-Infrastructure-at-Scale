@@ -47,6 +47,7 @@ import ResponsiveLayout from '@/components/ResponsiveLayout';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { apiClient } from '@/services/api';
 import { cacheBuster, forceRefresh } from '@/utils/cache-buster';
+import { useFreshData } from '@/hooks/useFreshData';
 
 interface AnalyticsData {
     timestamp: string;
@@ -68,6 +69,17 @@ export default function AnalyticsPage() {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [timeframe, setTimeframe] = useState('7d');
+
+    // Auto-refresh analytics data every 30 seconds
+    const { forceRefresh: refreshAnalytics, isStale, lastRefresh } = useFreshData('analytics', {
+        autoRefresh: true,
+        refreshInterval: 30000, // 30 seconds
+        dependencies: [timeframe],
+        onRefresh: () => {
+            console.log('🔄 Auto-refreshing analytics data...');
+            fetchAnalyticsData();
+        }
+    });
 
     const fetchAnalyticsData = async () => {
         try {
@@ -205,9 +217,17 @@ export default function AnalyticsPage() {
                                     <AnalyticsIcon sx={{ fontSize: 40 }} />
                                     Advanced Analytics
                                 </Typography>
-                                <Typography variant="body1" color="text.secondary">
-                                    Comprehensive analytics and insights for your AI infrastructure assessments.
-                                </Typography>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <Typography variant="body1" color="text.secondary">
+                                        Comprehensive analytics and insights for your AI infrastructure assessments
+                                    </Typography>
+                                    <Chip
+                                        label={isStale ? "Data may be outdated" : "Live data"}
+                                        size="small"
+                                        color={isStale ? "warning" : "success"}
+                                        variant="outlined"
+                                    />
+                                </Box>
                             </Box>
                             <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                                 <FormControl size="small" sx={{ minWidth: 120 }}>
@@ -224,10 +244,11 @@ export default function AnalyticsPage() {
                                         <MenuItem value="90d">90 Days</MenuItem>
                                     </Select>
                                 </FormControl>
-                                <Button 
-                                    startIcon={<Refresh />} 
-                                    onClick={fetchAnalyticsData}
+                                <Button
+                                    startIcon={<Refresh />}
+                                    onClick={refreshAnalytics}
                                     size="small"
+                                    title={`Last updated: ${new Date(lastRefresh).toLocaleTimeString()}`}
                                 >
                                     Refresh
                                 </Button>
@@ -235,7 +256,8 @@ export default function AnalyticsPage() {
                         </Box>
                         {analyticsData && (
                             <Typography variant="caption" color="text.secondary">
-                                Last updated: {new Date(analyticsData.timestamp).toLocaleString()}
+                                Data timestamp: {new Date(analyticsData.timestamp).toLocaleString()} •
+                                Page refreshed: {new Date(lastRefresh).toLocaleString()}
                             </Typography>
                         )}
                     </Box>
@@ -261,19 +283,30 @@ export default function AnalyticsPage() {
                                         
                                         {analyticsData.analytics.cost_modeling?.current_analysis ? (
                                             <>
-                                                <Box sx={{ mb: 2 }}>
-                                                    <Typography variant="h4" color="primary">
-                                                        {formatCurrency(analyticsData.analytics.cost_modeling.current_analysis.total_monthly_cost)}
-                                                    </Typography>
-                                                    <Typography variant="body2" color="text.secondary">
-                                                        Total Monthly Cost
-                                                    </Typography>
-                                                </Box>
-                                                
+                                                {analyticsData.analytics.cost_modeling.current_analysis.total_monthly_cost > 0 ? (
+                                                    <Box sx={{ mb: 2 }}>
+                                                        <Typography variant="h4" color="primary">
+                                                            {formatCurrency(analyticsData.analytics.cost_modeling.current_analysis.total_monthly_cost)}
+                                                        </Typography>
+                                                        <Typography variant="body2" color="text.secondary">
+                                                            Total Monthly Cost
+                                                        </Typography>
+                                                    </Box>
+                                                ) : (
+                                                    <Box sx={{ mb: 2, textAlign: 'center', py: 3 }}>
+                                                        <Typography variant="h6" color="text.secondary" gutterBottom>
+                                                            No Cost Data Available
+                                                        </Typography>
+                                                        <Typography variant="body2" color="text.secondary">
+                                                            Complete assessments to see cost analysis
+                                                        </Typography>
+                                                    </Box>
+                                                )}
+
                                                 <Typography variant="body2" sx={{ mb: 2 }}>
                                                     Assessments analyzed: {analyticsData.analytics.cost_modeling.current_analysis.assessments_analyzed}
                                                 </Typography>
-                                                
+
                                                 {analyticsData.analytics.cost_modeling.current_analysis.assessments_analyzed === 0 && (
                                                     <Alert severity="info" sx={{ mt: 2 }}>
                                                         <Typography variant="body2">

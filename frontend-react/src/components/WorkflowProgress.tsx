@@ -40,11 +40,12 @@ interface WorkflowProgressProps {
 }
 
 const WORKFLOW_STEPS = [
-    { key: 'initialization', label: 'Initialization' },
-    { key: 'analysis', label: 'Analysis' },
-    { key: 'optimization', label: 'Optimization' },
+    { key: 'created', label: 'Assessment Created' },
+    { key: 'initializing', label: 'Initializing Workflow' },
+    { key: 'analysis', label: 'Multi-Agent Analysis' },
+    { key: 'recommendations', label: 'Generating Recommendations' },
     { key: 'report_generation', label: 'Report Generation' },
-    { key: 'completion', label: 'Completion' }
+    { key: 'completed', label: 'Analysis Complete' }
 ];
 
 const WorkflowProgress: React.FC<WorkflowProgressProps> = ({
@@ -75,20 +76,23 @@ const WorkflowProgress: React.FC<WorkflowProgressProps> = ({
 
     const loadWorkflowStatus = async () => {
         try {
-            const response = await apiClient.getAssessmentWorkflowStatus(assessmentId);
+            // Use the existing assessment endpoint instead of non-existent workflow status endpoint
+            const response = await apiClient.getAssessment(assessmentId);
+            const progress = response.progress || {};
+
             setWorkflowState(prev => ({
                 ...prev,
-                currentStep: response.current_step || '',
-                progress: response.progress || 0,
-                status: response.status || '',
-                steps: response.steps || [],
-                canAdvance: response.can_advance || false,
-                isRunning: response.is_running || false,
-                error: null
+                currentStep: progress.current_step || 'created',
+                progress: progress.progress_percentage || 0,
+                status: response.status || 'draft',
+                steps: [], // We'll map this from our known workflow steps
+                canAdvance: response.status === 'draft' || response.status === 'failed',
+                isRunning: response.status === 'in_progress',
+                error: progress.error || null
             }));
 
             if (onProgressUpdate) {
-                onProgressUpdate(response.progress || 0, response.status || '');
+                onProgressUpdate(progress.progress_percentage || 0, response.status || '');
             }
         } catch (error) {
             console.error('Failed to load workflow status:', error);
@@ -101,46 +105,49 @@ const WorkflowProgress: React.FC<WorkflowProgressProps> = ({
 
     const handleAdvanceStep = async () => {
         setWorkflowState(prev => ({ ...prev, loading: true, error: null }));
-        
+
         try {
-            await apiClient.advanceAssessmentWorkflow(assessmentId);
-            await loadWorkflowStatus(); // Refresh status after advancing
+            // Use the existing start workflow endpoint
+            await apiClient.startAssessmentAnalysis(assessmentId, {
+                assessment_id: assessmentId,
+                priority: 'high',
+                use_advanced_analysis: true
+            });
+            await loadWorkflowStatus(); // Refresh status after starting
         } catch (error) {
-            console.error('Failed to advance workflow:', error);
+            console.error('Failed to start workflow:', error);
             setWorkflowState(prev => ({
                 ...prev,
-                error: error instanceof Error ? error.message : 'Failed to advance workflow'
+                error: error instanceof Error ? error.message : 'Failed to start workflow'
             }));
         } finally {
             setWorkflowState(prev => ({ ...prev, loading: false }));
         }
     };
 
-    const handlePauseResume = async () => {
+    const handleRefresh = async () => {
         setWorkflowState(prev => ({ ...prev, loading: true, error: null }));
-        
         try {
-            if (workflowState.isRunning) {
-                await apiClient.pauseAssessmentWorkflow(assessmentId);
-            } else {
-                await apiClient.resumeAssessmentWorkflow(assessmentId);
-            }
             await loadWorkflowStatus();
-        } catch (error) {
-            console.error('Failed to pause/resume workflow:', error);
-            setWorkflowState(prev => ({
-                ...prev,
-                error: error instanceof Error ? error.message : 'Failed to pause/resume workflow'
-            }));
         } finally {
             setWorkflowState(prev => ({ ...prev, loading: false }));
         }
     };
 
     const getStepStatus = (stepKey: string) => {
-        const step = workflowState.steps.find(s => s.name === stepKey);
-        if (!step) return 'pending';
-        return step.status;
+        // Map based on current step and progress percentage
+        const currentStepIndex = WORKFLOW_STEPS.findIndex(step => step.key === workflowState.currentStep);
+        const stepIndex = WORKFLOW_STEPS.findIndex(step => step.key === stepKey);
+
+        if (stepIndex < currentStepIndex) {
+            return 'completed';
+        } else if (stepIndex === currentStepIndex && workflowState.status === 'in_progress') {
+            return 'in_progress';
+        } else if (stepIndex === currentStepIndex && workflowState.status === 'failed') {
+            return 'failed';
+        } else {
+            return 'pending';
+        }
     };
 
     const getCurrentStepIndex = () => {
@@ -253,30 +260,29 @@ const WorkflowProgress: React.FC<WorkflowProgressProps> = ({
                 <Box sx={{ display: 'flex', gap: 2, justifyContent: 'center' }}>
                     <Button
                         variant="outlined"
-                        startIcon={workflowState.isRunning ? <PauseIcon /> : <PlayIcon />}
-                        onClick={handlePauseResume}
-                        disabled={workflowState.loading || workflowState.status === 'completed'}
+                        startIcon={workflowState.loading ? <CircularProgress size={20} /> : <RefreshIcon />}
+                        onClick={handleRefresh}
+                        disabled={workflowState.loading}
                     >
-                        {workflowState.isRunning ? 'Pause' : 'Resume'}
+                        Refresh Status
                     </Button>
-                    
+
                     {workflowState.canAdvance && (
                         <Button
                             variant="contained"
-                            startIcon={workflowState.loading ? <CircularProgress size={20} /> : <NextIcon />}
+                            startIcon={workflowState.loading ? <CircularProgress size={20} /> : <PlayIcon />}
                             onClick={handleAdvanceStep}
                             disabled={workflowState.loading || !workflowState.canAdvance}
                         >
-                            Advance Step
+                            Start Analysis
                         </Button>
                     )}
                 </Box>
 
                 {/* Manual Trigger Notice */}
-                {workflowState.status === 'paused' && workflowState.canAdvance && (
+                {workflowState.canAdvance && workflowState.status !== 'in_progress' && (
                     <Alert severity="info" sx={{ mt: 2 }}>
-                        This assessment is paused and waiting for manual input. 
-                        Click "Advance Step" to continue the workflow.
+                        This assessment is ready to start. Click "Start Analysis" to begin the AI workflow.
                     </Alert>
                 )}
             </CardContent>

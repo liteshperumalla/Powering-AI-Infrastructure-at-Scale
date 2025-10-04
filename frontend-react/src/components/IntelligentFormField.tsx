@@ -109,7 +109,11 @@ export default function IntelligentFormField({
     const [contextualHelp, setContextualHelp] = useState<ContextualHelp | null>(null);
     const [showSmartDefaults, setShowSmartDefaults] = useState(false);
     const [helpAnchorEl, setHelpAnchorEl] = useState<HTMLElement | null>(null);
-    const [inputValue, setInputValue] = useState(value as string || '');
+    const [inputValue, setInputValue] = useState(() => {
+        if (typeof value === 'string') return value;
+        if (Array.isArray(value)) return value.join(', ');
+        return String(value || '');
+    });
     const [showSuggestions, setShowSuggestions] = useState(false);
     const [textInputValue, setTextInputValue] = useState('');
     const [showTextInput, setShowTextInput] = useState(false);
@@ -126,7 +130,13 @@ export default function IntelligentFormField({
 
     // Update input value when value prop changes
     useEffect(() => {
-        setInputValue(value as string || '');
+        if (typeof value === 'string') {
+            setInputValue(value);
+        } else if (Array.isArray(value)) {
+            setInputValue(value.join(', '));
+        } else {
+            setInputValue(String(value || ''));
+        }
     }, [value]);
 
     const loadSmartDefaults = useCallback(async () => {
@@ -147,7 +157,14 @@ export default function IntelligentFormField({
         if (!onGetSuggestions) return;
 
         try {
-            const suggestions = await onGetSuggestions(name, query);
+            // Ensure query is a string and not empty
+            const queryString = String(query || '').trim();
+            if (!queryString) {
+                setSuggestions([]);
+                return;
+            }
+
+            const suggestions = await onGetSuggestions(name, queryString);
             setSuggestions(suggestions || []);
         } catch (error) {
             console.error('Error loading suggestions:', error);
@@ -196,9 +213,22 @@ export default function IntelligentFormField({
     const handleLoadSuggestions = async () => {
         setIsLoadingAI(true);
         try {
-            const query = (value as string) || inputValue || '';
-            if (query.trim()) {
-                await loadSuggestions(query);
+            // Ensure query is always a string
+            let query = '';
+            if (typeof value === 'string') {
+                query = value;
+            } else if (Array.isArray(value)) {
+                query = value.join(', ');
+            } else if (value !== null && value !== undefined) {
+                query = String(value);
+            } else {
+                query = inputValue || '';
+            }
+
+            // Ensure query is a string and has content
+            const queryString = String(query || '');
+            if (queryString.trim()) {
+                await loadSuggestions(queryString);
                 setShowSuggestions(true);
             } else {
                 // If no query, load smart defaults instead
@@ -537,19 +567,26 @@ export default function IntelligentFormField({
                 return (
                     <Autocomplete
                         options={suggestions}
-                        getOptionLabel={(option) => typeof option === 'string' ? option : (option as Suggestion).label}
-                        renderOption={(props, option) => (
-                            <Box component="li" {...props}>
-                                <Box>
-                                    <Typography variant="body2">
-                                        {(option as Suggestion).label}
-                                    </Typography>
-                                    <Typography variant="caption" color="text.secondary">
-                                        {(option as Suggestion).description}
-                                    </Typography>
+                        getOptionLabel={(option) => {
+                            if (!option) return '';
+                            return typeof option === 'string' ? option : (option as Suggestion)?.label || '';
+                        }}
+                        renderOption={(props, option) => {
+                            const { key, ...otherProps } = props;
+                            const suggestion = option as Suggestion;
+                            return (
+                                <Box component="li" key={key} {...otherProps}>
+                                    <Box>
+                                        <Typography variant="body2">
+                                            {suggestion?.label || ''}
+                                        </Typography>
+                                        <Typography variant="caption" color="text.secondary">
+                                            {suggestion?.description || ''}
+                                        </Typography>
+                                    </Box>
                                 </Box>
-                            </Box>
-                        )}
+                            );
+                        }}
                         renderInput={(params) => (
                             <TextField
                                 {...params}
@@ -559,19 +596,20 @@ export default function IntelligentFormField({
                                 placeholder={placeholder}
                             />
                         )}
-                        value={value || null}
+                        value={value || ''}
                         onChange={(_, newValue) => {
                             // Handle both string values (freeSolo) and object values (suggestions)
-                            const finalValue = typeof newValue === 'string' 
-                                ? newValue 
-                                : (newValue as { value?: string })?.value || newValue;
+                            const finalValue = typeof newValue === 'string'
+                                ? newValue
+                                : (newValue as { value?: string })?.value || newValue || '';
                             handleInputChange(finalValue);
                         }}
-                        inputValue={inputValue}
+                        inputValue={inputValue || ''}
                         onInputChange={(_, newInputValue) => {
-                            setInputValue(newInputValue);
+                            const safeInputValue = newInputValue || '';
+                            setInputValue(safeInputValue);
                             // Update the form value immediately when typing (for freeSolo mode)
-                            handleInputChange(newInputValue);
+                            handleInputChange(safeInputValue);
                             // Removed automatic suggestion loading - now manual only
                         }}
                         freeSolo

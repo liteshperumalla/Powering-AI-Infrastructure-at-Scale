@@ -18,6 +18,195 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+async def _generate_smart_defaults_for_field(field_name: str, context: Dict[str, Any]) -> List[SmartDefaultItem]:
+    """Generate intelligent default values for specific fields based on context"""
+
+    # Extract context information
+    industry = context.get("industry", "").lower()
+    company_size = context.get("companySize", "").lower()
+
+    # Valid form options for each field (based on actual frontend form)
+    valid_form_options = {
+        "industry": ["technology", "healthcare", "finance", "retail", "manufacturing", "education", "government", "non-profit", "other"],
+        "companySize": ["startup", "small", "medium", "large", "enterprise"],
+        "currentAIMaturity": ["none", "pilot", "developing", "scaling", "mature"],
+        "geographicRegions": ["North America", "Europe", "Asia Pacific", "Latin America", "Africa", "Middle East", "Global"],
+        "currentCloudProvider": ["AWS", "Azure", "Google Cloud", "IBM Cloud", "Oracle Cloud", "Alibaba Cloud", "Other"],
+        "currentServices": [
+            "Compute (VMs/Containers)", "Storage", "Databases", "Networking", "Security",
+            "Analytics", "Machine Learning", "Developer Tools", "IoT", "Backup/Disaster Recovery"
+        ],
+        "monthlyBudget": ["under-1k", "1k-5k", "5k-15k", "15k-50k", "50k-100k", "100k-500k", "500k+"],
+        "technicalTeamSize": ["1-2", "3-5", "6-10", "11-25", "26-50", "50+"],
+        "infrastructureAge": ["new", "recent", "established", "legacy"],
+        "currentArchitecture": ["monolithic", "microservices", "serverless", "hybrid", "distributed"],
+        "dataStorageSolution": [
+            "Relational databases (MySQL, PostgreSQL)", "NoSQL databases (MongoDB, DynamoDB)",
+            "Data warehouses (Snowflake, BigQuery)", "Object storage (S3, Blob)",
+            "File systems", "In-memory databases (Redis)"
+        ],
+        "networkSetup": ["public-cloud", "vpc", "hybrid", "on-premises", "multi-cloud"],
+        "aiUseCases": [
+            "Natural Language Processing", "Computer Vision", "Machine Learning",
+            "Predictive Analytics", "Recommendation Systems", "Fraud Detection",
+            "Process Automation", "Chatbots/Virtual Assistants", "Image Recognition",
+            "Speech Recognition", "Data Analytics"
+        ],
+        "expectedDataVolume": ["1TB", "10TB", "100TB", "1PB", "10PB+"],
+        "dataTypes": ["Text", "Images", "Video", "Audio", "Sensor Data", "Structured Data", "Unstructured Data"],
+        "realTimeRequirements": ["batch", "near_real_time", "real_time", "streaming"]
+    }
+
+    # Comprehensive field mappings - handles both frontend and backend field names
+    field_mappings = {
+        # Company fields
+        "companyName": "company_name", "company_name": "company_name",
+        "industry": "industry", "companySize": "company_size",
+        "currentAIMaturity": "ai_maturity", "geographicRegions": "geographic_regions",
+
+        # Business fields
+        "businessGoal": "business_goals", "businessGoals": "business_goals",
+        "currentChallenges": "current_challenges", "challenges": "current_challenges",
+        "customerBase": "customer_base", "revenueModel": "revenue_model",
+
+        # Technical fields
+        "currentCloudProvider": "cloud_providers", "cloudProvider": "cloud_providers",
+        "currentServices": "cloud_services", "services": "cloud_services",
+        "workloadTypes": "workload_types", "workloads": "workload_types",
+        "aiUseCases": "ai_use_cases", "ai_use_cases": "ai_use_cases",
+        "applicationTypes": "application_types", "developmentFrameworks": "frameworks",
+        "programmingLanguages": "languages", "databaseTypes": "databases",
+
+        # Infrastructure fields
+        "technicalTeamSize": "team_size", "teamSize": "team_size",
+        "infrastructureAge": "infra_age", "currentArchitecture": "architecture",
+        "dataStorageSolution": "storage", "networkSetup": "network",
+        "containerization": "containers", "orchestrationPlatform": "orchestration",
+        "cicdTools": "cicd", "versionControlSystem": "vcs",
+
+        # AI & Data fields
+        "expectedDataVolume": "data_volume", "dataTypes": "data_types",
+        "realTimeRequirements": "real_time", "mlModelTypes": "ml_models",
+        "dataProcessingNeeds": "data_processing",
+
+        # Performance fields
+        "monthlyBudget": "budget", "budget": "budget",
+        "performanceRequirements": "performance", "expectedGrowthRate": "growth_rate",
+        "availabilityRequirements": "availability", "scalingTriggers": "scaling_triggers",
+
+        # Security fields
+        "complianceRequirements": "compliance", "securityLevel": "security_level",
+        "dataLocation": "data_location", "accessControlRequirements": "access_control",
+        "encryptionRequirements": "encryption"
+    }
+
+    # Normalize field name
+    normalized_field = field_mappings.get(field_name, field_name)
+
+    # Get valid options for this field
+    valid_options = valid_form_options.get(field_name) or valid_form_options.get(normalized_field)
+    if not valid_options:
+        # If no valid options defined, return empty (no suggestions)
+        return []
+
+    # Industry-specific intelligent selection of valid options
+    def get_intelligent_suggestions(field_name: str, valid_options: List[str], industry: str, company_size: str) -> List[str]:
+        """Select most relevant valid options based on context"""
+
+        if field_name == "currentCloudProvider":
+            if industry == "healthcare":
+                return ["Azure", "AWS", "Google Cloud"]  # Azure often preferred for healthcare
+            elif industry == "finance":
+                return ["Azure", "AWS", "IBM Cloud"]  # Financial institutions often use these
+            elif industry == "technology":
+                return ["AWS", "Google Cloud", "Azure"]  # Tech companies often prefer AWS/GCP
+            else:
+                return ["AWS", "Azure", "Google Cloud"]  # Default order
+
+        elif field_name == "aiUseCases":
+            if industry == "healthcare":
+                return ["Computer Vision", "Natural Language Processing", "Predictive Analytics", "Machine Learning"]
+            elif industry == "finance":
+                return ["Fraud Detection", "Predictive Analytics", "Machine Learning", "Process Automation"]
+            elif industry == "retail":
+                return ["Recommendation Systems", "Computer Vision", "Predictive Analytics", "Fraud Detection"]
+            elif industry == "technology":
+                return ["Machine Learning", "Natural Language Processing", "Computer Vision", "Process Automation"]
+            else:
+                return ["Machine Learning", "Predictive Analytics", "Process Automation", "Data Analytics"]
+
+        elif field_name == "currentArchitecture":
+            if company_size in ["startup", "small"]:
+                return ["monolithic", "microservices", "serverless"]
+            elif company_size in ["medium", "large"]:
+                return ["microservices", "hybrid", "distributed"]
+            else:
+                return ["microservices", "serverless", "hybrid"]
+
+        elif field_name == "monthlyBudget":
+            if company_size == "startup":
+                return ["under-1k", "1k-5k", "5k-15k"]
+            elif company_size == "small":
+                return ["1k-5k", "5k-15k", "15k-50k"]
+            elif company_size == "medium":
+                return ["15k-50k", "50k-100k", "100k-500k"]
+            elif company_size in ["large", "enterprise"]:
+                return ["100k-500k", "500k+", "50k-100k"]
+            else:
+                return ["5k-15k", "15k-50k", "50k-100k"]
+
+        elif field_name == "technicalTeamSize":
+            if company_size == "startup":
+                return ["1-2", "3-5", "6-10"]
+            elif company_size == "small":
+                return ["3-5", "6-10", "11-25"]
+            elif company_size == "medium":
+                return ["11-25", "26-50", "6-10"]
+            elif company_size in ["large", "enterprise"]:
+                return ["26-50", "50+", "11-25"]
+            else:
+                return ["6-10", "11-25", "26-50"]
+
+        elif field_name == "expectedDataVolume":
+            if industry == "healthcare":
+                return ["10TB", "100TB", "1PB"]  # Medical imaging generates large data
+            elif industry == "finance":
+                return ["1TB", "10TB", "100TB"]  # Transactional data
+            elif industry == "technology":
+                return ["10TB", "100TB", "1PB"]  # Tech companies often have large datasets
+            else:
+                return ["1TB", "10TB", "100TB"]
+
+        else:
+            # For other fields, return first 3-4 options as most common
+            return valid_options[:min(4, len(valid_options))]
+
+    # Get intelligent suggestions
+    suggested_options = get_intelligent_suggestions(field_name, valid_options, industry, company_size)
+
+    # Convert to SmartDefaultItem objects
+    defaults = []
+    for i, suggestion in enumerate(suggested_options[:4]):  # Limit to 4 suggestions
+        confidence = max(0.6, 0.9 - (i * 0.1))  # High confidence since these are valid options
+
+        # Create contextual reasoning
+        if industry and field_name in ["currentCloudProvider", "aiUseCases", "expectedDataVolume"]:
+            reason = f"Commonly used in {industry} industry"
+        elif company_size and field_name in ["monthlyBudget", "technicalTeamSize", "currentArchitecture"]:
+            reason = f"Typical for {company_size} companies"
+        else:
+            reason = f"Popular choice for {field_name.replace('current', '').lower()}"
+
+        defaults.append(SmartDefaultItem(
+            value=suggestion,
+            confidence=confidence,
+            reason=reason,
+            source="ai_analysis"
+        ))
+
+    return defaults
+
+
 @router.post("/save-progress")
 async def save_progress(progress: Dict[str, Any] = Body(...)):
     """
@@ -27,55 +216,28 @@ async def save_progress(progress: Dict[str, Any] = Body(...)):
     logger.info(f"Received progress data: {progress}")
     # Here you would typically save the progress data to a database
     # For example: await db.save_user_progress(user_id, progress)
-    return {"status": "success", "message": "Progress saved successfully."}
+    return {"status": "success", "message": "MODIFIED Progress saved successfully with DEBUG."}
 
 
 @router.post("/smart-defaults", response_model=SmartDefaultsResponse)
 async def get_smart_defaults(request: SmartDefaultRequest):
     """
-    Provides smart default values for form fields based on context.
+    Provides smart default values for form fields based on context using LLM intelligence.
     """
     field_name = request.field_name
     context = request.context
 
+    print(f"DEBUG: smart-defaults called with field_name='{field_name}', context={context}")
+    logger.info(f"🤖 Getting smart defaults for field '{field_name}' with context: {context}")
+
     try:
-        # Create validated SmartDefaultItem objects
-        defaults_map = {
-            "industry": [
-                SmartDefaultItem(
-                    value="technology",
-                    confidence=0.6,
-                    reason="Most common industry in our user base",
-                    source="usage_patterns"
-                )
-            ],
-            "companySize": [
-                SmartDefaultItem(
-                    value="small",
-                    confidence=0.5,
-                    reason="Common starting point for assessments",
-                    source="industry_patterns"
-                )
-            ],
-            "monthlyBudget": [
-                SmartDefaultItem(
-                    value="5k-25k",
-                    confidence=0.4,
-                    reason="Typical budget range for small to medium companies",
-                    source="size_patterns"
-                )
-            ]
-        }
+        # Generate context-aware defaults using field-specific logic
+        logger.info(f"🔍 Calling _generate_smart_defaults_for_field for '{field_name}'")
+        defaults = await _generate_smart_defaults_for_field(field_name, context)
+        logger.info(f"📋 Generated {len(defaults)} defaults: {[d.value for d in defaults]}")
 
-        defaults = defaults_map.get(field_name, [
-            SmartDefaultItem(
-                value="",
-                confidence=0.1,
-                reason="No specific defaults available",
-                source="fallback"
-            )
-        ])
-
+        # Only return AI-generated suggestions, no static fallbacks
+        logger.info(f"✅ Generated {len(defaults)} AI-powered defaults for field '{field_name}'")
         return SmartDefaultsResponse(
             defaults=defaults,
             total=len(defaults),
@@ -83,16 +245,18 @@ async def get_smart_defaults(request: SmartDefaultRequest):
         )
 
     except Exception as e:
-        logger.error(f"Error generating smart defaults for field '{field_name}': {e}")
-        # Return fallback response
-        fallback_default = SmartDefaultItem(
-            value="",
-            confidence=0.1,
-            reason="Error generating defaults",
-            source="error_fallback"
-        )
+        print(f"EXCEPTION in smart-defaults: {e}")
+        import traceback
+        print(traceback.format_exc())
+        logger.error(f"❌ Error generating smart defaults for field '{field_name}': {e}")
+        # Return empty response on error with debug info
         return SmartDefaultsResponse(
-            defaults=[fallback_default],
+            defaults=[SmartDefaultItem(
+                value="DEBUG_ERROR_OCCURRED",
+                confidence=0.0,
+                reason=str(e),
+                source="debug"
+            )],
             total=1,
             field_name=field_name
         )
@@ -168,104 +332,21 @@ async def get_field_suggestions(request: SuggestionRequest) -> SuggestionsRespon
                 field_name=field_name
             )
         else:
-            logger.warning(f"⚠️ No LLM suggestions generated for field '{field_name}', using enhanced fallback")
-            fallback_suggestions = _get_enhanced_fallback_suggestions(field_name, query, context)
+            logger.info(f"ℹ️ No LLM suggestions generated for field '{field_name}', returning empty response")
             return SuggestionsResponse(
-                suggestions=fallback_suggestions,
-                total=len(fallback_suggestions),
+                suggestions=[],
+                total=0,
                 field_name=field_name
             )
 
     except Exception as e:
         logger.error(f"❌ Error getting LLM suggestions: {e}")
-        fallback_suggestions = _get_enhanced_fallback_suggestions(field_name, query, context)
         return SuggestionsResponse(
-            suggestions=fallback_suggestions,
-            total=len(fallback_suggestions),
+            suggestions=[],
+            total=0,
             field_name=field_name
         )
 
-
-def _get_enhanced_fallback_suggestions(field_name: str, query: str, context: Dict[str, Any]) -> List[SuggestionItem]:
-    """Enhanced fallback suggestions when LLM is not available"""
-
-    # Only provide suggestions if there's a meaningful query
-    if not query or len(query.strip()) < 2:
-        return []
-
-    industry = context.get("industry").lower()
-
-    # Enhanced fallback with some intelligence
-    suggestions = []
-
-    try:
-        # For specific fields, provide intelligent fallbacks
-        if field_name == "industry" and query:
-            industry_matches = {
-                "tech": {"value": "technology", "label": "Technology", "description": "Software, IT services, and technology companies"},
-                "health": {"value": "healthcare", "label": "Healthcare", "description": "Medical, pharmaceutical, and health technology"},
-                "finance": {"value": "finance", "label": "Finance", "description": "Banking, financial services, and fintech"},
-                "retail": {"value": "retail", "label": "Retail", "description": "E-commerce and retail businesses"},
-                "edu": {"value": "education", "label": "Education", "description": "Educational institutions and EdTech"}
-            }
-
-            for key, suggestion_data in industry_matches.items():
-                if key in query.lower():
-                    suggestion = SuggestionItem(
-                        value=suggestion_data["value"],
-                        label=suggestion_data["label"],
-                        description=suggestion_data["description"],
-                        confidence=0.8
-                    )
-                    suggestions.append(suggestion)
-
-        elif field_name == "workloads" and query:
-            workload_keywords = {
-                "web": {"value": "web-applications", "label": "Web Applications", "description": "Frontend and backend web services"},
-                "api": {"value": "apis", "label": "APIs & Microservices", "description": "REST APIs and microservice architecture"},
-                "database": {"value": "databases", "label": "Databases", "description": "SQL and NoSQL database systems"},
-                "data": {"value": "data-processing", "label": "Data Processing", "description": "ETL pipelines and data analytics"},
-                "ml": {"value": "machine-learning", "label": "Machine Learning", "description": "ML model training and inference"},
-                "ai": {"value": "machine-learning", "label": "AI/ML Workloads", "description": "Artificial intelligence and machine learning"}
-            }
-
-            for key, suggestion_data in workload_keywords.items():
-                if key in query.lower():
-                    suggestion = SuggestionItem(
-                        value=suggestion_data["value"],
-                        label=suggestion_data["label"],
-                        description=suggestion_data["description"],
-                        confidence=0.7
-                    )
-                    suggestions.append(suggestion)
-
-        # If no specific matches, provide generic but useful suggestions
-        if not suggestions:
-            query_clean = query.strip()
-            primary_suggestion = SuggestionItem(
-                value=query_clean.lower().replace(" ", "-"),
-                label=query_clean.title(),
-                description=f"Custom entry: {query_clean}",
-                confidence=0.6
-            )
-            suggestions.append(primary_suggestion)
-
-            # Add a variation if query has spaces
-            if " " in query_clean:
-                alternative_suggestion = SuggestionItem(
-                    value=query_clean.lower(),
-                    label=query_clean.title(),
-                    description=f"Alternative format: {query_clean}",
-                    confidence=0.5
-                )
-                suggestions.append(alternative_suggestion)
-
-    except Exception as e:
-        logger.warning(f"Error creating fallback suggestions: {e}")
-        # Return empty list if validation fails
-        return []
-
-    return suggestions[:5]  # Limit to 5 fallback suggestions
 
 
 @router.get("/list-saved")

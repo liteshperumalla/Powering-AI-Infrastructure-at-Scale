@@ -1,12 +1,24 @@
 'use client';
 
+import { useSearchParams } from 'next/navigation';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../store';
 import ResponsiveLayout from '../../components/ResponsiveLayout';
 import VendorLockInAnalysis from '../../components/VendorLockInAnalysis';
 
 export default function VendorLockInPage() {
+    const searchParams = useSearchParams();
+    const currentAssessment = useSelector((state: RootState) => state.assessment.currentAssessment);
+
+    // Priority: URL param > Redux state
+    const urlAssessmentId = searchParams?.get('assessment_id');
+    const assessmentId = urlAssessmentId || currentAssessment?.id;
+
+    // No redirect - just handle the case when there's no assessment
+
     return (
         <ResponsiveLayout title="Vendor Lock-in Analysis">
-            <VendorLockInAnalysis />
+            <VendorLockInAnalysis assessmentId={assessmentId} />
         </ResponsiveLayout>
     );
 }
