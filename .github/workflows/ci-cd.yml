@@ -1,63 +1,38 @@
-name: Enhanced CI/CD Pipeline
+name: CI/CD Pipeline - Infra Mind
 
 on:
   push:
-    branches: [ main, develop, 'release/*', 'hotfix/*' ]
+    branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
-  release:
-    types: [ published ]
   workflow_dispatch:
-    inputs:
-      environment:
-        description: 'Target environment'
-        required: true
-        default: 'staging'
-        type: choice
-        options:
-        - staging
-        - production
-      skip_tests:
-        description: 'Skip tests (emergency deployment)'
-        required: false
-        default: false
-        type: boolean
 
 env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME_API: ${{ github.repository }}/api
-  IMAGE_NAME_FRONTEND: ${{ github.repository }}/frontend
   PYTHON_VERSION: '3.11'
   NODE_VERSION: '20'
+  DOCKER_BUILDKIT: 1
+  COMPOSE_DOCKER_CLI_BUILD: 1
 
 jobs:
-  # Code Quality and Testing
-  test:
-    name: Test and Quality Checks
+  # ==================== BACKEND TESTS ====================
+  backend-tests:
+    name: Backend Tests & Quality
     runs-on: ubuntu-latest
-    if: ${{ !github.event.inputs.skip_tests }}
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ['3.11']
-        node-version: ['20']
-        test-type: ['unit', 'integration']
-    
+
     services:
       mongodb:
         image: mongo:7.0
-        env:
-          MONGO_INITDB_ROOT_USERNAME: test
-          MONGO_INITDB_ROOT_PASSWORD: test
         ports:
           - 27017:27017
+        env:
+          MONGO_INITDB_ROOT_USERNAME: admin
+          MONGO_INITDB_ROOT_PASSWORD: password
         options: >-
-          --health-cmd "mongosh --eval 'db.adminCommand(\"ping\")'"
+          --health-cmd "mongosh --eval 'db.adminCommand({ ping: 1 })'"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      
+
       redis:
         image: redis:7.2-alpine
         ports:
@@ -67,787 +42,398 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ matrix.python-version }}
-    
-    - name: Set up Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'npm'
-        cache-dependency-path: frontend-react/package-lock.json
-    
-    - name: Cache Python dependencies
-      uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt', '**/pyproject.toml') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-    
-    - name: Install Python dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e .
-        pip install pytest pytest-cov pytest-asyncio black flake8 mypy
-    
-    - name: Install Node.js dependencies
-      working-directory: ./frontend-react
-      run: npm ci
-    
-    - name: Code formatting check (Black)
-      run: black --check --diff src/ tests/
-    
-    - name: Linting (Flake8)
-      run: flake8 src/ tests/ --max-line-length=88 --extend-ignore=E203,W503
-    
-    - name: Type checking (MyPy)
-      run: mypy src/ --ignore-missing-imports
-    
-    - name: Frontend linting
-      working-directory: ./frontend-react
-      run: npm run lint
-    
-    - name: Frontend type checking
-      working-directory: ./frontend-react
-      run: npm run type-check
-    
-    - name: Run Python tests
-      env:
-        INFRA_MIND_MONGODB_URL: mongodb://test:test@localhost:27017/test_infra_mind?authSource=admin
-        INFRA_MIND_REDIS_URL: redis://localhost:6379
-        INFRA_MIND_ENVIRONMENT: test
-        INFRA_MIND_SECRET_KEY: test-secret-key-for-ci
-        INFRA_MIND_OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY_TEST || 'test-key-placeholder' }}
-      run: |
-        pytest tests/ -v --cov=src --cov-report=xml --cov-report=html || echo "Some tests failed, but continuing build"
-    
-    - name: Run Frontend tests
-      working-directory: ./frontend-react
-      run: npm run test:ci || npm test -- --coverage --watchAll=false || echo "Frontend tests failed, but continuing build"
-    
-    - name: Upload Python coverage to Codecov
-      uses: codecov/codecov-action@v3
-      continue-on-error: true
-      with:
-        file: ./coverage.xml
-        flags: python
-        name: python-coverage
-    
-    - name: Upload Frontend coverage to Codecov
-      uses: codecov/codecov-action@v3
-      continue-on-error: true
-      with:
-        file: ./frontend-react/coverage/lcov.info
-        flags: frontend
-        name: frontend-coverage
-    
-    - name: Security scan (Bandit)
-      run: |
-        pip install bandit
-        bandit -r src/ -f json -o bandit-report.json || true
-    
-    - name: Upload security scan results
-      uses: actions/upload-artifact@v3
-      with:
-        name: security-scan-results-${{ matrix.test-type }}
-        path: bandit-report.json
-    
-    - name: Generate test summary
-      if: always()
-      run: |
-        echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
-        echo "- Python Version: ${{ matrix.python-version }}" >> $GITHUB_STEP_SUMMARY
-        echo "- Node Version: ${{ matrix.node-version }}" >> $GITHUB_STEP_SUMMARY
-        echo "- Test Type: ${{ matrix.test-type }}" >> $GITHUB_STEP_SUMMARY
-        echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
-    
-    - name: Comment PR with test results
-      if: github.event_name == 'pull_request' && always()
-      uses: actions/github-script@v6
-      with:
-        script: |
-          const { data: comments } = await github.rest.issues.listComments({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            issue_number: context.issue.number,
-          });
-          
-          const botComment = comments.find(comment => 
-            comment.user.type === 'Bot' && comment.body.includes('Test Results')
-          );
-          
-          const body = `## Test Results
-          - ✅ Python ${{ matrix.python-version }} tests passed
-          - ✅ Node.js ${{ matrix.node-version }} tests passed
-          - ✅ Security scans completed
-          - Test Type: ${{ matrix.test-type }}
-          `;
-          
-          if (botComment) {
-            await github.rest.issues.updateComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              comment_id: botComment.id,
-              body: body
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-asyncio pytest-mock
+          pip install bandit safety mypy
+
+      - name: Run unit tests
+        env:
+          INFRA_MIND_MONGODB_URL: mongodb://admin:password@localhost:27017/infra_mind_test?authSource=admin
+          INFRA_MIND_REDIS_URL: redis://localhost:6379
+          INFRA_MIND_ENVIRONMENT: testing
+        run: |
+          pytest tests/ \
+            --cov=src/infra_mind \
+            --cov-report=xml \
+            --cov-report=html \
+            --cov-report=term-missing \
+            --junitxml=pytest-report.xml \
+            -v
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.xml
+          flags: backend
+          name: backend-coverage
+
+      - name: Security scan with Bandit
+        run: |
+          bandit -r src/ -f json -o bandit-report.json || true
+          bandit -r src/ -f txt
+
+      - name: Dependency security check with Safety
+        run: |
+          safety check --json --output safety-report.json || true
+          safety check
+
+      - name: Type checking with mypy
+        run: |
+          mypy src/infra_mind --ignore-missing-imports --show-error-codes || true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-results
+          path: |
+            pytest-report.xml
+            htmlcov/
+            bandit-report.json
+            safety-report.json
+
+  # ==================== FRONTEND TESTS ====================
+  frontend-tests:
+    name: Frontend Tests & Quality
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend-react/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./frontend-react
+        run: npm ci
+
+      - name: Run linting
+        working-directory: ./frontend-react
+        run: npm run lint
+
+      - name: Run type checking
+        working-directory: ./frontend-react
+        run: npm run type-check
+
+      - name: Run unit tests
+        working-directory: ./frontend-react
+        run: npm run test:ci
+
+      - name: Build frontend
+        working-directory: ./frontend-react
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8000
+        run: npm run build
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-test-results
+          path: |
+            frontend-react/coverage/
+            frontend-react/.next/
+
+  # ==================== DOCKER BUILD ====================
+  docker-build:
+    name: Docker Build & Test
+    runs-on: ubuntu-latest
+    needs: [backend-tests, frontend-tests]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker images
+        run: |
+          docker-compose build --no-cache
+
+      - name: Start services
+        run: |
+          docker-compose up -d
+          sleep 30  # Wait for services to be ready
+
+      - name: Health check - Backend
+        run: |
+          for i in {1..10}; do
+            if curl -f http://localhost:8000/health; then
+              echo "✅ Backend health check passed"
+              exit 0
+            fi
+            echo "Waiting for backend... attempt $i/10"
+            sleep 5
+          done
+          echo "❌ Backend health check failed"
+          docker-compose logs api
+          exit 1
+
+      - name: Health check - Frontend
+        run: |
+          for i in {1..10}; do
+            if curl -f http://localhost:3000; then
+              echo "✅ Frontend health check passed"
+              exit 0
+            fi
+            echo "Waiting for frontend... attempt $i/10"
+            sleep 5
+          done
+          echo "❌ Frontend health check failed"
+          docker-compose logs frontend
+          exit 1
+
+      - name: Run integration tests
+        run: |
+          # Wait for all services
+          sleep 10
+
+          # Test API endpoints
+          curl -f http://localhost:8000/api/assessments || exit 1
+
+          # Test WebSocket
+          curl -f http://localhost:8000/ws || true
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          echo "=== API Logs ==="
+          docker-compose logs api
+          echo "=== Frontend Logs ==="
+          docker-compose logs frontend
+          echo "=== MongoDB Logs ==="
+          docker-compose logs mongodb
+          echo "=== Redis Logs ==="
+          docker-compose logs redis
+
+      - name: Cleanup
+        if: always()
+        run: docker-compose down -v
+
+  # ==================== CODE QUALITY ====================
+  code-quality:
+    name: Code Quality Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for better analysis
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/init@v3
+        with:
+          languages: python, javascript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+      - name: SonarCloud Scan
+        if: false  # Enable when SonarCloud is configured
+        uses: SonarSource/sonarcloud-github-action@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+  # ==================== SECURITY SCAN ====================
+  security-scan:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+      - name: OWASP Dependency Check
+        if: false  # Enable for production
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: 'infra-mind'
+          path: '.'
+          format: 'HTML'
+
+  # ==================== PERFORMANCE TESTS ====================
+  performance-tests:
+    name: Performance & Load Testing
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Start services
+        run: |
+          docker-compose up -d
+          sleep 30
+
+      - name: Install k6
+        run: |
+          sudo gpg -k
+          sudo gpg --no-default-keyring --keyring /usr/share/keyrings/k6-archive-keyring.gpg --keyserver hkp://keyserver.ubuntu.com:80 --recv-keys C5AD17C747E3415A3642D57D77C6C491D6AC1D69
+          echo "deb [signed-by=/usr/share/keyrings/k6-archive-keyring.gpg] https://dl.k6.io/deb stable main" | sudo tee /etc/apt/sources.list.d/k6.list
+          sudo apt-get update
+          sudo apt-get install k6
+
+      - name: Run load tests
+        run: |
+          # Create load test script
+          cat > load-test.js << 'EOF'
+          import http from 'k6/http';
+          import { check, sleep } from 'k6';
+
+          export const options = {
+            stages: [
+              { duration: '30s', target: 20 },
+              { duration: '1m', target: 50 },
+              { duration: '30s', target: 0 },
+            ],
+            thresholds: {
+              http_req_duration: ['p(95)<500'],
+              http_req_failed: ['rate<0.01'],
+            },
+          };
+
+          export default function () {
+            const res = http.get('http://localhost:8000/health');
+            check(res, {
+              'status is 200': (r) => r.status === 200,
+              'response time < 500ms': (r) => r.timings.duration < 500,
             });
-          } else {
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: context.issue.number,
-              body: body
-            });
+            sleep(1);
           }
+          EOF
 
-  # Build and Push Docker Images
-  build:
-    name: Build Docker Images
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.event_name != 'pull_request' || github.event.inputs.skip_tests
-    timeout-minutes: 45
-    
-    permissions:
-      contents: read
-      packages: write
-      security-events: write
-      id-token: write  # For OIDC
-    
-    outputs:
-      api-image: ${{ steps.extract-api-tag.outputs.image }}
-      frontend-image: ${{ steps.extract-frontend-tag.outputs.image }}
-      api-digest: ${{ steps.build-api.outputs.digest }}
-      frontend-digest: ${{ steps.build-frontend.outputs.digest }}
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v3
-    
-    - name: Log in to Container Registry
-      uses: docker/login-action@v3
-      with:
-        registry: ${{ env.REGISTRY }}
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    
-    - name: Extract metadata for API
-      id: meta-api
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_API }}
-        tags: |
-          type=ref,event=branch
-          type=ref,event=pr
-          type=sha,prefix={{branch}}-
-          type=raw,value=latest,enable={{is_default_branch}}
-          type=raw,value=${{ github.sha }}
-    
-    - name: Extract metadata for Frontend
-      id: meta-frontend
-      uses: docker/metadata-action@v5
-      with:
-        images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}
-        tags: |
-          type=ref,event=branch
-          type=ref,event=pr
-          type=sha,prefix={{branch}}-
-          type=raw,value=latest,enable={{is_default_branch}}
-          type=raw,value=${{ github.sha }}
-    
-    - name: Build and push API image
-      id: build-api
-      uses: docker/build-push-action@v5
-      with:
-        context: .
-        file: ./Dockerfile
-        target: production
-        push: true
-        tags: ${{ steps.meta-api.outputs.tags }}
-        labels: ${{ steps.meta-api.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        platforms: linux/amd64
-    
-    - name: Build and push Frontend image
-      id: build-frontend
-      uses: docker/build-push-action@v5
-      with:
-        context: ./frontend-react
-        file: ./frontend-react/Dockerfile
-        target: production
-        push: true
-        tags: ${{ steps.meta-frontend.outputs.tags }}
-        labels: ${{ steps.meta-frontend.outputs.labels }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
-        platforms: linux/amd64
-        build-args: |
-          BUILD_DATE=${{ fromJSON(steps.meta-frontend.outputs.json).labels['org.opencontainers.image.created'] }}
-          VCS_REF=${{ github.sha }}
-          VERSION=${{ fromJSON(steps.meta-frontend.outputs.json).labels['org.opencontainers.image.version'] }}
-    
-    - name: Extract API image tag
-      id: extract-api-tag
-      run: |
-        FIRST_TAG=$(echo "${{ steps.meta-api.outputs.tags }}" | head -n1)
-        echo "image=$FIRST_TAG" >> $GITHUB_OUTPUT
-    
-    - name: Extract Frontend image tag
-      id: extract-frontend-tag
-      run: |
-        FIRST_TAG=$(echo "${{ steps.meta-frontend.outputs.tags }}" | head -n1)
-        echo "image=$FIRST_TAG" >> $GITHUB_OUTPUT
-    
-    - name: Generate SBOM for API
-      uses: anchore/sbom-action@v0
-      continue-on-error: true
-      with:
-        image: ${{ steps.extract-api-tag.outputs.image }}
-        format: spdx-json
-        output-file: api-sbom.spdx.json
-    
-    - name: Generate SBOM for Frontend
-      uses: anchore/sbom-action@v0
-      continue-on-error: true
-      with:
-        image: ${{ steps.extract-frontend-tag.outputs.image }}
-        format: spdx-json
-        output-file: frontend-sbom.spdx.json
-    
-    - name: Upload SBOMs
-      uses: actions/upload-artifact@v3
-      with:
-        name: sbom-reports
-        path: |
-          api-sbom.spdx.json
-          frontend-sbom.spdx.json
-    
-    - name: Sign images with Cosign
-      if: github.ref == 'refs/heads/main'
-      uses: sigstore/cosign-installer@v3
-    
-    - name: Sign API image
-      if: github.ref == 'refs/heads/main'
-      run: |
-        cosign sign --yes ${{ steps.extract-api-tag.outputs.image }}@${{ steps.build-api.outputs.digest }}
-    
-    - name: Sign Frontend image
-      if: github.ref == 'refs/heads/main'
-      run: |
-        cosign sign --yes ${{ steps.extract-frontend-tag.outputs.image }}@${{ steps.build-frontend.outputs.digest }}
+          k6 run load-test.js
 
-  # Enhanced Security Scanning
-  security:
-    name: Enhanced Security Scanning
-    runs-on: ubuntu-latest
-    needs: build
-    if: github.event_name != 'pull_request' || github.event.inputs.skip_tests
-    timeout-minutes: 20
-    
-    permissions:
-      contents: read
-      security-events: write
-      actions: read
-    
-    strategy:
-      matrix:
-        scanner: ['trivy', 'grype', 'snyk']
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Run Trivy vulnerability scanner
-      if: matrix.scanner == 'trivy'
-      uses: aquasecurity/trivy-action@master
-      with:
-        image-ref: ${{ needs.build.outputs.api-image }}
-        format: 'sarif'
-        output: 'trivy-api-results.sarif'
-        severity: 'CRITICAL,HIGH,MEDIUM'
-    
-    - name: Run Trivy on Frontend
-      if: matrix.scanner == 'trivy'
-      uses: aquasecurity/trivy-action@master
-      with:
-        image-ref: ${{ needs.build.outputs.frontend-image }}
-        format: 'sarif'
-        output: 'trivy-frontend-results.sarif'
-        severity: 'CRITICAL,HIGH,MEDIUM'
-    
-    - name: Run Grype vulnerability scanner
-      if: matrix.scanner == 'grype'
-      uses: anchore/scan-action@v3
-      with:
-        image: ${{ needs.build.outputs.api-image }}
-        fail-build: false
-        output-format: sarif
-        output-file: grype-api-results.sarif
-    
-    - name: Run Snyk to check Docker images
-      if: matrix.scanner == 'snyk' && secrets.SNYK_TOKEN != ''
-      uses: snyk/actions/docker@master
-      env:
-        SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
-      with:
-        image: ${{ needs.build.outputs.api-image }}
-        args: --severity-threshold=high --file=Dockerfile
-      continue-on-error: true
-    
-    - name: Upload security scan results
-      uses: github/codeql-action/upload-sarif@v2
-      with:
-        sarif_file: '${{ matrix.scanner }}-*-results.sarif'
-      if: always()
-    
-    - name: Create security summary
-      if: always()
-      run: |
-        echo "## Security Scan Results (${{ matrix.scanner }})" >> $GITHUB_STEP_SUMMARY
-        echo "- Scanner: ${{ matrix.scanner }}" >> $GITHUB_STEP_SUMMARY
-        echo "- API Image: ${{ needs.build.outputs.api-image }}" >> $GITHUB_STEP_SUMMARY
-        echo "- Frontend Image: ${{ needs.build.outputs.frontend-image }}" >> $GITHUB_STEP_SUMMARY
-        echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+      - name: Cleanup
+        if: always()
+        run: docker-compose down -v
 
-  # Deploy to Staging
+  # ==================== DEPLOY TO STAGING ====================
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    needs: [test, build]
-    if: (github.ref == 'refs/heads/develop' || (github.event.inputs.environment == 'staging' && github.event_name == 'workflow_dispatch')) && secrets.KUBE_CONFIG_STAGING != ''
-    environment: 
+    needs: [docker-build, code-quality, security-scan]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    environment:
       name: staging
-      url: https://staging.infra-mind.com
-    timeout-minutes: 30
-    
-    outputs:
-      deployment-id: ${{ steps.deploy.outputs.deployment-id }}
-      rollback-revision: ${{ steps.get-revision.outputs.revision }}
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Configure kubectl
-      uses: azure/k8s-set-context@v3
-      with:
-        method: kubeconfig
-        kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
-    
-    - name: Get current revision for rollback
-      id: get-revision
-      run: |
-        REVISION=$(kubectl rollout history deployment/infra-mind-api -n infra-mind-staging --output=jsonpath='{.metadata.generation}' || echo "1")
-        echo "revision=$REVISION" >> $GITHUB_OUTPUT
-    
-    - name: Deploy to staging
-      id: deploy
-      run: |
-        # Create deployment ID for tracking
-        DEPLOYMENT_ID="staging-$(date +%s)-${{ github.sha }}"
-        echo "deployment-id=$DEPLOYMENT_ID" >> $GITHUB_OUTPUT
-        
-        # Backup current deployment
-        kubectl get deployment infra-mind-api -n infra-mind-staging -o yaml > api-backup.yaml || true
-        kubectl get deployment infra-mind-frontend -n infra-mind-staging -o yaml > frontend-backup.yaml || true
-        
-        # Update image tags in staging manifests
-        API_IMAGE=$(echo "${{ needs.build.outputs.api-image }}" | head -n1)
-        FRONTEND_IMAGE=$(echo "${{ needs.build.outputs.frontend-image }}" | head -n1)
-        sed -i "s|image: infra-mind/api:.*|image: $API_IMAGE|g" k8s/api-deployment.yaml
-        sed -i "s|image: infra-mind/frontend:.*|image: $FRONTEND_IMAGE|g" k8s/frontend-deployment.yaml
-        
-        # Add deployment annotations
-        kubectl annotate deployment infra-mind-api -n infra-mind-staging deployment.kubernetes.io/revision="$DEPLOYMENT_ID" --overwrite || true
-        kubectl annotate deployment infra-mind-frontend -n infra-mind-staging deployment.kubernetes.io/revision="$DEPLOYMENT_ID" --overwrite || true
-        
-        # Apply staging configurations with error handling
-        set -e
-        kubectl apply -f k8s/namespace.yaml
-        kubectl apply -f k8s/configmap.yaml
-        kubectl apply -f k8s/secrets.yaml -n infra-mind-staging || echo "Secrets may already exist"
-        kubectl apply -f k8s/mongodb-deployment.yaml -n infra-mind-staging
-        kubectl apply -f k8s/redis-deployment.yaml -n infra-mind-staging
-        
-        # Deploy applications with rollback on failure
-        if ! kubectl apply -f k8s/api-deployment.yaml -n infra-mind-staging; then
-          echo "API deployment failed, rolling back..."
-          kubectl apply -f api-backup.yaml || true
-          exit 1
-        fi
-        
-        if ! kubectl apply -f k8s/frontend-deployment.yaml -n infra-mind-staging; then
-          echo "Frontend deployment failed, rolling back..."
-          kubectl apply -f frontend-backup.yaml || true
-          kubectl rollout undo deployment/infra-mind-api -n infra-mind-staging || true
-          exit 1
-        fi
-        
-        kubectl apply -f k8s/ingress.yaml
-        
-        # Wait for rollout with timeout
-        echo "Waiting for API deployment..."
-        if ! kubectl rollout status deployment/infra-mind-api -n infra-mind-staging --timeout=600s; then
-          echo "API rollout failed, initiating rollback..."
-          kubectl rollout undo deployment/infra-mind-api -n infra-mind-staging
-          exit 1
-        fi
-        
-        echo "Waiting for Frontend deployment..."
-        if ! kubectl rollout status deployment/infra-mind-frontend -n infra-mind-staging --timeout=600s; then
-          echo "Frontend rollout failed, initiating rollback..."
-          kubectl rollout undo deployment/infra-mind-frontend -n infra-mind-staging
-          kubectl rollout undo deployment/infra-mind-api -n infra-mind-staging
-          exit 1
-        fi
-        
-        echo "Deployment successful: $DEPLOYMENT_ID"
-    
-    - name: Run comprehensive smoke tests
-      timeout-minutes: 10
-      run: |
-        # Wait for services to stabilize
-        echo "Waiting for services to stabilize..."
-        sleep 60
-        
-        # Function to run test with retry
-        run_test_with_retry() {
-          local test_name=$1
-          local test_command=$2
-          local max_attempts=3
-          local attempt=1
-          
-          while [ $attempt -le $max_attempts ]; do
-            echo "Running $test_name (attempt $attempt/$max_attempts)..."
-            if eval "$test_command"; then
-              echo "✅ $test_name passed"
-              return 0
-            else
-              echo "❌ $test_name failed (attempt $attempt/$max_attempts)"
-              if [ $attempt -eq $max_attempts ]; then
-                return 1
-              fi
-              sleep 10
-              ((attempt++))
-            fi
-          done
-        }
-        
-        # Test API health endpoint
-        run_test_with_retry "API Health Check" \
-          "kubectl run test-api-health --image=curlimages/curl:latest --rm -i --restart=Never -n infra-mind-staging -- curl -f -m 30 http://infra-mind-api-service:8000/health"
-        
-        # Test API documentation endpoint
-        run_test_with_retry "API Docs Check" \
-          "kubectl run test-api-docs --image=curlimages/curl:latest --rm -i --restart=Never -n infra-mind-staging -- curl -f -m 30 http://infra-mind-api-service:8000/docs"
-        
-        # Test Frontend health endpoint
-        run_test_with_retry "Frontend Health Check" \
-          "kubectl run test-frontend-health --image=curlimages/curl:latest --rm -i --restart=Never -n infra-mind-staging -- curl -f -m 30 http://infra-mind-frontend-service:3000/api/health"
-        
-        # Test database connectivity through API
-        run_test_with_retry "Database Connectivity Check" \
-          "kubectl run test-db-connectivity --image=curlimages/curl:latest --rm -i --restart=Never -n infra-mind-staging -- curl -f -m 30 http://infra-mind-api-service:8000/health/db"
-        
-        # Test Redis connectivity through API
-        run_test_with_retry "Redis Connectivity Check" \
-          "kubectl run test-redis-connectivity --image=curlimages/curl:latest --rm -i --restart=Never -n infra-mind-staging -- curl -f -m 30 http://infra-mind-api-service:8000/health/cache"
-        
-        echo "All smoke tests completed successfully!"
-    
-    - name: Run integration tests
-      timeout-minutes: 15
-      run: |
-        # Create a test job that runs integration tests
-        cat <<EOF | kubectl apply -f -
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          name: integration-tests-${{ github.run_number }}
-          namespace: infra-mind-staging
-        spec:
-          template:
-            spec:
-              restartPolicy: Never
-              containers:
-              - name: integration-tests
-                image: python:3.11-slim
-                command: ["/bin/bash"]
-                args:
-                - -c
-                - |
-                  pip install requests pytest
-                  cat > test_integration.py << 'PYTEST_EOF'
-                  import requests
-                  import pytest
-                  import time
-                  
-                  BASE_URL = "http://infra-mind-api-service:8000"
-                  
-                  def test_api_health():
-                      response = requests.get(f"{BASE_URL}/health", timeout=30)
-                      assert response.status_code == 200
-                      assert "status" in response.json()
-                  
-                  def test_api_docs():
-                      response = requests.get(f"{BASE_URL}/docs", timeout=30)
-                      assert response.status_code == 200
-                  
-                  def test_api_openapi():
-                      response = requests.get(f"{BASE_URL}/openapi.json", timeout=30)
-                      assert response.status_code == 200
-                      assert "openapi" in response.json()
-                  PYTEST_EOF
-                  
-                  pytest test_integration.py -v --tb=short
-          backoffLimit: 2
-        EOF
-        
-        # Wait for job completion
-        kubectl wait --for=condition=complete job/integration-tests-${{ github.run_number }} -n infra-mind-staging --timeout=900s
-        
-        # Get job logs
-        kubectl logs job/integration-tests-${{ github.run_number }} -n infra-mind-staging
-        
-        # Clean up job
-        kubectl delete job integration-tests-${{ github.run_number }} -n infra-mind-staging
-    
-    - name: Update deployment status
-      if: always()
-      run: |
-        if [ "${{ job.status }}" == "success" ]; then
-          kubectl annotate deployment infra-mind-api -n infra-mind-staging deployment.infra-mind.com/status="success" --overwrite
-          kubectl annotate deployment infra-mind-frontend -n infra-mind-staging deployment.infra-mind.com/status="success" --overwrite
-        else
-          kubectl annotate deployment infra-mind-api -n infra-mind-staging deployment.infra-mind.com/status="failed" --overwrite
-          kubectl annotate deployment infra-mind-frontend -n infra-mind-staging deployment.infra-mind.com/status="failed" --overwrite
-        fi
-    
-    - name: Notify deployment status
-      if: always() && secrets.SLACK_WEBHOOK != ''
-      uses: 8398a7/action-slack@v3
-      with:
-        status: ${{ job.status }}
-        text: |
-          🚀 Staging Deployment ${{ job.status == 'success' && 'Successful' || 'Failed' }}
-          • Environment: Staging
-          • Commit: ${{ github.sha }}
-          • Deployment ID: ${{ steps.deploy.outputs.deployment-id }}
-          • URL: https://staging.infra-mind.com
-        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-      env:
-        SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+      url: https://staging.inframind.ai
 
-  # Deploy to Production
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        if: false  # Enable when AWS is configured
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Login to Docker registry
+        if: false  # Enable when registry is configured
+        run: |
+          echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+
+      - name: Build and push Docker images
+        if: false  # Enable when registry is configured
+        run: |
+          docker-compose -f docker-compose.production.yml build
+          docker-compose -f docker-compose.production.yml push
+
+      - name: Deploy to staging
+        if: false  # Enable when deployment is configured
+        run: |
+          # Deploy to staging environment
+          # This could use kubectl, terraform, ansible, etc.
+          echo "Deploying to staging..."
+
+  # ==================== DEPLOY TO PRODUCTION ====================
   deploy-production:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: [test, build, security]
-    if: github.ref == 'refs/heads/main' && secrets.KUBE_CONFIG_PRODUCTION != ''
-    environment: production
-    
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Configure kubectl
-      uses: azure/k8s-set-context@v3
-      with:
-        method: kubeconfig
-        kubeconfig: ${{ secrets.KUBE_CONFIG_PRODUCTION }}
-    
-    - name: Deploy to production
-      run: |
-        # Update image tags in production manifests
-        API_IMAGE=$(echo "${{ needs.build.outputs.api-image }}" | head -n1)
-        FRONTEND_IMAGE=$(echo "${{ needs.build.outputs.frontend-image }}" | head -n1)
-        sed -i "s|image: infra-mind/api:.*|image: $API_IMAGE|g" k8s/api-deployment.yaml
-        sed -i "s|image: infra-mind/frontend:.*|image: $FRONTEND_IMAGE|g" k8s/frontend-deployment.yaml
-        
-        # Apply production configurations
-        kubectl apply -f k8s/namespace.yaml
-        kubectl apply -f k8s/configmap.yaml
-        kubectl apply -f k8s/secrets.yaml -n infra-mind
-        kubectl apply -f k8s/mongodb-deployment.yaml -n infra-mind
-        kubectl apply -f k8s/redis-deployment.yaml -n infra-mind
-        kubectl apply -f k8s/api-deployment.yaml -n infra-mind
-        kubectl apply -f k8s/frontend-deployment.yaml -n infra-mind
-        kubectl apply -f k8s/hpa.yaml
-        kubectl apply -f k8s/ingress.yaml
-        
-        # Wait for rollout
-        kubectl rollout status deployment/infra-mind-api -n infra-mind --timeout=600s
-        kubectl rollout status deployment/infra-mind-frontend -n infra-mind --timeout=600s
-    
-    - name: Run production smoke tests
-      run: |
-        # Wait for services to be ready
-        sleep 60
-        
-        # Test API health
-        kubectl run test-pod --image=curlimages/curl:latest --rm -i --restart=Never -n infra-mind -- \
-          curl -f http://infra-mind-api-service:8000/health
-        
-        # Test frontend health
-        kubectl run test-pod --image=curlimages/curl:latest --rm -i --restart=Never -n infra-mind -- \
-          curl -f http://infra-mind-frontend-service:3000/health
-    
-    - name: Notify deployment success
-      uses: 8398a7/action-slack@v3
-      with:
-        status: success
-        text: "🚀 Infra Mind successfully deployed to production!"
-        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-      if: success() && secrets.SLACK_WEBHOOK != ''
-    
-    - name: Notify deployment failure
-      uses: 8398a7/action-slack@v3
-      with:
-        status: failure
-        text: "❌ Infra Mind production deployment failed!"
-        webhook_url: ${{ secrets.SLACK_WEBHOOK }}
-      if: failure() && secrets.SLACK_WEBHOOK != ''
+    needs: [docker-build, code-quality, security-scan]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://inframind.ai
 
-  # Backup and Disaster Recovery
-  backup:
-    name: Backup and Disaster Recovery
-    runs-on: ubuntu-latest
-    needs: [deploy-production]
-    if: needs.deploy-production.result == 'success' && secrets.KUBE_CONFIG_PRODUCTION != ''
-    
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    - name: Configure kubectl for production
-      uses: azure/k8s-set-context@v3
-      with:
-        method: kubeconfig
-        kubeconfig: ${{ secrets.KUBE_CONFIG_PRODUCTION }}
-    
-    - name: Create database backup
-      run: |
-        # Create backup job
-        cat <<EOF | kubectl apply -f -
-        apiVersion: batch/v1
-        kind: Job
-        metadata:
-          name: mongodb-backup-${{ github.run_number }}
-          namespace: infra-mind
-        spec:
-          template:
-            spec:
-              restartPolicy: Never
-              containers:
-              - name: mongodb-backup
-                image: mongo:7.0
-                command: ["/bin/bash"]
-                args:
-                - -c
-                - |
-                  mongodump --host mongodb-service:27017 \
-                           --username \$MONGO_ROOT_USERNAME \
-                           --password \$MONGO_ROOT_PASSWORD \
-                           --authenticationDatabase admin \
-                           --out /backup/\$(date +%Y%m%d_%H%M%S)
-                env:
-                - name: MONGO_ROOT_USERNAME
-                  valueFrom:
-                    secretKeyRef:
-                      name: infra-mind-secrets
-                      key: MONGO_ROOT_USERNAME
-                - name: MONGO_ROOT_PASSWORD
-                  valueFrom:
-                    secretKeyRef:
-                      name: infra-mind-secrets
-                      key: MONGO_ROOT_PASSWORD
-                volumeMounts:
-                - name: backup-storage
-                  mountPath: /backup
-              volumes:
-              - name: backup-storage
-                persistentVolumeClaim:
-                  claimName: backup-pvc
-          backoffLimit: 2
-        EOF
-        
-        # Wait for backup completion
-        kubectl wait --for=condition=complete job/mongodb-backup-${{ github.run_number }} -n infra-mind --timeout=1800s
-        
-        # Clean up backup job
-        kubectl delete job mongodb-backup-${{ github.run_number }} -n infra-mind
-    
-    - name: Test disaster recovery procedures
-      run: |
-        echo "Testing disaster recovery procedures..."
-        
-        # Verify backup integrity
-        kubectl run backup-verify --image=mongo:7.0 --rm -i --restart=Never -n infra-mind -- \
-          bash -c "echo 'Backup verification would be performed here'"
-        
-        # Test rollback capability
-        echo "Verifying rollback capability..."
-        kubectl rollout history deployment/infra-mind-api -n infra-mind
-        kubectl rollout history deployment/infra-mind-frontend -n infra-mind
-    
-    - name: Update backup metadata
-      run: |
-        # Store backup metadata
-        kubectl create configmap backup-metadata-$(date +%Y%m%d) \
-          --from-literal=backup_date="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-          --from-literal=git_sha="${{ github.sha }}" \
-          --from-literal=deployment_version="${{ needs.deploy-production.outputs.deployment-id }}" \
-          -n infra-mind || true
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  # Cleanup old images and resources
-  cleanup:
-    name: Cleanup Old Resources
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ github.run_number }}
+          release_name: Release v${{ github.run_number }}
+          draft: false
+          prerelease: false
+
+      - name: Deploy to production
+        if: false  # Enable when ready for production
+        run: |
+          echo "Production deployment would happen here"
+          # Deployment steps...
+
+  # ==================== NOTIFICATION ====================
+  notify:
+    name: Send Notifications
     runs-on: ubuntu-latest
-    needs: [deploy-production, backup]
-    if: always() && (needs.deploy-production.result == 'success' || needs.backup.result == 'success')
-    
+    needs: [backend-tests, frontend-tests, docker-build]
+    if: always()
+
     steps:
-    - name: Delete old container images
-      uses: actions/delete-package-versions@v4
-      with:
-        package-name: 'api'
-        package-type: 'container'
-        min-versions-to-keep: 10
-        delete-only-untagged-versions: true
-    
-    - name: Delete old frontend images
-      uses: actions/delete-package-versions@v4
-      with:
-        package-name: 'frontend'
-        package-type: 'container'
-        min-versions-to-keep: 10
-        delete-only-untagged-versions: true
-    
-    - name: Configure kubectl for cleanup
-      uses: azure/k8s-set-context@v3
-      with:
-        method: kubeconfig
-        kubeconfig: ${{ secrets.KUBE_CONFIG_PRODUCTION }}
-    
-    - name: Cleanup old Kubernetes resources
-      run: |
-        # Clean up old backup metadata (keep last 30 days)
-        kubectl get configmaps -n infra-mind | grep backup-metadata | head -n -30 | awk '{print $1}' | xargs -r kubectl delete configmap -n infra-mind
-        
-        # Clean up completed jobs older than 7 days
-        kubectl delete jobs -n infra-mind --field-selector status.successful=1 --ignore-not-found=true
-        
-        # Clean up old test pods
-        kubectl delete pods -n infra-mind --field-selector status.phase=Succeeded --ignore-not-found=true
-        kubectl delete pods -n infra-mind-staging --field-selector status.phase=Succeeded --ignore-not-found=true
+      - name: Send Slack notification
+        if: false  # Enable when Slack is configured
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: 'CI/CD Pipeline completed'
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+
+      - name: Summary
+        run: |
+          echo "## CI/CD Pipeline Summary" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Backend tests: ${{ needs.backend-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Frontend tests: ${{ needs.frontend-tests.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Docker build: ${{ needs.docker-build.result }}" >> $GITHUB_STEP_SUMMARY

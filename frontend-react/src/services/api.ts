@@ -1,11 +1,12 @@
 /**
  * API Client Service for Infra Mind Frontend
- * 
+ *
  * This service provides a centralized way to interact with the backend API,
  * including authentication, error handling, and request/response transformation.
  */
 
 import { Assessment, BusinessRequirements, TechnicalRequirements } from '../store/slices/assessmentSlice';
+import AuthStorage from '../utils/authStorage';
 
 // API Configuration
 // Always use the public URL that browsers can reach, even for SSR
@@ -211,49 +212,41 @@ class ApiClient {
         this.clearOldTokens();
     }
 
-    // Token management
+    // Token management - now using centralized AuthStorage
     private getStoredToken(): string | null {
-        if (typeof window !== 'undefined') {
-            return typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-        }
-        return null;
+        // Use migration helper during transition period
+        return AuthStorage.getTokenFromAnySource();
     }
 
     public setStoredToken(token: string): void {
-        if (typeof window !== 'undefined') {
-            localStorage.setItem('auth_token', token);
-        }
+        AuthStorage.setToken(token);
     }
 
     public removeStoredToken(): void {
-        if (typeof window !== 'undefined') {
-            localStorage.removeItem('auth_token');
-        }
+        AuthStorage.clearAuth();
     }
 
     // Clear old tokens that might be missing required claims
     public clearOldTokens(): void {
-        if (typeof window !== 'undefined') {
-            const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-            if (token) {
-                try {
-                    // Decode token without verification to check claims
-                    const parts = token.split('.');
-                    if (parts.length === 3) {
-                        const payload = JSON.parse(atob(parts[1]));
-                        // If token is missing required claims, remove it
-                        const requiredClaims = ['iss', 'aud', 'token_type', 'jti'];
-                        const missingClaims = requiredClaims.filter(claim => !payload[claim]);
-                        if (missingClaims.length > 0) {
-                            console.log('🔄 Removing old token missing claims:', missingClaims);
-                            localStorage.removeItem('auth_token');
-                        }
+        const token = AuthStorage.getToken();
+        if (token) {
+            try {
+                // Decode token without verification to check claims
+                const parts = token.split('.');
+                if (parts.length === 3) {
+                    const payload = JSON.parse(atob(parts[1]));
+                    // If token is missing required claims, remove it
+                    const requiredClaims = ['iss', 'aud', 'token_type', 'jti'];
+                    const missingClaims = requiredClaims.filter(claim => !payload[claim]);
+                    if (missingClaims.length > 0) {
+                        console.log('🔄 Removing old token missing claims:', missingClaims);
+                        AuthStorage.clearAuth();
                     }
-                } catch (error) {
-                    // If we can't decode the token, it's probably invalid
-                    console.log('🔄 Removing invalid token');
-                    localStorage.removeItem('auth_token');
                 }
+            } catch (error) {
+                // If we can't decode the token, it's probably invalid
+                console.log('🔄 Removing invalid token');
+                AuthStorage.clearAuth();
             }
         }
     }
@@ -830,6 +823,44 @@ class ApiClient {
         return this.request<Recommendation>(`/recommendations/${recommendationId}/status`, {
             method: 'PUT',
             body: JSON.stringify({ status }),
+        });
+    }
+
+    // ML Interaction Tracking Methods
+    async trackRecommendationInteraction(
+        recommendationId: string,
+        interactionType: 'view' | 'click' | 'implement' | 'save' | 'share' | 'rate' | 'dismiss',
+        interactionValue?: number,
+        context?: Record<string, any>
+    ): Promise<{ status: string; message: string }> {
+        try {
+            return await this.request<{ status: string; message: string }>(
+                `/recommendations/interact/${recommendationId}`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        interaction_type: interactionType,
+                        interaction_value: interactionValue,
+                        context: context || {}
+                    }),
+                }
+            );
+        } catch (error) {
+            console.error(`Failed to track ${interactionType} interaction:`, error);
+            // Fail silently - don't disrupt user experience if tracking fails
+            return { status: 'error', message: 'Failed to track interaction' };
+        }
+    }
+
+    async getRecommendationStats(recommendationId: string): Promise<any> {
+        return this.request<any>(`/recommendations/stats/${recommendationId}`, {
+            method: 'GET',
+        });
+    }
+
+    async getUserInteractionHistory(limit: number = 100): Promise<any> {
+        return this.request<any>(`/recommendations/user/history?limit=${limit}`, {
+            method: 'GET',
         });
     }
 

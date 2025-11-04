@@ -5,7 +5,7 @@
  * and system health status.
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
     Box,
     Card,
@@ -53,6 +53,8 @@ import {
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { safeToFixed } from '../utils/numberUtils';
+import { useApiData } from '../hooks/useOptimizedApi';
+import { SkeletonPerformanceDashboard } from './skeletons/SkeletonCard';
 
 // Types
 interface PerformanceMetric {
@@ -111,12 +113,57 @@ interface PerformanceMonitoringDashboardProps {
 }
 
 const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardProps> = ({ assessmentId }) => {
-    // State
-    const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    // State - Define BEFORE hooks that use them
     const [autoRefresh, setAutoRefresh] = useState(true);
     const [refreshInterval, setRefreshInterval] = useState(30000); // 30 seconds
+
+    // ✅ Use optimized API hook instead of manual fetch
+    const { data: apiResponse, loading, error: apiError, refetch } = useApiData<any>(
+        `/api/v1/features/assessment/${assessmentId}/performance`,
+        {
+            enabled: !!assessmentId,
+            refetchInterval: autoRefresh ? refreshInterval : undefined
+        }
+    );
+
+    // Transform API response
+    const dashboardData = useMemo<DashboardData | null>(() => {
+        if (!apiResponse) return null;
+
+        return {
+            currentMetrics: {
+                'response_time': apiResponse.metrics?.response_time?.current || 0,
+                'throughput': apiResponse.metrics?.throughput?.requests_per_second || 0,
+                'error_rate': apiResponse.metrics?.error_rate?.percentage || 0,
+                'uptime': apiResponse.summary?.uptime_percentage || 0,
+                'cpu_usage': 45, // Mock data
+                'memory_usage': 60, // Mock data
+            },
+            activeAlerts: (apiResponse.alerts || []).map((alert: any) => ({
+                id: alert.id,
+                severity: alert.severity as 'info' | 'warning' | 'critical' | 'emergency',
+                metric: alert.title,
+                currentValue: 0,
+                thresholdValue: 0,
+                message: alert.description,
+                timestamp: alert.timestamp,
+                acknowledged: false,
+            })),
+            monitoringSummary: {
+                monitoringActive: true,
+                activeAlertsCount: apiResponse.summary?.active_alerts || 0,
+                alertRulesCount: 0,
+                scalingPoliciesCount: 0,
+                websocketClientsCount: 0,
+                performanceTrends: {},
+                lastUpdated: apiResponse.generated_at || new Date().toISOString(),
+            },
+            performanceReport: apiResponse.summary || {},
+            timestamp: apiResponse.generated_at || new Date().toISOString(),
+        };
+    }, [apiResponse]);
+
+    const error = apiError?.message || null;
     const [selectedTimeRange, setSelectedTimeRange] = useState('1h');
     const [alertRuleDialogOpen, setAlertRuleDialogOpen] = useState(false);
     const [newAlertRule, setNewAlertRule] = useState<Partial<AlertRule>>({});
@@ -132,88 +179,23 @@ const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardPro
         url: 'ws://localhost:8000/api/performance/ws'
     });
 
-    // Fetch dashboard data
-    const fetchDashboardData = useCallback(async () => {
-        if (!assessmentId) {
-            setLoading(false);
-            return;
-        }
-
-        try {
-            // Use apiClient for authenticated requests
-            const { apiClient } = await import('@/services/api');
-            const apiResponse = await apiClient.get<any>(`/features/assessment/${assessmentId}/performance`);
-
-            // Transform API response to match component's expected structure
-            const transformedData: DashboardData = {
-                currentMetrics: {
-                    'response_time': apiResponse.metrics?.response_time?.current || 0,
-                    'throughput': apiResponse.metrics?.throughput?.requests_per_second || 0,
-                    'error_rate': apiResponse.metrics?.error_rate?.percentage || 0,
-                    'uptime': apiResponse.summary?.uptime_percentage || 0,
-                    'cpu_usage': 45, // Mock data
-                    'memory_usage': 60, // Mock data
-                },
-                activeAlerts: (apiResponse.alerts || []).map((alert: any) => ({
-                    id: alert.id,
-                    severity: alert.severity as 'info' | 'warning' | 'critical' | 'emergency',
-                    metric: alert.title,
-                    currentValue: 0,
-                    thresholdValue: 0,
-                    message: alert.description,
-                    timestamp: alert.timestamp,
-                    acknowledged: false,
-                })),
-                monitoringSummary: {
-                    monitoringActive: true,
-                    activeAlertsCount: apiResponse.summary?.active_alerts || 0,
-                    alertRulesCount: 0,
-                    scalingPoliciesCount: 0,
-                    websocketClientsCount: 0,
-                    performanceTrends: {},
-                    lastUpdated: apiResponse.generated_at || new Date().toISOString(),
-                },
-                performanceReport: apiResponse.summary || {},
-                timestamp: apiResponse.generated_at || new Date().toISOString(),
-            };
-
-            setDashboardData(transformedData);
-            setError(null);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to fetch dashboard data');
-        } finally {
-            setLoading(false);
-        }
-    }, [assessmentId]);
-
-    // Handle WebSocket messages
+    // Handle WebSocket messages for real-time updates
     useEffect(() => {
-        if (lastMessage) {
+        if (lastMessage && dashboardData) {
             try {
-                // Ensure lastMessage is a string before parsing
                 const messageString = typeof lastMessage === 'string' ? lastMessage : JSON.stringify(lastMessage);
                 const message = JSON.parse(messageString);
 
                 switch (message.type) {
                     case 'metrics':
-                        if (dashboardData) {
-                            setDashboardData(prev => prev ? {
-                                ...prev,
-                                currentMetrics: message.data,
-                                timestamp: message.timestamp
-                            } : null);
-                        }
+                        // Real-time metric updates handled by WebSocket
+                        refetch(); // Trigger a refetch to get latest data
                         break;
 
                     case 'alert':
-                        if (dashboardData) {
-                            setDashboardData(prev => prev ? {
-                                ...prev,
-                                activeAlerts: [...prev.activeAlerts, message.data]
-                            } : null);
-                        }
                         setSnackbarMessage(`New alert: ${message.data.message}`);
                         setSnackbarOpen(true);
+                        refetch();
                         break;
 
                     case 'recommendations':
@@ -225,20 +207,7 @@ const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardPro
                 console.error('Error parsing WebSocket message:', err);
             }
         }
-    }, [lastMessage, dashboardData]);
-
-    // Auto-refresh effect
-    useEffect(() => {
-        if (autoRefresh) {
-            const interval = setInterval(fetchDashboardData, refreshInterval);
-            return () => clearInterval(interval);
-        }
-    }, [autoRefresh, refreshInterval, fetchDashboardData]);
-
-    // Initial data fetch
-    useEffect(() => {
-        fetchDashboardData();
-    }, [fetchDashboardData]);
+    }, [lastMessage, dashboardData, refetch]);
 
     // Request real-time metrics via WebSocket
     useEffect(() => {
@@ -309,7 +278,7 @@ const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardPro
             if (response.ok) {
                 setSnackbarMessage('Alert acknowledged successfully');
                 setSnackbarOpen(true);
-                fetchDashboardData(); // Refresh data
+                refetch(); // Refresh data
             }
         } catch (err) {
             setSnackbarMessage('Failed to acknowledge alert');
@@ -331,7 +300,7 @@ const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardPro
                 setSnackbarOpen(true);
                 setAlertRuleDialogOpen(false);
                 setNewAlertRule({});
-                fetchDashboardData();
+                refetch();
             }
         } catch (err) {
             setSnackbarMessage('Failed to create alert rule');
@@ -362,14 +331,9 @@ const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardPro
         }
     };
 
-    if (loading) {
-        return (
-            <Box sx={{ p: 3 }}>
-                <Typography variant="h4" gutterBottom>Performance Monitoring</Typography>
-                <LinearProgress />
-                <Typography sx={{ mt: 2 }}>Loading performance data...</Typography>
-            </Box>
-        );
+    // ✅ Show skeleton during loading for better UX
+    if (loading && !dashboardData) {
+        return <SkeletonPerformanceDashboard />;
     }
 
     if (!assessmentId) {
@@ -391,7 +355,7 @@ const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardPro
                     <AlertTitle>Error Loading Performance Data</AlertTitle>
                     {error}
                 </Alert>
-                <Button onClick={fetchDashboardData} sx={{ mt: 2 }}>
+                <Button onClick={refetch} sx={{ mt: 2 }}>
                     Retry
                 </Button>
             </Box>
@@ -419,7 +383,7 @@ const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardPro
                         }
                         label="Auto Refresh"
                     />
-                    <IconButton onClick={fetchDashboardData} disabled={loading}>
+                    <IconButton onClick={refetch} disabled={loading}>
                         <RefreshIcon />
                     </IconButton>
                     <Button

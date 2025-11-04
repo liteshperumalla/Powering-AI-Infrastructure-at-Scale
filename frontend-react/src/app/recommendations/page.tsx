@@ -33,6 +33,7 @@ import InfoIcon from '@mui/icons-material/Info';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { apiClient } from '../../services/api';
 import { useRecommendationsData } from '../../hooks/useFreshData';
+import RecommendationInsightsPanel from '../../components/RecommendationInsightsPanel';
 
 interface Recommendation {
   _id: string;
@@ -72,8 +73,297 @@ function RecommendationsPageContent() {
   const [assessment, setAssessment] = useState<AssessmentData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [viewStartTimes, setViewStartTimes] = useState<Record<string, number>>({});
 
   const assessmentId = searchParams.get('assessment_id');
+
+  // ML Interaction Tracking Functions
+  const trackInteraction = async (
+    recommendationId: string,
+    interactionType: 'view' | 'click' | 'implement' | 'save' | 'share' | 'rate' | 'dismiss',
+    interactionValue?: number
+  ) => {
+    try {
+      await apiClient.trackRecommendationInteraction(
+        recommendationId,
+        interactionType,
+        interactionValue,
+        { assessment_id: assessmentId }
+      );
+      console.log(`✅ Tracked ${interactionType} for recommendation ${recommendationId}`);
+    } catch (error) {
+      console.error(`Failed to track ${interactionType}:`, error);
+    }
+  };
+
+  // Track view when recommendation becomes visible
+  useEffect(() => {
+    if (recommendations.length > 0) {
+      recommendations.forEach((rec) => {
+        // Record view start time
+        setViewStartTimes(prev => ({ ...prev, [rec._id]: Date.now() }));
+      });
+    }
+  }, [recommendations]);
+
+  // Track view duration when component unmounts or recommendations change
+  useEffect(() => {
+    return () => {
+      // Calculate and track view durations
+      Object.entries(viewStartTimes).forEach(([recId, startTime]) => {
+        const viewDuration = (Date.now() - startTime) / 1000; // Convert to seconds
+        if (viewDuration > 1) { // Only track if viewed for more than 1 second
+          trackInteraction(recId, 'view', viewDuration);
+        }
+      });
+    };
+  }, [viewStartTimes]);
+
+  const handleRecommendationClick = (recommendationId: string) => {
+    trackInteraction(recommendationId, 'click');
+  };
+
+  const handleImplementClick = (recommendationId: string) => {
+    trackInteraction(recommendationId, 'implement');
+  };
+
+  const handleSaveClick = (recommendationId: string) => {
+    trackInteraction(recommendationId, 'save');
+  };
+
+  // Handle insight action clicks
+  const handleInsightAction = (action: string, insight: any) => {
+    console.log('🎯 Insight action clicked:', action, insight);
+
+    // Track the interaction for related recommendations (with validation)
+    if (insight.related_recommendations && insight.related_recommendations.length > 0) {
+      insight.related_recommendations.forEach((recId: string) => {
+        // Only track if recId is valid (not undefined, null, or 'undefined' string)
+        if (recId && recId !== 'undefined' && recId !== 'null') {
+          trackInteraction(recId, 'click');
+        } else {
+          console.warn('⚠️ Skipping invalid recommendation ID:', recId);
+        }
+      });
+    }
+
+    // Action handlers based on action type
+    switch (action) {
+      // Quick Wins actions
+      case 'View Quick Wins':
+        scrollToRecommendations(insight.related_recommendations);
+        highlightRecommendations(insight.related_recommendations);
+        break;
+
+      case 'Create Action Plan':
+        generateActionPlan(insight);
+        break;
+
+      case 'Assign to Team':
+        openAssignmentDialog(insight);
+        break;
+
+      // Cost Optimization actions
+      case 'View Cost Breakdown':
+        showCostBreakdown(insight);
+        break;
+
+      case 'Compare Alternatives':
+        compareAlternatives(insight);
+        break;
+
+      case 'Generate ROI Report':
+        generateROIReport(insight);
+        break;
+
+      // Security actions
+      case 'Review Security Recommendations':
+      case 'Prioritize Security Fixes':
+      case 'Schedule Security Audit':
+        handleSecurityAction(action, insight);
+        break;
+
+      // High Impact actions
+      case 'Explore Opportunities':
+      case 'Build Business Case':
+      case 'Present to Stakeholders':
+        handleHighImpactAction(action, insight);
+        break;
+
+      // Performance actions
+      case 'Analyze Performance Impact':
+      case 'Review Implementation':
+      case 'Schedule Optimization':
+        handlePerformanceAction(action, insight);
+        break;
+
+      default:
+        console.log(`Action "${action}" not yet implemented`);
+        alert(`Action: ${action}\n\nThis will ${action.toLowerCase()} for ${insight.related_recommendations.length} related recommendations.`);
+    }
+  };
+
+  // Scroll to specific recommendations
+  const scrollToRecommendations = (recIds: string[]) => {
+    if (recIds && recIds.length > 0) {
+      const firstRecElement = document.getElementById(`rec-${recIds[0]}`);
+      if (firstRecElement) {
+        firstRecElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  };
+
+  // Highlight recommendations temporarily
+  const highlightRecommendations = (recIds: string[]) => {
+    recIds.forEach(recId => {
+      const element = document.getElementById(`rec-${recId}`);
+      if (element) {
+        element.style.transition = 'all 0.3s ease';
+        element.style.backgroundColor = '#e3f2fd';
+        element.style.transform = 'scale(1.02)';
+
+        setTimeout(() => {
+          element.style.backgroundColor = '';
+          element.style.transform = '';
+        }, 2000);
+      }
+    });
+  };
+
+  // Generate action plan
+  const generateActionPlan = (insight: any) => {
+    const relatedRecs = recommendations.filter(r =>
+      insight.related_recommendations.includes(r._id)
+    );
+
+    const planText = `
+🎯 Action Plan: ${insight.title}
+
+📋 Summary:
+${insight.description}
+
+✅ Recommendations to Implement (${relatedRecs.length}):
+${relatedRecs.map((rec, i) => `
+${i + 1}. ${rec.title}
+   - Priority: ${rec.priority}
+   - Effort: ${rec.implementation_effort || 'Medium'}
+   - Timeline: ${rec.estimated_implementation_time || '2-3 weeks'}
+`).join('\n')}
+
+📊 Expected Outcomes:
+- Potential Savings: $${insight.metrics.potential_savings?.toLocaleString() || 'TBD'}
+- Implementation Time: ${insight.metrics.implementation_time}
+- Confidence Level: ${(insight.metrics.confidence * 100).toFixed(0)}%
+
+📅 Next Steps:
+1. Review each recommendation in detail
+2. Assign owners for each task
+3. Schedule implementation timeline
+4. Set up progress tracking
+
+Generated: ${new Date().toLocaleDateString()}
+    `.trim();
+
+    // Copy to clipboard and show alert
+    navigator.clipboard.writeText(planText).then(() => {
+      alert('✅ Action Plan Generated!\n\nThe action plan has been copied to your clipboard. You can paste it into your project management tool or share with your team.');
+    }).catch(() => {
+      alert(planText);
+    });
+  };
+
+  // Open assignment dialog (placeholder)
+  const openAssignmentDialog = (insight: any) => {
+    alert(`🎯 Assign to Team\n\n${insight.related_recommendations.length} recommendations ready to assign.\n\nFeature coming soon: Assign recommendations to team members with notifications and tracking.`);
+  };
+
+  // Show cost breakdown
+  const showCostBreakdown = (insight: any) => {
+    const relatedRecs = recommendations.filter(r =>
+      insight.related_recommendations.includes(r._id)
+    );
+
+    const breakdown = relatedRecs.map(rec => ({
+      title: rec.title,
+      cost: rec.estimated_cost_savings || 0,
+      effort: rec.implementation_effort
+    }));
+
+    const message = `
+💰 Cost Breakdown
+
+Total Potential Savings: $${insight.metrics.potential_savings?.toLocaleString()}
+
+Individual Recommendations:
+${breakdown.map((item, i) =>
+  `${i + 1}. ${item.title}\n   Savings: $${item.cost.toLocaleString()}/month\n   Effort: ${item.effort || 'Medium'}`
+).join('\n\n')}
+    `.trim();
+
+    alert(message);
+  };
+
+  // Compare alternatives (placeholder)
+  const compareAlternatives = (insight: any) => {
+    alert(`🔄 Compare Alternatives\n\nAnalyzing ${insight.related_recommendations.length} recommendations to find the best cost/benefit ratio.\n\nFeature coming soon: Side-by-side comparison of cloud providers and service options.`);
+  };
+
+  // Generate ROI report
+  const generateROIReport = (insight: any) => {
+    const roi = insight.metrics.roi || 0;
+    const savings = insight.metrics.potential_savings || 0;
+    const implementationCost = savings / (roi || 1);
+
+    const report = `
+📊 ROI REPORT
+
+Investment Analysis:
+- Implementation Cost: $${implementationCost.toLocaleString()}
+- Monthly Savings: $${savings.toLocaleString()}
+- ROI: ${roi.toFixed(1)}x
+- Payback Period: ${(implementationCost / savings).toFixed(1)} months
+
+Recommendations Included: ${insight.related_recommendations.length}
+Confidence Level: ${(insight.metrics.confidence * 100).toFixed(0)}%
+Implementation Timeline: ${insight.metrics.implementation_time}
+
+Generated: ${new Date().toLocaleString()}
+    `.trim();
+
+    navigator.clipboard.writeText(report).then(() => {
+      alert('✅ ROI Report Generated!\n\nThe report has been copied to your clipboard.');
+    }).catch(() => {
+      alert(report);
+    });
+  };
+
+  // Handle security actions
+  const handleSecurityAction = (action: string, insight: any) => {
+    scrollToRecommendations(insight.related_recommendations);
+    highlightRecommendations(insight.related_recommendations);
+    alert(`🔒 ${action}\n\nViewing ${insight.related_recommendations.length} security-related recommendations.`);
+  };
+
+  // Handle high impact actions
+  const handleHighImpactAction = (action: string, insight: any) => {
+    scrollToRecommendations(insight.related_recommendations);
+    highlightRecommendations(insight.related_recommendations);
+
+    if (action === 'Build Business Case') {
+      generateActionPlan(insight);
+    } else if (action === 'Present to Stakeholders') {
+      generateROIReport(insight);
+    } else {
+      alert(`💡 ${action}\n\nExploring ${insight.related_recommendations.length} transformational opportunities.`);
+    }
+  };
+
+  // Handle performance actions
+  const handlePerformanceAction = (action: string, insight: any) => {
+    scrollToRecommendations(insight.related_recommendations);
+    highlightRecommendations(insight.related_recommendations);
+    alert(`⚡ ${action}\n\nReviewing ${insight.related_recommendations.length} performance optimization recommendations.`);
+  };
 
   const fetchData = async () => {
     try {
@@ -317,6 +607,17 @@ function RecommendationsPageContent() {
         )}
       </Box>
 
+      {/* Actionable Insights Panel */}
+      {recommendations.length > 0 && (
+        <Box sx={{ mb: 4 }}>
+          <RecommendationInsightsPanel
+            recommendations={recommendations}
+            assessment={assessment}
+            onActionClick={handleInsightAction}
+          />
+        </Box>
+      )}
+
       {/* Recommendations */}
       {recommendations.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
@@ -348,8 +649,11 @@ function RecommendationsPageContent() {
       ) : (
         <Grid container spacing={3}>
           {recommendations.map((rec) => (
-            <Grid item xs={12} key={rec._id}>
-              <Card>
+            <Grid item xs={12} key={rec._id} id={`rec-${rec._id}`}>
+              <Card
+                sx={{ cursor: 'pointer', '&:hover': { boxShadow: 4 } }}
+                onClick={() => handleRecommendationClick(rec._id)}
+              >
                 <CardContent>
                   {/* Header */}
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
@@ -404,8 +708,9 @@ function RecommendationsPageContent() {
                   {/* Key Metrics */}
                   <Grid container spacing={2} sx={{ mb: 3 }}>
                     {[
-                      rec.estimated_cost_savings > 0 && (
-                        <Grid item xs={12} sm={6} md={3} key={`cost-savings-${rec._id}`}>
+                      rec.estimated_cost_savings > 0 && {
+                        key: `cost-savings-${rec._id}`,
+                        content: (
                           <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'success.light', color: 'success.contrastText' }}>
                             <MonetizationOnIcon sx={{ mb: 1 }} />
                             <Typography variant="h6">
@@ -415,21 +720,25 @@ function RecommendationsPageContent() {
                               Estimated Savings
                             </Typography>
                           </Paper>
-                        </Grid>
-                      ),
-                      <Grid item xs={12} sm={6} md={3} key={`implementation-effort-${rec._id}`}>
-                        <Paper sx={{ p: 2, textAlign: 'center' }}>
-                          <TrendingUpIcon sx={{ mb: 1 }} />
-                          <Typography variant="h6">
-                            {rec.implementation_effort}
-                          </Typography>
-                          <Typography variant="caption">
-                            Implementation Effort
-                          </Typography>
-                        </Paper>
-                      </Grid>,
-                      rec.estimated_implementation_time && (
-                        <Grid item xs={12} sm={6} md={3} key={`timeline-${rec._id}`}>
+                        )
+                      },
+                      {
+                        key: `implementation-effort-${rec._id}`,
+                        content: (
+                          <Paper sx={{ p: 2, textAlign: 'center' }}>
+                            <TrendingUpIcon sx={{ mb: 1 }} />
+                            <Typography variant="h6">
+                              {rec.implementation_effort || 'Medium'}
+                            </Typography>
+                            <Typography variant="caption">
+                              Implementation Effort
+                            </Typography>
+                          </Paper>
+                        )
+                      },
+                      rec.estimated_implementation_time && {
+                        key: `timeline-${rec._id}`,
+                        content: (
                           <Paper sx={{ p: 2, textAlign: 'center' }}>
                             <Typography variant="h6">
                               {rec.estimated_implementation_time}
@@ -438,10 +747,11 @@ function RecommendationsPageContent() {
                               Timeline
                             </Typography>
                           </Paper>
-                        </Grid>
-                      ),
-                      rec.cloud_provider && (
-                        <Grid item xs={12} sm={6} md={3} key={`cloud-provider-${rec._id}`}>
+                        )
+                      },
+                      rec.cloud_provider && {
+                        key: `cloud-provider-${rec._id}`,
+                        content: (
                           <Paper sx={{ p: 2, textAlign: 'center' }}>
                             <CloudIcon sx={{ mb: 1 }} />
                             <Typography variant="h6">
@@ -451,9 +761,13 @@ function RecommendationsPageContent() {
                               Cloud Provider
                             </Typography>
                           </Paper>
-                        </Grid>
-                      )
-                    ].filter(Boolean)}
+                        )
+                      }
+                    ].filter(Boolean).map((metric: any) => (
+                      <Grid item xs={12} sm={6} md={3} key={metric.key}>
+                        {metric.content}
+                      </Grid>
+                    ))}
                   </Grid>
 
                   {/* Benefits */}
@@ -463,11 +777,14 @@ function RecommendationsPageContent() {
                         Key Benefits:
                       </Typography>
                       <Stack spacing={1}>
-                        {(rec.benefits || []).map((benefit, idx) => (
-                          <Typography key={`benefit-${rec._id}-${idx}`} variant="body2" sx={{ display: 'flex', alignItems: 'center' }}>
-                            • {benefit}
-                          </Typography>
-                        ))}
+                        {(rec.benefits || []).map((benefit, idx) => {
+                          const benefitText = typeof benefit === 'string' ? benefit : String(benefit);
+                          return (
+                            <Typography key={`benefit-${rec._id}-${idx}`} variant="body2" sx={{ display: 'flex', alignItems: 'center' }}>
+                              • {benefitText}
+                            </Typography>
+                          );
+                        })}
                       </Stack>
                     </Box>
                   )}
@@ -479,30 +796,62 @@ function RecommendationsPageContent() {
                         Implementation Steps:
                       </Typography>
                       <Stack spacing={1}>
-                        {(rec.implementation_steps || []).map((step, idx) => (
-                          <Typography key={`step-${rec._id}-${idx}`} variant="body2" sx={{ display: 'flex', alignItems: 'flex-start' }}>
-                            {idx + 1}. {step}
-                          </Typography>
-                        ))}
+                        {(rec.implementation_steps || []).map((step, idx) => {
+                          const stepText = typeof step === 'string' ? step : String(step);
+                          return (
+                            <Typography key={`step-${rec._id}-${idx}`} variant="body2" sx={{ display: 'flex', alignItems: 'flex-start' }}>
+                              {idx + 1}. {stepText}
+                            </Typography>
+                          );
+                        })}
                       </Stack>
                     </Box>
                   )}
 
                   {/* Risks */}
                   {Array.isArray(rec.risks) && rec.risks.length > 0 && (
-                    <Box>
+                    <Box sx={{ mb: 3 }}>
                       <Typography variant="subtitle2" gutterBottom color="error">
                         Potential Risks:
                       </Typography>
                       <Stack spacing={1}>
-                        {(rec.risks || []).map((risk, idx) => (
-                          <Typography key={`risk-${rec._id}-${idx}`} variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
-                            ⚠️ {risk}
-                          </Typography>
-                        ))}
+                        {(rec.risks || []).map((risk, idx) => {
+                          const riskText = typeof risk === 'string' ? risk : String(risk);
+                          return (
+                            <Typography key={`risk-${rec._id}-${idx}`} variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
+                              ⚠️ {riskText}
+                            </Typography>
+                          );
+                        })}
                       </Stack>
                     </Box>
                   )}
+
+                  {/* Action Buttons */}
+                  <Divider sx={{ my: 2 }} />
+                  <Stack direction="row" spacing={2} justifyContent="flex-end">
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSaveClick(rec._id);
+                      }}
+                    >
+                      Save for Later
+                    </Button>
+                    <Button
+                      variant="contained"
+                      size="small"
+                      color="primary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleImplementClick(rec._id);
+                      }}
+                    >
+                      Mark as Implemented
+                    </Button>
+                  </Stack>
                 </CardContent>
               </Card>
             </Grid>

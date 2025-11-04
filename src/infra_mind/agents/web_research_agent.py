@@ -20,6 +20,7 @@ from .web_search import get_web_search_client, search_cloud_infrastructure_topic
 from ..models.assessment import Assessment
 from ..models.web_research import WebResearchData
 from ..core.cache import cache_manager
+from ..llm.prompt_sanitizer import PromptSanitizer
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,9 @@ class WebResearchAgent(BaseAgent):
         
         super().__init__(config)
         
+
+        # Initialize prompt sanitizer for security
+        self.prompt_sanitizer = PromptSanitizer(security_level="balanced")
         # Web Research Agent-specific attributes
         self.cache_manager = cache_manager
         

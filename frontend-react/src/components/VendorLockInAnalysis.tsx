@@ -570,7 +570,7 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
                       Migration Cost
                     </Typography>
                     <Typography variant="h6" color="warning.main">
-                      ${scenario.cost_analysis.migration_costs.toLocaleString()}
+                      ${scenario.cost_analysis?.migration_costs?.toLocaleString() || '0'}
                     </Typography>
                   </Grid>
                   <Grid item xs={6}>
@@ -578,21 +578,21 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
                       Break Even
                     </Typography>
                     <Typography variant="h6" color="success.main">
-                      {scenario.cost_analysis.break_even_point}
+                      {scenario.cost_analysis?.break_even_point || 'N/A'}
                     </Typography>
                   </Grid>
                 </Grid>
                 
                 {/* Risk Assessment */}
                 <Box mb={2}>
-                  <Typography variant="subtitle2" mb={1}>Risk Score: {scenario.risk_assessment.overall_risk_score}/100</Typography>
+                  <Typography variant="subtitle2" mb={1}>Risk Score: {scenario.risk_assessment?.overall_risk_score || 0}/100</Typography>
                   <LinearProgress
                     variant="determinate"
-                    value={scenario.risk_assessment.overall_risk_score}
+                    value={scenario.risk_assessment?.overall_risk_score || 0}
                     color={getRiskColor(
-                      scenario.risk_assessment.overall_risk_score >= 80 ? 'critical' :
-                      scenario.risk_assessment.overall_risk_score >= 60 ? 'high' :
-                      scenario.risk_assessment.overall_risk_score >= 40 ? 'medium' : 'low'
+                      (scenario.risk_assessment?.overall_risk_score || 0) >= 80 ? 'critical' :
+                      (scenario.risk_assessment?.overall_risk_score || 0) >= 60 ? 'high' :
+                      (scenario.risk_assessment?.overall_risk_score || 0) >= 40 ? 'medium' : 'low'
                     ) as any}
                   />
                 </Box>
@@ -600,11 +600,11 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
                 {/* Benefits */}
                 <Accordion>
                   <AccordionSummary expandIcon={<ExpandMore />}>
-                    <Typography variant="body2">Benefits ({scenario.benefits.length})</Typography>
+                    <Typography variant="body2">Benefits ({scenario.benefits?.length || 0})</Typography>
                   </AccordionSummary>
                   <AccordionDetails>
                     <List dense>
-                      {scenario.benefits.map((benefit, index) => (
+                      {(scenario.benefits || []).map((benefit, index) => (
                         <ListItem key={index}>
                           <ListItemIcon>
                             <CheckCircle color="success" fontSize="small" />

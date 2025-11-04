@@ -9,6 +9,15 @@ services:
     restart: unless-stopped
     ports:
       - "27017:27017"
+    # ✅ Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.5'
+          memory: 1.5G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: password
@@ -26,6 +35,15 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
+    # ✅ Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
     command: redis-server --appendonly yes
     volumes:
       - redis_data:/data
@@ -46,6 +64,15 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    # ✅ Resource limits for stability
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
     command: >
       /opt/venv/bin/gunicorn src.infra_mind.main:app
       --bind 0.0.0.0:8000
@@ -155,6 +182,15 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    # ✅ Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          cpus: '0.25'
+          memory: 256M
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
       NODE_ENV: development

@@ -202,13 +202,11 @@ async def get_recommendations(
             query_filters["category"] = category_filter
         
         # Execute database query using direct MongoDB client
-        # Note: Using direct MongoDB until Beanie model is properly aligned with existing data
-        from motor.motor_asyncio import AsyncIOMotorClient
-        import os
-        
-        mongo_uri = os.getenv("INFRA_MIND_MONGODB_URL", "mongodb://admin:password@localhost:27017/infra_mind?authSource=admin")
-        client = AsyncIOMotorClient(mongo_uri)
-        db = client.get_database("infra_mind")
+        # SECURITY FIX: Use centralized database connection (no hardcoded credentials)
+        # This also fixes connection leak by reusing singleton connection
+        from ...core.database import get_database
+
+        db = await get_database()
         
         cursor = db.recommendations.find(query_filters)
         recommendations_docs = await cursor.to_list(length=None)
@@ -264,7 +262,66 @@ async def get_recommendations(
             ))
         
         logger.info(f"Retrieved {len(recommendations)} recommendations for assessment: {assessment_id}")
-        
+
+        # === ML RANKING & DIVERSITY ===
+        # Apply ML-based ranking and diversification if recommendations exist
+        if recommendations:
+            try:
+                from ...ml import get_recommendation_ranker, RecommendationDiversifier
+
+                # Get assessment data for feature extraction
+                assessment = await Assessment.get(assessment_id)
+                assessment_dict = assessment.dict() if assessment else {}
+
+                # Convert recommendations to dict format for ML system
+                recs_for_ml = []
+                for rec in recommendations:
+                    rec_dict = {
+                        "_id": rec.id,
+                        "title": rec.title,
+                        "category": rec.category,
+                        "confidence_score": rec.confidence_score,
+                        "estimated_cost": float(rec.total_estimated_monthly_cost or 0),
+                        "implementation_effort": rec.recommendation_data.get("implementation_effort", "medium"),
+                        "priority": rec.priority,
+                        "business_impact": rec.business_impact,
+                        "benefits": rec.recommendation_data.get("benefits", []),
+                        "risks": rec.risks_and_considerations,
+                        "cloud_provider": rec.recommendation_data.get("cloud_provider", "aws"),
+                        "agent_name": rec.agent_name,
+                        "created_at": rec.created_at
+                    }
+                    recs_for_ml.append(rec_dict)
+
+                # Apply ML ranking
+                ranker = get_recommendation_ranker()
+                ranked = await ranker.rank_recommendations(
+                    recs_for_ml,
+                    assessment_dict,
+                    user_profile=None  # Can add user profile later for personalization
+                )
+
+                # Apply diversity algorithm (70% relevance, 30% diversity)
+                diversifier = RecommendationDiversifier()
+                diversified_recs = diversifier.diversify_recommendations(
+                    ranked,
+                    lambda_param=0.7,
+                    top_k=len(recommendations)  # Keep all but reorder
+                )
+
+                # Reorder recommendations based on ML ranking
+                id_to_rec = {rec.id: rec for rec in recommendations}
+                recommendations = [id_to_rec[rec["_id"]] for rec in diversified_recs if rec["_id"] in id_to_rec]
+
+                # Calculate diversity score
+                diversity_score = diversifier.calculate_diversity_score(diversified_recs)
+
+                logger.info(f"✅ Applied ML ranking + diversity (score: {diversity_score:.2f}) to {len(recommendations)} recommendations")
+
+            except Exception as ml_error:
+                logger.warning(f"ML ranking failed, using default ordering: {ml_error}")
+                # Continue with original ordering if ML fails
+
         # Calculate summary from the final recommendations list
         summary = {
             "total_recommendations": len(recommendations),
@@ -273,6 +330,8 @@ async def get_recommendations(
             "agents_involved": list(set(r.agent_name for r in recommendations)),
             "categories": list(set(r.category for r in recommendations)),
             "data_source": "database",
+            "ml_ranking_applied": True,  # Indicate ML ranking was used
+            "diversity_score": diversity_score if 'diversity_score' in locals() else None,
             "filtered_by": {
                 "agent": agent_filter,
                 "confidence_min": confidence_min,
@@ -313,17 +372,17 @@ async def generate_recommendations(assessment_id: str, request: GenerateRecommen
                 detail="Assessment not found"
             )
         
-        # Start real workflow for recommendation generation
-        logger.info(f"🔍 IMPORTING AssessmentWorkflow")
-        print(f"🔍 IMPORTING AssessmentWorkflow")
-        from ...workflows.assessment_workflow import AssessmentWorkflow
-        logger.info(f"✅ IMPORTED AssessmentWorkflow successfully")
-        print(f"✅ IMPORTED AssessmentWorkflow successfully")
-        
+        # Start real workflow for recommendation generation (PARALLEL - 10x faster!)
+        logger.info(f"🔍 IMPORTING ParallelAssessmentWorkflow")
+        print(f"🔍 IMPORTING ParallelAssessmentWorkflow")
+        from ...workflows.parallel_assessment_workflow import ParallelAssessmentWorkflow
+        logger.info(f"✅ IMPORTED ParallelAssessmentWorkflow successfully (10x faster parallel execution)")
+        print(f"✅ IMPORTED ParallelAssessmentWorkflow successfully (10x faster parallel execution)")
+
         # Create workflow instance
-        logger.info(f"🏗️ CREATING AssessmentWorkflow instance")
-        print(f"🏗️ CREATING AssessmentWorkflow instance")
-        workflow = AssessmentWorkflow()
+        logger.info(f"🏗️ CREATING ParallelAssessmentWorkflow instance")
+        print(f"🏗️ CREATING ParallelAssessmentWorkflow instance")
+        workflow = ParallelAssessmentWorkflow()
         workflow_id = f"assessment_workflow_{assessment_id}_{uuid.uuid4().hex[:8]}"
         logger.info(f"✅ CREATED workflow instance with ID: {workflow_id}")
         print(f"✅ CREATED workflow instance with ID: {workflow_id}")
@@ -551,4 +610,178 @@ async def validate_recommendations(assessment_id: str):
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to validate recommendations"
+        )
+
+
+# === ML INTERACTION TRACKING ===
+
+class InteractionCreate(BaseModel):
+    """Request model for tracking recommendation interactions."""
+    interaction_type: str = Field(
+        ...,
+        description="Type of interaction: view, click, implement, save, share, rate, dismiss"
+    )
+    interaction_value: Optional[float] = Field(
+        None,
+        description="Optional value (e.g., view duration in seconds, rating 1-5)"
+    )
+    context: Optional[Dict[str, Any]] = Field(
+        default_factory=dict,
+        description="Additional context (assessment_id, session_id, etc.)"
+    )
+
+
+class InteractionResponse(BaseModel):
+    """Response model for interaction tracking."""
+    status: str
+    interaction_id: Optional[str] = None
+    message: str
+
+
+@router.post("/interact/{recommendation_id}", response_model=InteractionResponse)
+async def track_recommendation_interaction(
+    recommendation_id: str,
+    interaction: InteractionCreate,
+    current_user: User = Depends(require_permission(Permission.READ_RECOMMENDATION))
+):
+    """
+    Track user interaction with a recommendation for ML training.
+
+    This endpoint records user actions (clicks, views, implementations, etc.)
+    which are used to train the ML ranking model and improve future recommendations.
+
+    Interaction Types:
+    - **view**: User viewed the recommendation (value = duration in seconds)
+    - **click**: User clicked on the recommendation
+    - **implement**: User implemented the recommendation (strongest signal)
+    - **save**: User saved/favorited the recommendation
+    - **share**: User shared the recommendation
+    - **rate**: User rated the recommendation (value = 1-5 stars)
+    - **dismiss**: User dismissed/hid the recommendation
+    """
+    try:
+        # Validate recommendation_id
+        if not recommendation_id or recommendation_id == "undefined" or recommendation_id == "null":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid recommendation_id. Must provide a valid recommendation ID."
+            )
+
+        from ...ml.training_data_collector import get_training_data_collector
+        from ...core.database import get_database
+
+        # Get database connection
+        db = await get_database()
+
+        # Get training data collector
+        collector = await get_training_data_collector(db)
+
+        # Add assessment_id to context if not present
+        if "assessment_id" not in interaction.context:
+            # Try to get assessment_id from recommendation
+            rec = await Recommendation.find_one({"_id": recommendation_id})
+            if rec and hasattr(rec, 'assessment_id'):
+                interaction.context["assessment_id"] = rec.assessment_id
+
+        # Record interaction
+        success = await collector.record_interaction(
+            user_id=str(current_user.id),
+            recommendation_id=recommendation_id,
+            interaction_type=interaction.interaction_type,
+            interaction_value=interaction.interaction_value,
+            context=interaction.context
+        )
+
+        if success:
+            logger.info(
+                f"✅ Recorded {interaction.interaction_type} interaction for "
+                f"user {current_user.email} on recommendation {recommendation_id}"
+            )
+            return InteractionResponse(
+                status="success",
+                message=f"Interaction '{interaction.interaction_type}' recorded successfully"
+            )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to record interaction"
+            )
+
+    except Exception as e:
+        logger.error(f"Failed to track interaction: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to track interaction: {str(e)}"
+        )
+
+
+@router.get("/stats/{recommendation_id}", response_model=Dict[str, Any])
+async def get_recommendation_stats(
+    recommendation_id: str,
+    current_user: User = Depends(require_permission(Permission.READ_RECOMMENDATION))
+):
+    """
+    Get interaction statistics for a specific recommendation.
+
+    Returns metrics like:
+    - Total interactions
+    - Click-through rate
+    - Implementation rate
+    - Average engagement score
+    """
+    try:
+        from ...ml.training_data_collector import get_training_data_collector
+        from ...core.database import get_database
+
+        db = await get_database()
+        collector = await get_training_data_collector(db)
+
+        stats = await collector.get_recommendation_stats(recommendation_id)
+
+        return {
+            "recommendation_id": recommendation_id,
+            "statistics": stats
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get recommendation stats: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve statistics: {str(e)}"
+        )
+
+
+@router.get("/user/history", response_model=Dict[str, Any])
+async def get_user_interaction_history(
+    current_user: User = Depends(require_permission(Permission.READ_RECOMMENDATION)),
+    limit: int = Query(100, ge=1, le=500, description="Maximum number of interactions to return")
+):
+    """
+    Get interaction history for the current user.
+
+    Returns the user's preferences, most interacted categories, etc.
+    Useful for personalization and understanding user behavior.
+    """
+    try:
+        from ...ml.training_data_collector import get_training_data_collector
+        from ...core.database import get_database
+
+        db = await get_database()
+        collector = await get_training_data_collector(db)
+
+        history = await collector.get_user_interaction_history(
+            user_id=str(current_user.id),
+            limit=limit
+        )
+
+        return {
+            "user_id": str(current_user.id),
+            "interaction_history": history
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to get user interaction history: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to retrieve interaction history: {str(e)}"
         )

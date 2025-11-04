@@ -699,8 +699,19 @@ class GCPSQLClient:
             for tier in tiers:
                 tier_name = tier.get('tier')
                 ram_bytes = tier.get('RAM', 0)
+                # Convert to int if string
+                if isinstance(ram_bytes, str):
+                    try:
+                        ram_bytes = int(ram_bytes)
+                    except ValueError:
+                        ram_bytes = 0
                 memory_gb = ram_bytes / (1024 ** 3) if ram_bytes else 0
                 disk_quota = tier.get('DiskQuota', 0)
+                if isinstance(disk_quota, str):
+                    try:
+                        disk_quota = int(disk_quota)
+                    except ValueError:
+                        disk_quota = 0
                 
                 # Get pricing (fallback to calculated price if not in lookup)
                 hourly_price = self._get_sql_tier_price(tier_name, pricing_lookup, memory_gb)

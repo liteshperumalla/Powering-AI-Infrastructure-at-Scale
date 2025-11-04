@@ -21,6 +21,7 @@ from ...models.report import Report, ReportSection, ReportTemplate, ReportType, 
 from ...models.assessment import Assessment
 from ...models.recommendation import Recommendation
 from ...models.user import User
+from ...core.dependencies import DatabaseDep  # Dependency injection for database access
 from ...services.report_service import ReportService
 from ...agents.report_generator_agent import ReportGeneratorAgent
 from ...agents.cto_agent import CTOAgent
@@ -70,17 +71,17 @@ async def test_reports_endpoint():
 
 
 @router.get("/user-reports")
-async def get_user_reports(current_user: User = Depends(get_current_user)):
-    """Get all reports for current user - simplified version."""
+async def get_user_reports(
+    current_user: User = Depends(get_current_user),
+    db: DatabaseDep = None
+):
+    """
+    Get all reports for current user - simplified version.
+
+    Note: Now uses dependency injection for database access.
+    """
     try:
-        from motor.motor_asyncio import AsyncIOMotorClient
-        import os
-        
-        mongo_uri = os.getenv("INFRA_MIND_MONGODB_URL", "mongodb://admin:password@localhost:27017/infra_mind?authSource=admin")
-        client = AsyncIOMotorClient(mongo_uri)
-        db = client.get_database("infra_mind")
-        
-        # Query reports collection
+        # Query reports collection (database injected)
         cursor = db.reports.find({"user_id": str(current_user.id)})
         reports = await cursor.to_list(length=None)
         
@@ -102,17 +103,17 @@ async def get_user_reports(current_user: User = Depends(get_current_user)):
 
 
 @router.get("/all")
-async def get_all_user_reports(current_user: User = Depends(get_current_user)):
-    """Get all reports for current user - used by frontend."""
+async def get_all_user_reports(
+    current_user: User = Depends(get_current_user),
+    db: DatabaseDep = None
+):
+    """
+    Get all reports for current user - used by frontend.
+
+    Note: Now uses dependency injection for database access.
+    """
     try:
-        from motor.motor_asyncio import AsyncIOMotorClient
-        import os
-        
-        mongo_uri = os.getenv("INFRA_MIND_MONGODB_URL", "mongodb://admin:password@localhost:27017/infra_mind?authSource=admin")
-        client = AsyncIOMotorClient(mongo_uri)
-        db = client.get_database("infra_mind")
-        
-        # Query reports collection
+        # Query reports collection (database injected)
         cursor = db.reports.find({"user_id": str(current_user.id)})
         reports = await cursor.to_list(length=None)
         
@@ -128,7 +129,7 @@ async def get_all_user_reports(current_user: User = Depends(get_current_user)):
                         # Try to parse the string and reformat it
                         parsed_date = datetime.fromisoformat(date_value.replace('Z', '+00:00'))
                         return parsed_date.isoformat()
-                    except:
+                    except Exception as e:
                         return datetime.now().isoformat()
                 else:
                     return datetime.now().isoformat()
@@ -1564,7 +1565,7 @@ async def get_report_by_id(
         # Find the report by ID
         try:
             report = await db.reports.find_one({"_id": ObjectId(report_id)})
-        except:
+        except Exception as e:
             # If ObjectId fails, try as string
             report = await db.reports.find_one({"_id": report_id})
         
@@ -1876,7 +1877,7 @@ async def download_report(
         # Get the report and verify access
         try:
             report = await db.reports.find_one({"_id": ObjectId(report_id)})
-        except:
+        except Exception as e:
             # If ObjectId fails, try as string
             report = await db.reports.find_one({"_id": report_id})
             
@@ -1898,7 +1899,7 @@ async def download_report(
         # Get assessment and verify access
         try:
             assessment = await db.assessments.find_one({"_id": ObjectId(assessment_id)})
-        except:
+        except Exception as e:
             assessment = await db.assessments.find_one({"_id": assessment_id})
             
         if not assessment:
@@ -2408,7 +2409,7 @@ async def share_report(
             # Get report directly from database
             try:
                 report_doc = await db_conn.reports.find_one({"_id": ObjectId(report_id)})
-            except:
+            except Exception as e:
                 report_doc = await db_conn.reports.find_one({"report_id": report_id})
             
             if not report_doc:
@@ -2436,7 +2437,7 @@ async def share_report(
                         "updated_at": datetime.now(timezone.utc)
                     }}
                 )
-            except:
+            except Exception as e:
                 await db_conn.reports.update_one(
                     {"report_id": report_id},
                     {"$set": {

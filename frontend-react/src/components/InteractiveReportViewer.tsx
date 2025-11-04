@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import DOMPurify from 'dompurify';
 import {
     Box,
     Paper,
@@ -179,10 +180,16 @@ const InteractiveReportViewer: React.FC<InteractiveReportViewerProps> = ({
     };
 
     const renderInteractiveContent = (section: ReportSection) => {
+        // Sanitize HTML content to prevent XSS attacks
+        const sanitizedContent = DOMPurify.sanitize(section.content, {
+            ALLOWED_TAGS: ['p', 'br', 'strong', 'em', 'u', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td', 'div', 'span', 'pre', 'code'],
+            ALLOWED_ATTR: ['class', 'style', 'id']
+        });
+
         if (!section.isInteractive) {
             return (
                 <Box
-                    dangerouslySetInnerHTML={{ __html: section.content }}
+                    dangerouslySetInnerHTML={{ __html: sanitizedContent }}
                     sx={{ fontSize: `${zoomLevel}%` }}
                 />
             );
@@ -190,7 +197,7 @@ const InteractiveReportViewer: React.FC<InteractiveReportViewerProps> = ({
 
         return (
             <Box sx={{ fontSize: `${zoomLevel}%` }}>
-                <Box dangerouslySetInnerHTML={{ __html: section.content }} />
+                <Box dangerouslySetInnerHTML={{ __html: sanitizedContent }} />
 
                 {/* Interactive Charts */}
                 {section.chartsConfig && section.chartsConfig.length > 0 && (

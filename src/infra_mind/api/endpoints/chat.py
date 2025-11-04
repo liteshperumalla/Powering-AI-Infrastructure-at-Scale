@@ -25,6 +25,8 @@ from ...models.report import Report
 from ...agents.chatbot_agent import ChatbotAgent
 from ...agents.base import AgentConfig, AgentRole
 from .auth import get_current_user
+from ...core.rate_limiter import get_chat_rate_limiter
+from ...services.assessment_context_cache import get_assessment_context_cache
 
 logger = logging.getLogger(__name__)
 
@@ -248,10 +250,21 @@ async def start_conversation(
 ):
     """
     Start a new conversation.
-    
+
     Creates a new conversation session and optionally sends an initial message.
     """
     try:
+        # Check rate limits for conversation creation
+        rate_limiter = get_chat_rate_limiter()
+        allowed, retry_after = await rate_limiter.check_conversation_limit(str(current_user.id))
+
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Too many conversations created. Please try again in {retry_after} seconds.",
+                headers={"Retry-After": str(retry_after)}
+            )
+
         # Create new conversation
         conversation = Conversation(
             title=request.title or "New Chat",
@@ -501,19 +514,30 @@ async def send_message(
 ):
     """
     Send a message in a conversation.
-    
+
     Processes the user message and generates an AI response.
     """
     try:
+        # Check rate limits
+        rate_limiter = get_chat_rate_limiter()
+        allowed, retry_after = await rate_limiter.check_message_limit(str(current_user.id))
+
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail=f"Rate limit exceeded. Please try again in {retry_after} seconds.",
+                headers={"Retry-After": str(retry_after)}
+            )
+
         # Get conversation from database
         conversation = await Conversation.get(conversation_id)
-        
+
         if not conversation:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Conversation not found"
             )
-        
+
         # Check ownership
         if conversation.user_id != str(current_user.id):
             raise HTTPException(
@@ -550,123 +574,100 @@ async def send_message(
             "conversation_context": conversation.context.value
         }
         
-        # Load report data if available for context
-        if bot_context.get("report_id"):
-            try:
-                report = await Report.get(bot_context["report_id"])
-                if report:
-                    bot_context["report_data"] = {
-                        "title": report.title,
-                        "key_findings": report.key_findings,
-                        "recommendations": report.recommendations[:3],  # Top 3 recommendations
-                        "compliance_score": report.compliance_score,
-                        "estimated_savings": report.estimated_savings
-                    }
-            except Exception as e:
-                logger.warning(f"Failed to load report data: {str(e)}")
-        
-        # Load comprehensive assessment data if available for context
+        # Load comprehensive assessment data first (using cache)
+        assessment_data = None
         if bot_context.get("assessment_id"):
             try:
-                from ...models.recommendation import Recommendation
+                context_cache = get_assessment_context_cache()
+                assessment_data = await context_cache.get_assessment_context(
+                    bot_context["assessment_id"]
+                )
 
-                assessment = await Assessment.get(bot_context["assessment_id"])
-                if assessment:
-                    # Get all recommendations for this assessment
-                    recommendations = await Recommendation.find(
-                        {"assessment_id": str(assessment.id)}
-                    ).to_list()
-
-                    # Get advanced analytics
-                    analytics_collection = db.get_collection("advanced_analytics")
-                    advanced_analytics = await analytics_collection.find_one(
-                        {"assessment_id": str(assessment.id)}
-                    )
-
-                    # Get quality metrics
-                    quality_collection = db.get_collection("quality_metrics")
-                    quality_metrics = await quality_collection.find_one(
-                        {"assessment_id": str(assessment.id)}
-                    )
-
-                    # Get reports for this assessment
-                    reports = await Report.find(
-                        {"assessment_id": str(assessment.id)}
-                    ).to_list()
-
-                    # Build comprehensive context
+                if assessment_data:
+                    bot_context["assessment_data"] = assessment_data
+                    logger.info(f"Loaded cached assessment context: {bot_context['assessment_id']}")
+                else:
+                    logger.warning(f"Failed to load assessment context: {bot_context['assessment_id']}")
                     bot_context["assessment_data"] = {
-                        "id": str(assessment.id),
-                        "title": assessment.title,
-                        "status": str(assessment.status),
-                        "completion_percentage": assessment.completion_percentage,
-                        "business_requirements": {
-                            "company_name": assessment.business_requirements.get("company_name"),
-                            "industry": assessment.business_requirements.get("industry"),
-                            "company_size": assessment.business_requirements.get("company_size"),
-                            "business_goals": assessment.business_requirements.get("business_goals", []),
-                            "budget_range": assessment.business_requirements.get("budget_range"),
-                            "timeline": assessment.business_requirements.get("timeline")
-                        },
-                        "technical_requirements": {
-                            "workload_types": getattr(assessment.technical_requirements, 'workload_types', []),
-                            "cloud_preference": getattr(assessment.technical_requirements, 'cloud_preference', None),
-                            "scalability_requirements": getattr(assessment.technical_requirements, 'scalability_requirements', {}),
-                            "performance_requirements": getattr(assessment.technical_requirements, 'performance_requirements', {})
-                        },
-                        "recommendations": {
-                            "count": len(recommendations),
-                            "summary": [
-                                {
-                                    "title": rec.title,
-                                    "category": rec.category,
-                                    "confidence_score": rec.confidence_score,
-                                    "benefits": rec.benefits if hasattr(rec, 'benefits') else [],
-                                    "risks": rec.risks if hasattr(rec, 'risks') else rec.risks_and_considerations,
-                                    "implementation_steps": rec.implementation_steps,
-                                    "cloud_provider": rec.cloud_provider,
-                                    "estimated_cost": rec.total_estimated_monthly_cost,
-                                    "business_impact": rec.business_impact
-                                }
-                                for rec in recommendations[:10]  # Limit to top 10
-                            ]
-                        },
-                        "analytics": {
-                            "cost_analysis": advanced_analytics.get("cost_analysis") if advanced_analytics else None,
-                            "performance_analysis": advanced_analytics.get("performance_analysis") if advanced_analytics else None,
-                            "risk_assessment": advanced_analytics.get("risk_assessment") if advanced_analytics else None,
-                            "optimization_opportunities": advanced_analytics.get("optimization_opportunities", []) if advanced_analytics else []
-                        },
-                        "quality_metrics": {
-                            "overall_score": quality_metrics.get("value") if quality_metrics else None,
-                            "completeness": quality_metrics.get("details", {}).get("completeness") if quality_metrics else None,
-                            "accuracy": quality_metrics.get("details", {}).get("accuracy") if quality_metrics else None,
-                            "confidence": quality_metrics.get("details", {}).get("confidence") if quality_metrics else None
-                        },
-                        "reports": {
-                            "count": len(reports),
-                            "available_types": [report.report_type for report in reports]
-                        },
-                        "agents_involved": list(set([rec.agent_name for rec in recommendations])),
-                        "decision_factors": {
-                            "total_estimated_cost": sum([
-                                float(str(rec.total_estimated_monthly_cost).replace('$', '').replace(',', '') or 0)
-                                for rec in recommendations
-                            ]) if recommendations else 0,
-                            "average_confidence": sum([rec.confidence_score for rec in recommendations]) / len(recommendations) if recommendations else 0,
-                            "high_priority_items": len([rec for rec in recommendations if rec.priority == "high"]),
-                            "implementation_complexity": [rec.implementation_effort for rec in recommendations if hasattr(rec, 'implementation_effort')]
-                        }
+                        "error": "Failed to load assessment data",
+                        "message": "Some assessment information may be unavailable"
                     }
-
-                    logger.info(f"Loaded comprehensive context for assessment {assessment.id}: {len(recommendations)} recommendations, {len(reports)} reports")
             except Exception as e:
-                logger.error(f"Failed to load comprehensive assessment data: {str(e)}")
-                # Provide minimal fallback
+                logger.error(f"Failed to load assessment data: {str(e)}")
                 bot_context["assessment_data"] = {
                     "error": "Failed to load complete assessment data",
                     "message": "Some assessment information may be unavailable"
                 }
+
+        # Load report data if available for context
+        if bot_context.get("report_id"):
+            try:
+                report = await Report.get(bot_context["report_id"])
+                if report and report.status == "completed":
+                    # Use actual report data if report generation succeeded
+                    bot_context["report_data"] = {
+                        "title": report.title,
+                        "report_type": report.report_type,
+                        "created_at": report.created_at.isoformat() if report.created_at else None,
+                        "status": report.status,
+                        "key_findings": report.key_findings if hasattr(report, 'key_findings') else None,
+                        "recommendations": report.recommendations[:5] if report.recommendations else [],  # Top 5
+                        "compliance_score": report.compliance_score if hasattr(report, 'compliance_score') else None,
+                        "estimated_savings": report.estimated_savings if hasattr(report, 'estimated_savings') else None
+                    }
+                    logger.info(f"Loaded report data from Report model: {bot_context['report_id']}")
+                elif assessment_data and not assessment_data.get("error"):
+                    # If report failed or incomplete, build report data from assessment context
+                    logger.info(f"Building report data from assessment context (report status: {report.status if report else 'not found'})")
+
+                    # Extract recommendations summary
+                    recommendations_summary = []
+                    if assessment_data.get("recommendations", {}).get("summary"):
+                        for rec in assessment_data["recommendations"]["summary"][:5]:  # Top 5
+                            recommendations_summary.append({
+                                "title": rec.get("title"),
+                                "category": rec.get("category"),
+                                "confidence_score": rec.get("confidence_score"),
+                                "benefits": rec.get("benefits", [])[:2],  # Top 2 benefits
+                                "estimated_cost": rec.get("estimated_cost")
+                            })
+
+                    # Build key findings from analytics
+                    key_findings = []
+                    analytics = assessment_data.get("analytics", {})
+
+                    if cost_analysis := analytics.get("cost_analysis"):
+                        key_findings.append(f"Cost Analysis: {cost_analysis.get('summary', 'Available')}")
+
+                    if performance := analytics.get("performance_analysis"):
+                        key_findings.append(f"Performance: {performance.get('summary', 'Available')}")
+
+                    if risk := analytics.get("risk_assessment"):
+                        key_findings.append(f"Risk Assessment: {risk.get('summary', 'Evaluated')}")
+
+                    # Extract estimated savings from cost analysis
+                    estimated_savings = None
+                    if cost_analysis and isinstance(cost_analysis, dict):
+                        estimated_savings = cost_analysis.get("potential_savings")
+
+                    bot_context["report_data"] = {
+                        "title": f"{assessment_data.get('title', 'Assessment')} - Analysis Report",
+                        "report_type": "comprehensive",
+                        "created_at": assessment_data.get("_cached_at"),
+                        "status": "generated_from_assessment",
+                        "key_findings": key_findings if key_findings else ["Assessment completed with recommendations"],
+                        "recommendations": recommendations_summary,
+                        "compliance_score": assessment_data.get("quality_metrics", {}).get("overall_score"),
+                        "estimated_savings": estimated_savings,
+                        "total_recommendations": assessment_data.get("recommendations", {}).get("count", 0),
+                        "completion_percentage": assessment_data.get("completion_percentage"),
+                        "agents_involved": assessment_data.get("agents_involved", [])
+                    }
+                    logger.info(f"Built report data from assessment context with {len(recommendations_summary)} recommendations")
+            except Exception as e:
+                import traceback
+                logger.error(f"Failed to load report data: {str(e)}")
+                logger.error(f"Traceback: {traceback.format_exc()}")
         
         # Generate bot response
         bot_response = await chatbot.handle_message(

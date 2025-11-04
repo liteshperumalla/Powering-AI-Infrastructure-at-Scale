@@ -2,13 +2,14 @@
 Direct authentication service that bypasses Pydantic model validation.
 
 This service handles user authentication using direct MongoDB operations.
+
+Note: Refactored to use dependency injection - database passed via constructor.
 """
 
 import os
 import jwt
 from datetime import datetime, timezone
 from typing import Dict, Any, Optional
-from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from fastapi import HTTPException, Depends, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -21,17 +22,20 @@ ALGORITHM = "HS256"
 security = HTTPBearer()
 
 class DirectAuthService:
-    """Direct database operations for authentication."""
-    
-    def __init__(self):
-        self.mongo_uri = os.getenv("INFRA_MIND_MONGODB_URL", 
-                                  "mongodb://admin:password@localhost:27017/infra_mind?authSource=admin")
-    
-    async def get_database_connection(self):
-        """Get database connection."""
-        client = AsyncIOMotorClient(self.mongo_uri)
-        db = client.get_database("infra_mind")
-        return client, db
+    """
+    Direct database operations for authentication.
+
+    Note: Now uses dependency injection - database passed in constructor.
+    """
+
+    def __init__(self, db):
+        """
+        Initialize with injected database.
+
+        Args:
+            db: Database instance from DatabaseDep dependency injection
+        """
+        self.db = db
     
     def verify_token(self, token: str) -> dict:
         """Verify and decode a JWT token."""
@@ -51,16 +55,12 @@ class DirectAuthService:
     
     async def get_user_by_id_direct(self, user_id: str) -> Optional[Dict[str, Any]]:
         """Get user by ID using direct database query."""
-        client, db = await self.get_database_connection()
         try:
-            try:
-                user = await db.users.find_one({"_id": ObjectId(user_id)})
-            except:
-                # Try string ID if ObjectId fails
-                user = await db.users.find_one({"user_id": user_id})
-            return user
-        finally:
-            client.close()
+            user = await self.db.users.find_one({"_id": ObjectId(user_id)})
+        except Exception as e:
+            # Try string ID if ObjectId fails
+            user = await self.db.users.find_one({"user_id": user_id})
+        return user
     
     async def get_current_user_direct(
         self, 
@@ -90,10 +90,5 @@ class DirectAuthService:
         }
 
 
-# Global instance
-direct_auth_service = DirectAuthService()
-
-# Dependency function
-async def get_current_user_direct(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Dict[str, Any]:
-    """Dependency function to get current user without Pydantic models."""
-    return await direct_auth_service.get_current_user_direct(credentials)
+# NOTE: Global instance removed - now instantiated with DI where needed
+# Example: service = DirectAuthService(db)

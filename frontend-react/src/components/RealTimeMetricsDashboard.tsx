@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { safeToFixed, formatDuration } from '../utils/numberUtils';
+import { useApiData } from '../hooks/useOptimizedApi';
+import { SkeletonDashboard } from './skeletons/SkeletonCard';
 import {
     Box,
     Card,
@@ -186,44 +188,38 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
         }
     }, [websocket, isRealTimeEnabled, handleWebSocketMessage]);
 
-    // Periodic data refresh
+    // ✅ Use optimized API hook instead of manual fetch
+    const { data: metricsData, loading, error: apiError } = useApiData<any>(
+        '/api/metrics/current',
+        {
+            enabled: isRealTimeEnabled,
+            refetchInterval: isRealTimeEnabled ? refreshInterval : undefined
+        }
+    );
+
+    // Update metrics when data changes
     useEffect(() => {
-        if (!isRealTimeEnabled) return;
+        if (metricsData) {
+            const timestamp = Date.now();
 
-        const fetchMetrics = async () => {
-            try {
-                // Fetch latest metrics from API
-                const response = await fetch('/api/metrics/current');
-                if (response.ok) {
-                    const data = await response.json();
-                    const timestamp = Date.now();
+            if (metricsData.system_health) {
+                setSystemHealth(metricsData.system_health);
 
-                    if (data.system_health) {
-                        setSystemHealth(data.system_health);
-
-                        setHistoricalData(prev => ({
-                            cpu: [...prev.cpu, { timestamp, value: data.system_health.cpu_usage_percent }].slice(-maxDataPoints),
-                            memory: [...prev.memory, { timestamp, value: data.system_health.memory_usage_percent }].slice(-maxDataPoints),
-                            responseTime: [...prev.responseTime, { timestamp, value: data.system_health.response_time_ms }].slice(-maxDataPoints),
-                            errorRate: [...prev.errorRate, { timestamp, value: data.system_health.error_rate_percent }].slice(-maxDataPoints)
-                        }));
-                    }
-
-                    if (data.workflow_metrics) {
-                        setWorkflowMetrics(data.workflow_metrics);
-                    }
-
-                    setLastUpdate(new Date());
-                }
-            } catch (error) {
-                console.error('Error fetching metrics:', error);
+                setHistoricalData(prev => ({
+                    cpu: [...prev.cpu, { timestamp, value: metricsData.system_health.cpu_usage_percent }].slice(-maxDataPoints),
+                    memory: [...prev.memory, { timestamp, value: metricsData.system_health.memory_usage_percent }].slice(-maxDataPoints),
+                    responseTime: [...prev.responseTime, { timestamp, value: metricsData.system_health.response_time_ms }].slice(-maxDataPoints),
+                    errorRate: [...prev.errorRate, { timestamp, value: metricsData.system_health.error_rate_percent }].slice(-maxDataPoints)
+                }));
             }
-        };
 
-        const interval = setInterval(fetchMetrics, refreshInterval);
+            if (metricsData.workflow_metrics) {
+                setWorkflowMetrics(metricsData.workflow_metrics);
+            }
 
-        return () => clearInterval(interval);
-    }, [isRealTimeEnabled, refreshInterval, maxDataPoints]);
+            setLastUpdate(new Date());
+        }
+    }, [metricsData, maxDataPoints]);
 
     // Helper functions
     const getHealthColor = (value: number, thresholds: { warning: number; critical: number }) => {

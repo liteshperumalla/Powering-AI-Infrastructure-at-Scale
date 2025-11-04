@@ -108,7 +108,7 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [complianceService] = useState(() => getComplianceAutomationService());
+  const [complianceService] = useState(() => getComplianceAutomationService(assessmentId));
 
   // State for different sections
   const [dashboard, setDashboard] = useState<ComplianceDashboard | null>(null);
@@ -512,7 +512,7 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
                       Requirements
                     </Typography>
                     <Typography variant="body2">
-                      {framework.requirements.length}
+                      {framework.requirements?.length || 0}
                     </Typography>
                   </Grid>
                   <Grid item xs={6}>

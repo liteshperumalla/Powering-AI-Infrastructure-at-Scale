@@ -140,6 +140,9 @@ class ReportGeneratorAgent(BaseAgent):
             )
         super().__init__(config)
         
+
+        # Initialize prompt sanitizer for security
+        self.prompt_sanitizer = PromptSanitizer(security_level="balanced")
         # Initialize advanced prompt engineering system
         self.advanced_prompt_engineer = AdvancedPromptEngineer()
         

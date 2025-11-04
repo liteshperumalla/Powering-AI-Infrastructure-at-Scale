@@ -21,6 +21,7 @@ from .base import BaseAgent, AgentConfig, AgentRole
 from .tools import ToolResult
 from .web_search import WebSearchClient, get_web_search_client
 from ..models.assessment import Assessment
+from ..llm.prompt_sanitizer import PromptSanitizer
 from ..llm.manager import LLMManager
 
 logger = logging.getLogger(__name__)
@@ -119,6 +120,9 @@ class SimulationAgent(BaseAgent):
         
         super().__init__(config)
         
+
+        # Initialize prompt sanitizer for security
+        self.prompt_sanitizer = PromptSanitizer(security_level="balanced")
         # Simulation-specific attributes
         self.scenario_types = [
             ScenarioType.COST_PROJECTION,

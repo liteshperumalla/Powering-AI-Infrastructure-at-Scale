@@ -386,22 +386,22 @@ async def get_dashboard_data(
     """Get A/B testing dashboard data (admin only)."""
     try:
         # Get experiment counts by status
-        total_experiments = await Experiment.count()
-        active_experiments = await Experiment.count(Experiment.status == ExperimentStatus.RUNNING)
-        completed_experiments = await Experiment.count(Experiment.status == ExperimentStatus.COMPLETED)
-        
+        total_experiments = await Experiment.find().count()
+        active_experiments = await Experiment.find(Experiment.status == ExperimentStatus.RUNNING).count()
+        completed_experiments = await Experiment.find(Experiment.status == ExperimentStatus.COMPLETED).count()
+
         # Get recent experiments
         recent_experiments = await Experiment.find().sort(-Experiment.created_at).limit(5).to_list()
-        
+
         # Get total participants (events)
-        total_events = await ExperimentEvent.count()
-        
+        total_events = await ExperimentEvent.find().count()
+
         experiment_summaries = []
         for exp in recent_experiments:
             # Get participant count for this experiment
-            participant_count = await ExperimentEvent.count(
+            participant_count = await ExperimentEvent.find(
                 ExperimentEvent.experiment_id == str(exp.id)
-            )
+            ).count()
             
             experiment_summaries.append({
                 "id": str(exp.id),

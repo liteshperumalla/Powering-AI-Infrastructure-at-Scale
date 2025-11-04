@@ -16,13 +16,18 @@ import {
   Skeleton,
   Stack,
   Paper,
-  Divider
+  Divider,
+  List,
+  ListItem,
+  ListItemText
 } from '@mui/material';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import BusinessIcon from '@mui/icons-material/Business';
 import SecurityIcon from '@mui/icons-material/Security';
 import CloudIcon from '@mui/icons-material/Cloud';
+import ResponsiveLayout from '@/components/ResponsiveLayout';
+import ProtectedRoute from '@/components/ProtectedRoute';
 import { apiClient } from '../../../services/api';
 
 interface AssessmentData {
@@ -48,7 +53,7 @@ interface AssessmentData {
   updated_at: string;
 }
 
-export default function AssessmentDetailPage() {
+function AssessmentDetailPage() {
   const params = useParams();
   const router = useRouter();
   const [assessment, setAssessment] = useState<AssessmentData | null>(null);
@@ -223,24 +228,109 @@ export default function AssessmentDetailPage() {
                   Business Requirements
                 </Typography>
                 <Divider sx={{ mb: 2 }} />
-                
-                {assessment.business_requirements.objectives && (
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Objectives:
-                    </Typography>
-                    {assessment.business_requirements.objectives.map((obj: string, idx: number) => (
-                      <Typography key={idx} variant="body2" sx={{ mb: 0.5 }}>
-                        • {obj}
+
+                <Grid container spacing={2}>
+                  {/* Company Info */}
+                  {assessment.business_requirements.company_name && (
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Company:
                       </Typography>
-                    ))}
+                      <Typography variant="body1">
+                        {assessment.business_requirements.company_name}
+                      </Typography>
+                    </Grid>
+                  )}
+
+                  {assessment.business_requirements.industry && (
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Industry:
+                      </Typography>
+                      <Typography variant="body1">
+                        {assessment.business_requirements.industry}
+                      </Typography>
+                    </Grid>
+                  )}
+
+                  {assessment.business_requirements.company_size && (
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Company Size:
+                      </Typography>
+                      <Typography variant="body1">
+                        {assessment.business_requirements.company_size}
+                      </Typography>
+                    </Grid>
+                  )}
+
+                  {/* Budget */}
+                  {assessment.business_requirements.budget_constraints && (
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Budget Range:
+                      </Typography>
+                      <Typography variant="body1">
+                        {assessment.business_requirements.budget_constraints.total_budget_range || 'Not specified'}
+                      </Typography>
+                      {assessment.business_requirements.budget_constraints.monthly_budget_limit && (
+                        <Typography variant="body2" color="text.secondary">
+                          Monthly Limit: ${Number(assessment.business_requirements.budget_constraints.monthly_budget_limit).toLocaleString()}
+                        </Typography>
+                      )}
+                    </Grid>
+                  )}
+                </Grid>
+
+                {/* Business Goals */}
+                {assessment.business_requirements.business_goals && assessment.business_requirements.business_goals.length > 0 && (
+                  <Box sx={{ mt: 3 }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Business Goals:
+                    </Typography>
+                    <List dense>
+                      {assessment.business_requirements.business_goals.map((goal: any, idx: number) => (
+                        <ListItem key={idx}>
+                          <ListItemText
+                            primary={goal.goal || goal}
+                            secondary={
+                              goal.priority && goal.timeline_months
+                                ? `Priority: ${goal.priority} | Timeline: ${goal.timeline_months} months`
+                                : null
+                            }
+                          />
+                        </ListItem>
+                      ))}
+                    </List>
                   </Box>
                 )}
-                
-                {assessment.business_requirements.budget_constraint && (
-                  <Typography variant="body2">
-                    <strong>Budget:</strong> ${assessment.business_requirements.budget_constraint.toLocaleString()}
-                  </Typography>
+
+                {/* Pain Points */}
+                {assessment.business_requirements.current_pain_points && assessment.business_requirements.current_pain_points.length > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Current Pain Points:
+                    </Typography>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      {assessment.business_requirements.current_pain_points.map((pain: string, idx: number) => (
+                        <Chip key={idx} label={pain} size="small" variant="outlined" color="warning" />
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
+
+                {/* Success Criteria */}
+                {assessment.business_requirements.success_criteria && assessment.business_requirements.success_criteria.length > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Success Criteria:
+                    </Typography>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      {assessment.business_requirements.success_criteria.map((criteria: string, idx: number) => (
+                        <Chip key={idx} label={criteria} size="small" variant="outlined" color="success" />
+                      ))}
+                    </Stack>
+                  </Box>
                 )}
               </CardContent>
             </Card>
@@ -255,17 +345,136 @@ export default function AssessmentDetailPage() {
                   Technical Requirements
                 </Typography>
                 <Divider sx={{ mb: 2 }} />
-                
-                {assessment.technical_requirements.performance_targets && (
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Performance Targets:
-                    </Typography>
-                    {Object.entries(assessment.technical_requirements.performance_targets).map(([key, value]) => (
-                      <Typography key={key} variant="body2" sx={{ mb: 0.5 }}>
-                        • {key.replace(/_/g, ' ')}: {String(value)}
+
+                {!Object.keys(assessment.technical_requirements).some(key => {
+                  const value = assessment.technical_requirements[key];
+                  return value !== null && value !== undefined &&
+                         (Array.isArray(value) ? value.length > 0 : value !== '');
+                }) ? (
+                  <Alert severity="info">
+                    No technical requirements have been specified for this assessment yet.
+                    Technical requirements can include architecture details, cloud providers,
+                    programming languages, databases, and infrastructure specifications.
+                  </Alert>
+                ) : (
+                  <Box>
+
+                <Grid container spacing={2}>
+                  {/* Current Architecture */}
+                  {assessment.technical_requirements.current_architecture && (
+                    <Grid item xs={12}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Current Architecture:
                       </Typography>
-                    ))}
+                      <Typography variant="body1">
+                        {assessment.technical_requirements.current_architecture}
+                      </Typography>
+                    </Grid>
+                  )}
+
+                  {/* Containerization */}
+                  {assessment.technical_requirements.containerization && (
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Containerization:
+                      </Typography>
+                      <Typography variant="body1">
+                        {assessment.technical_requirements.containerization}
+                      </Typography>
+                    </Grid>
+                  )}
+
+                  {/* Orchestration */}
+                  {assessment.technical_requirements.orchestration_platform && (
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Orchestration Platform:
+                      </Typography>
+                      <Typography variant="body1">
+                        {assessment.technical_requirements.orchestration_platform}
+                      </Typography>
+                    </Grid>
+                  )}
+
+                  {/* Performance */}
+                  {assessment.technical_requirements.response_time_requirements && (
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Response Time Requirements:
+                      </Typography>
+                      <Typography variant="body1">
+                        {assessment.technical_requirements.response_time_requirements}
+                      </Typography>
+                    </Grid>
+                  )}
+
+                  {assessment.technical_requirements.availability_requirements && (
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Availability Requirements:
+                      </Typography>
+                      <Typography variant="body1">
+                        {assessment.technical_requirements.availability_requirements}
+                      </Typography>
+                    </Grid>
+                  )}
+                </Grid>
+
+                {/* Arrays: Cloud Providers */}
+                {assessment.technical_requirements.current_cloud_providers && assessment.technical_requirements.current_cloud_providers.length > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Current Cloud Providers:
+                    </Typography>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      {assessment.technical_requirements.current_cloud_providers.map((provider: string, idx: number) => (
+                        <Chip key={idx} label={provider} size="small" variant="outlined" color="primary" />
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
+
+                {/* Programming Languages */}
+                {assessment.technical_requirements.programming_languages && assessment.technical_requirements.programming_languages.length > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Programming Languages:
+                    </Typography>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      {assessment.technical_requirements.programming_languages.map((lang: string, idx: number) => (
+                        <Chip key={idx} label={lang} size="small" variant="outlined" />
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
+
+                {/* Database Types */}
+                {assessment.technical_requirements.database_types && assessment.technical_requirements.database_types.length > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      Database Types:
+                    </Typography>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      {assessment.technical_requirements.database_types.map((db: string, idx: number) => (
+                        <Chip key={idx} label={db} size="small" variant="outlined" />
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
+
+                {/* CI/CD Tools */}
+                {assessment.technical_requirements.cicd_tools && assessment.technical_requirements.cicd_tools.length > 0 && (
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle2" gutterBottom>
+                      CI/CD Tools:
+                    </Typography>
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      {assessment.technical_requirements.cicd_tools.map((tool: string, idx: number) => (
+                        <Chip key={idx} label={tool} size="small" variant="outlined" />
+                      ))}
+                    </Stack>
+                  </Box>
+                )}
                   </Box>
                 )}
               </CardContent>
@@ -388,5 +597,16 @@ export default function AssessmentDetailPage() {
         </Grid>
       </Grid>
     </Container>
+  );
+}
+
+// Wrap with layout and protection
+export default function AssessmentDetailPageWrapper() {
+  return (
+    <ProtectedRoute>
+      <ResponsiveLayout title="Assessment Details">
+        <AssessmentDetailPage />
+      </ResponsiveLayout>
+    </ProtectedRoute>
   );
 }

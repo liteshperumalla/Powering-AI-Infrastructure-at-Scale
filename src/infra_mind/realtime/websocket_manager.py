@@ -390,30 +390,75 @@ class WebSocketManager:
         ))
     
     async def _handle_authentication(self, connection: WebSocketConnection, message: WebSocketMessage):
-        """Handle authentication message."""
+        """Handle authentication message with JWT validation."""
         try:
             token = message.data.get("token")
             if not token:
-                await self._send_error(connection, "Token required")
+                await self._send_error(connection, "Authentication token required")
+                logger.warning(f"Connection {connection.connection_id} missing auth token")
                 return
-            
-            # TODO: Implement actual token validation
-            # For now, simulate authentication
-            user_id = message.data.get("user_id", "anonymous")
-            
-            connection.user_id = user_id
-            self.connection_manager.user_connections[user_id].add(connection.connection_id)
-            
-            await self._send_message(connection, WebSocketMessage(
-                type=MessageType.AUTHENTICATION,
-                data={"status": "authenticated", "user_id": user_id}
-            ))
-            
-            logger.info(f"Connection {connection.connection_id} authenticated as {user_id}")
-            
+
+            # Validate JWT token using core auth module
+            try:
+                from ..core.auth import verify_token
+
+                # Verify and decode token
+                payload = verify_token(token)
+
+                # Extract user information from token
+                user_id = payload.get("sub")
+                email = payload.get("email")
+
+                if not user_id:
+                    await self._send_error(connection, "Invalid token: missing user ID")
+                    logger.warning(f"Connection {connection.connection_id} token missing user ID")
+                    return
+
+                # Set user information on connection
+                connection.user_id = user_id
+                connection.metadata["email"] = email
+                connection.metadata["authenticated_at"] = datetime.utcnow()
+
+                # Track user connection
+                self.connection_manager.user_connections[user_id].add(connection.connection_id)
+
+                # Send success response
+                await self._send_message(connection, WebSocketMessage(
+                    type=MessageType.AUTHENTICATION,
+                    data={
+                        "status": "authenticated",
+                        "user_id": user_id,
+                        "email": email,
+                        "timestamp": datetime.utcnow().isoformat()
+                    }
+                ))
+
+                logger.info(
+                    f"✅ WebSocket authenticated: connection={connection.connection_id}, "
+                    f"user={user_id}, email={email}"
+                )
+
+            except ValueError as ve:
+                # Token verification failed
+                await self._send_error(connection, f"Invalid token: {str(ve)}")
+                logger.error(f"❌ Token verification failed for connection {connection.connection_id}: {ve}")
+                return
+
+            except ImportError:
+                # Fallback if auth module not available (development only)
+                logger.error("⚠️  Auth module not available - using mock authentication (DEVELOPMENT ONLY)")
+                user_id = message.data.get("user_id", "anonymous")
+                connection.user_id = user_id
+                self.connection_manager.user_connections[user_id].add(connection.connection_id)
+
+                await self._send_message(connection, WebSocketMessage(
+                    type=MessageType.AUTHENTICATION,
+                    data={"status": "authenticated_mock", "user_id": user_id, "warning": "Development mode"}
+                ))
+
         except Exception as e:
-            logger.error(f"Authentication error: {e}")
-            await self._send_error(connection, "Authentication failed")
+            logger.error(f"❌ Authentication error for connection {connection.connection_id}: {e}")
+            await self._send_error(connection, "Authentication failed: internal error")
     
     async def _handle_subscribe(self, connection: WebSocketConnection, message: WebSocketMessage):
         """Handle subscription message."""
@@ -620,7 +665,8 @@ class WebSocketManager:
                     connection.state = ConnectionState.DISCONNECTED
                     try:
                         await connection.websocket.close()
-                    except:
+                    except Exception as e:
+                        logger.debug(f"Error closing websocket: {e}")
                         pass
                     self.connection_manager.remove_connection(connection.connection_id)
                 

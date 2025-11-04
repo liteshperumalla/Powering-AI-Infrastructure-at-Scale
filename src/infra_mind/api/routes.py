@@ -6,7 +6,7 @@ Supports API versioning for backward compatibility and evolution.
 """
 
 from fastapi import APIRouter, HTTPException, status
-from .endpoints import auth, assessments, recommendations, reports, monitoring, webhooks, admin, testing, resilience, compliance, integrations, compliance_dashboard, business_tools, performance_monitoring, forms, cloud_services, chat, advanced_analytics, scenarios, validation, dashboard, experiments, feedback, quality, vendor_lockin, rollback, budget_forecasting, change_impact, gitops, approval_workflows, executive, assessment_features
+from .endpoints import auth, assessments, recommendations, reports, monitoring, webhooks, admin, testing, resilience, compliance, integrations, compliance_dashboard, business_tools, performance_monitoring, forms, cloud_services, chat, advanced_analytics, scenarios, validation, dashboard, experiments, feedback, quality, vendor_lockin, rollback, budget_forecasting, change_impact, gitops, approval_workflows, executive, assessment_features, di_example
 from .documentation import get_api_integration_guide
 
 # Create versioned API routers
@@ -317,10 +317,22 @@ api_v1_router.include_router(
     tags=["Additional Features"]
 )
 
+# Dependency Injection Example - For testing and reference
+api_v1_router.include_router(
+    di_example.router,
+    tags=["Dependency Injection"]
+)
+
 api_v2_router.include_router(
     assessment_features.router,
     prefix="/features",
     tags=["Additional Features"]
+)
+
+# Dependency Injection Example in V2 as well
+api_v2_router.include_router(
+    di_example.router,
+    tags=["Dependency Injection"]
 )
 
 # Documentation endpoints are now included directly in main api_router

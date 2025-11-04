@@ -21,6 +21,7 @@ from ..core.database import get_database
 from ..core.cache import get_cache_manager
 from ..llm.manager import LLMManager
 from ..llm.interface import LLMRequest
+from ..llm.prompt_sanitizer import PromptSanitizer
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,9 @@ class ChatbotAgent(BaseAgent):
             )
         super().__init__(config)
         
+
+        # Initialize prompt sanitizer for security
+        self.prompt_sanitizer = PromptSanitizer(security_level="balanced")
         # Chatbot-specific configuration
         self.max_conversation_turns = config.custom_config.get("max_conversation_turns", 20)
         self.escalation_threshold = config.custom_config.get("escalation_threshold", 3)
@@ -229,7 +233,9 @@ class ChatbotAgent(BaseAgent):
             }
             
         except Exception as e:
+            import traceback
             logger.error(f"Error handling chatbot message: {str(e)}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             
             # Return fallback response
             return {
@@ -486,29 +492,24 @@ class ChatbotAgent(BaseAgent):
             - Experience Level: {self.user_info.get('experience_level')}
             """
 
-        # Add report/assessment context if available
+        # Add report/assessment context if available with rich formatting
         domain_context = ""
         if additional_context:
             if additional_context.get("report_data"):
                 report_data = additional_context["report_data"]
-                domain_context += f"""
-                Related Report Information:
-                - Title: {report_data.get('title')}
-                - Key Findings: {', '.join(report_data.get('key_findings', [])[:3])}
-                - Top Recommendations: {', '.join(report_data.get('recommendations', [])[:2])}
-                - Compliance Score: {report_data.get('compliance_score')}
-                - Estimated Savings: ${report_data.get('estimated_savings')}
-                """
-            
+                domain_context += self._format_report_context(report_data)
+
             if additional_context.get("assessment_data"):
                 assessment_data = additional_context["assessment_data"]
+                # Quick reference for inline context (full context already in system prompt)
                 domain_context += f"""
-                Related Assessment Information:
-                - Title: {assessment_data.get('title')}
-                - Status: {assessment_data.get('status')}
-                - Business Goals: {', '.join(assessment_data.get('business_goals', [])[:3])}
-                - Cloud Providers: {', '.join(assessment_data.get('cloud_providers', []))}
-                """
+
+━━━ QUICK ASSESSMENT REFERENCE ━━━
+• Title: {assessment_data.get('title')}
+• Status: {assessment_data.get('status')}
+• Progress: {assessment_data.get('completion_percentage', 0)}%
+• Company: {assessment_data.get('business_requirements', {}).get('company_name', 'N/A')}
+"""
         
         # Create comprehensive prompt
         prompt = f"""
@@ -623,120 +624,470 @@ Platform capabilities include:
 - Compliance mapping and security analysis
 - Professional reports and decision-making support"""
 
-        # Add context-specific guidance with assessment data integration
+        # Add context-specific guidance with comprehensive instructions
         context_prompts = {
             ConversationContext.TECHNICAL_SUPPORT: """
-Focus on technical troubleshooting and problem-solving. Be methodical in diagnosing issues and provide step-by-step solutions. Reference platform features, APIs, and integrations accurately.""",
+━━━ TECHNICAL SUPPORT MODE ━━━
+
+PRIMARY OBJECTIVE: Provide expert technical troubleshooting and problem-solving assistance.
+
+APPROACH:
+✓ Be methodical and systematic in diagnosing issues
+✓ Provide step-by-step solutions with actual commands/code
+✓ Reference platform features, APIs, and integrations accurately
+✓ Include relevant kubectl, terraform, or cloud CLI commands
+✓ Explain WHY each step is necessary (educational value)
+✓ Anticipate follow-up questions and address them proactively
+✓ Link to relevant documentation when applicable
+
+TECHNICAL DEPTH:
+- Provide actual command syntax (not pseudocode)
+- Include configuration examples (YAML, JSON, HCL)
+- Mention specific versions and compatibility considerations
+- Discuss performance implications and best practices
+- Reference monitoring/debugging tools appropriate for the issue
+
+ESCALATION: Escalate if issue requires:
+- Direct database access or system-level changes
+- Security-sensitive operations
+- Platform bug fixes or feature requests""",
 
             ConversationContext.ASSESSMENT_HELP: """
-Help users understand their specific assessment results comprehensively. When assessment data is provided:
-- Reference the actual business requirements, goals, and constraints
-- Explain each recommendation in detail including benefits, risks, estimated costs
-- Discuss the AI agents involved and their specialized expertise
-- Analyze quality metrics and confidence scores
-- Provide context on decision factors and trade-offs
-- Compare different approaches and alternatives mentioned in recommendations
-- Reference actual analytics data like cost projections, performance analysis, and risk assessment""",
+━━━ ASSESSMENT HELP MODE ━━━
+
+PRIMARY OBJECTIVE: Help users understand and act on their specific assessment results.
+
+WHEN ASSESSMENT DATA IS PROVIDED:
+✓ Reference ACTUAL business requirements, goals, and constraints from the data
+✓ Explain each recommendation with specifics: benefits, risks, estimated costs
+✓ Discuss the AI agents involved and their specialized expertise areas
+✓ Analyze quality metrics and confidence scores - explain what they mean
+✓ Provide context on decision factors and trade-offs between options
+✓ Compare different approaches mentioned in recommendations
+✓ Reference actual analytics: cost projections, performance analysis, risk assessment
+✓ Mention the company name, industry, and how recommendations align with goals
+
+KEY BEHAVIORS:
+- Start responses by acknowledging the specific assessment by name
+- Use actual numbers and percentages from the assessment data
+- Explain HOW and WHY recommendations were generated
+- Discuss implementation timeline and resource requirements
+- Address potential concerns about each recommendation
+- Provide next steps based on current assessment status
+
+DO NOT:
+- Give generic cloud advice when specific assessment data is available
+- Ignore the business context provided in the assessment
+- Recommend solutions that contradict the assessment findings"""
+        }
+
+        # Additional context prompts for extended modes (not in enum but supported)
+        extended_prompts = {
+            "report_analysis": """
+━━━ REPORT ANALYSIS MODE ━━━
+
+PRIMARY OBJECTIVE: Help users interpret and act on report findings.
+
+WHEN REPORT DATA IS PROVIDED:
+✓ Reference SPECIFIC findings and recommendations from the report
+✓ Use ACTUAL numbers for compliance scores, costs, and savings
+✓ Explain the IMPLICATIONS of findings for the user's business
+✓ Provide ACTIONABLE guidance based on recommendations
+✓ Prioritize recommendations by potential impact and feasibility
+✓ Discuss risks and mitigation strategies explicitly mentioned
+✓ Reference compliance standards and security ratings
+
+KEY BEHAVIORS:
+- Start by summarizing the report type and key findings
+- Explain what metrics/scores mean in business terms
+- Compare current vs. target states with specific numbers
+- Discuss ROI timeline and cost-benefit analysis
+- Provide clear next steps from the report
+- Highlight urgent items vs. long-term improvements
+
+EDUCATIONAL VALUE:
+- Explain why certain metrics matter
+- Discuss industry benchmarks where relevant
+- Clarify technical terms in business language""",
 
             ConversationContext.PLATFORM_GUIDANCE: """
-Provide clear explanations of platform features and workflows. Guide users through the system systematically, explaining how different components work together.""",
+━━━ PLATFORM GUIDANCE MODE ━━━
+
+PRIMARY OBJECTIVE: Guide users through Infra Mind platform features and workflows.
+
+PLATFORM FEATURES TO COVER:
+✓ Assessment Creation: Multi-step wizard, business + technical requirements
+✓ Dashboard Navigation: Assessments, reports, recommendations views
+✓ AI Agents: Which agents do what (Infrastructure, Cloud Engineer, Compliance, etc.)
+✓ Reports: How to generate, view, and export different report types
+✓ Recommendations: How to filter, compare, and implement suggestions
+✓ Analytics: Cost analysis, performance predictions, risk assessment
+✓ Collaboration: Sharing assessments, team access, commenting
+
+WORKFLOW GUIDANCE:
+1. Assessment Creation → Input gathering → AI analysis
+2. Recommendation Review → Filtering → Comparison → Selection
+3. Report Generation → Analysis → Export → Implementation
+4. Monitoring → Optimization → Continuous improvement
+
+NAVIGATION TIPS:
+- Provide exact menu paths (Dashboard → New Assessment → Business Requirements)
+- Explain what each section contains
+- Mention keyboard shortcuts where applicable
+- Guide users to relevant features based on their current need
+
+BE SPECIFIC about Infra Mind platform, not generic cloud platforms.""",
 
             ConversationContext.BILLING_SUPPORT: """
-Handle billing inquiries professionally. Explain cost structures, pricing models, and optimization opportunities. Reference actual cost data when available.""",
+━━━ BILLING SUPPORT MODE ━━━
+
+PRIMARY OBJECTIVE: Handle billing and cost-related inquiries professionally.
+
+TOPICS TO COVER:
+✓ Pricing models and subscription tiers
+✓ Cost optimization opportunities
+✓ Usage-based charges and limits
+✓ Invoice explanations and breakdowns
+✓ Payment methods and billing cycles
+✓ Budget alerts and cost controls
+
+WHEN COST DATA IS AVAILABLE:
+- Reference actual spending amounts
+- Compare against budget or projections
+- Identify cost spikes or anomalies
+- Suggest specific optimization actions
+- Discuss ROI and cost savings opportunities
+
+PROFESSIONAL APPROACH:
+- Be transparent about costs and charges
+- Explain complex pricing in simple terms
+- Provide cost estimates when possible
+- Suggest ways to reduce costs without sacrificing quality
+- Escalate billing disputes or payment issues appropriately""",
 
             ConversationContext.GENERAL_INQUIRY: """
-Be welcoming and provide overview information. Guide users to specific resources and features relevant to their needs."""
+━━━ GENERAL INQUIRY MODE ━━━
+
+PRIMARY OBJECTIVE: Provide welcoming, helpful overview information.
+
+APPROACH:
+✓ Be friendly and approachable (while maintaining professionalism)
+✓ Provide concise overviews with option to dive deeper
+✓ Guide users to relevant features based on their questions
+✓ Explain Infra Mind's value proposition clearly
+✓ Suggest logical next steps for their journey
+
+KEY TOPICS:
+- What is Infra Mind and how it helps
+- Overview of AI agents and their capabilities
+- How assessments work (high-level)
+- Types of recommendations and reports generated
+- Getting started guide for new users
+- Platform capabilities across AWS, Azure, GCP
+
+DISCOVERY QUESTIONS:
+- Ask clarifying questions to understand user needs
+- Suggest specific features that might help
+- Provide examples of common use cases
+- Guide towards creating first assessment
+
+TONE: Professional but welcoming, educational but not overwhelming.""",
+
+            "decision_making": """
+━━━ DECISION MAKING MODE ━━━
+
+PRIMARY OBJECTIVE: Help users make informed infrastructure decisions.
+
+DECISION FRAMEWORK:
+✓ Present options with clear pros/cons for each
+✓ Consider user's specific context (budget, timeline, team size, etc.)
+✓ Reference assessment data when available
+✓ Provide decision criteria and prioritization
+✓ Discuss trade-offs explicitly
+✓ Recommend based on best fit, not just "best practice"
+
+FACTORS TO CONSIDER:
+- Budget constraints and ROI timeline
+- Team expertise and learning curve
+- Current infrastructure and migration complexity
+- Business goals and priorities
+- Risk tolerance and compliance needs
+- Timeline and implementation effort
+
+RESPONSE STRUCTURE:
+1. Restate the decision to be made
+2. Present 2-4 viable options
+3. Compare options across key criteria
+4. Provide recommendation with reasoning
+5. Discuss next steps for chosen option
+
+BE BALANCED: Present trade-offs fairly, don't just push one solution."""
         }
 
         # Build comprehensive prompt with assessment context
         prompt_parts = [base_prompt]
 
-        # Add context-specific guidance
+        # Add context-specific guidance (check both enums and string keys)
+        context_key = context if isinstance(context, str) else context.value if hasattr(context, 'value') else str(context)
+
         if context in context_prompts:
             prompt_parts.append(f"\n\nCONTEXT-SPECIFIC GUIDANCE:\n{context_prompts[context]}")
+        elif context_key in extended_prompts:
+            prompt_parts.append(f"\n\nCONTEXT-SPECIFIC GUIDANCE:\n{extended_prompts[context_key]}")
 
         # Add assessment data context if available
         if assessment_data and not assessment_data.get("error"):
-            prompt_parts.append(self._format_assessment_context(assessment_data))
+            try:
+                formatted_context = self._format_assessment_context(assessment_data)
+                prompt_parts.append(formatted_context)
+            except Exception as e:
+                logger.error(f"Failed to format assessment context: {e}")
+                # Continue without assessment context rather than crashing
 
         return "\n".join(prompt_parts)
 
     def _format_assessment_context(self, assessment_data: Dict[str, Any]) -> str:
         """Format assessment data into context for the LLM."""
-        context_parts = ["\n\nCURRENT ASSESSMENT CONTEXT:"]
+        context_parts = ["\n\n━━━ CURRENT ASSESSMENT CONTEXT ━━━"]
 
         # Basic info
         context_parts.append(f"""
-Assessment: {assessment_data.get('title', 'Unknown')}
-Status: {assessment_data.get('status', 'Unknown')}
-Completion: {assessment_data.get('completion_percentage', 0)}%""")
+📊 ASSESSMENT OVERVIEW:
+• Title: {assessment_data.get('title', 'Unknown')}
+• ID: {assessment_data.get('id', 'Unknown')}
+• Status: {assessment_data.get('status', 'Unknown')}
+• Completion: {assessment_data.get('completion_percentage', 0)}%
+• Created: {assessment_data.get('_cached_at', 'Recently')}""")
 
         # Business requirements
         if biz_req := assessment_data.get('business_requirements'):
+            goals_list = biz_req.get('business_goals', [])
+            goals_str = ', '.join(goals_list[:5]) if isinstance(goals_list, list) and goals_list else 'Not specified'
+
             context_parts.append(f"""
-Business Profile:
-- Company: {biz_req.get('company_name', 'Not specified')}
-- Industry: {biz_req.get('industry', 'Not specified')}
-- Size: {biz_req.get('company_size', 'Not specified')}
-- Budget: {biz_req.get('budget_range', 'Not specified')}
-- Goals: {', '.join(biz_req.get('business_goals', [])[:5]) if biz_req.get('business_goals') else 'Not specified'}""")
+🏢 BUSINESS PROFILE:
+• Company: {biz_req.get('company_name', 'Not specified')}
+• Industry: {biz_req.get('industry', 'Not specified')}
+• Company Size: {biz_req.get('company_size', 'Not specified')}
+• Budget Range: {biz_req.get('budget_range', 'Not specified')}
+• Timeline: {biz_req.get('timeline', 'Not specified')}
+• Business Goals: {goals_str}""")
+
+        # Technical requirements
+        if tech_req := assessment_data.get('technical_requirements'):
+            workload_types = tech_req.get('workload_types', [])
+            workloads_str = ', '.join(workload_types) if isinstance(workload_types, list) and workload_types else 'Not specified'
+
+            context_parts.append(f"""
+⚙️ TECHNICAL REQUIREMENTS:
+• Workload Types: {workloads_str}
+• Cloud Preference: {tech_req.get('cloud_preference', 'Not specified')}
+• Scalability Needs: {tech_req.get('scalability_requirements', 'Not specified')}
+• Performance Targets: {tech_req.get('performance_requirements', 'Not specified')}""")
 
         # Recommendations summary
         if recs := assessment_data.get('recommendations'):
-            context_parts.append(f"""
-Recommendations: {recs.get('count', 0)} total
-Average Confidence: {assessment_data.get('decision_factors', {}).get('average_confidence', 0):.0%}
-High Priority Items: {assessment_data.get('decision_factors', {}).get('high_priority_items', 0)}
-Total Estimated Cost: ${assessment_data.get('decision_factors', {}).get('total_estimated_cost', 0):,.2f}/month""")
+            rec_count = recs.get('count', 0)
+            decision_factors = assessment_data.get('decision_factors', {})
 
-            if recs.get('summary'):
-                context_parts.append("\nKey Recommendations:")
-                for i, rec in enumerate(recs['summary'][:5], 1):
+            context_parts.append(f"""
+💡 RECOMMENDATIONS SUMMARY:
+• Total Recommendations: {rec_count}
+• Average Confidence: {decision_factors.get('average_confidence', 0) * 100:.0f}%
+• High Priority Items: {decision_factors.get('high_priority_items', 0)}
+• Total Estimated Cost: ${decision_factors.get('total_estimated_cost', 0):,.2f}/month""")
+
+            if rec_summary := recs.get('summary'):
+                context_parts.append("\n📋 TOP RECOMMENDATIONS:")
+                for i, rec in enumerate(rec_summary[:3], 1):  # Show top 3
+                    benefits_count = len(rec.get('benefits', []))
+                    risks_count = len(rec.get('risks', []))
+                    confidence = rec.get('confidence_score', 0)
+                    if isinstance(confidence, (int, float)) and confidence > 1:
+                        confidence = confidence / 100  # Convert if needed
+
                     context_parts.append(f"""
-{i}. {rec.get('title', 'Unknown')}
-   - Category: {rec.get('category', 'N/A')}
-   - Confidence: {rec.get('confidence_score', 0):.0%}
-   - Provider: {rec.get('cloud_provider', 'N/A')}
-   - Cost: {rec.get('estimated_cost', 'N/A')}
-   - Benefits: {len(rec.get('benefits', []))} listed
-   - Risks: {len(rec.get('risks', []))} identified""")
+{i}. {rec.get('title', 'Unknown Recommendation')}
+   • Category: {rec.get('category', 'General')}
+   • Cloud Provider: {rec.get('cloud_provider', 'Multi-cloud')}
+   • Confidence Score: {confidence * 100:.0f}%
+   • Estimated Cost: {rec.get('estimated_cost', 'TBD')}
+   • Benefits: {benefits_count} key benefits identified
+   • Risks: {risks_count} risks to consider
+   • Business Impact: {rec.get('business_impact', 'Not specified')}""")
 
         # Analytics summary
         if analytics := assessment_data.get('analytics'):
             if cost_analysis := analytics.get('cost_analysis'):
+                current_cost = cost_analysis.get('current_monthly_cost', 0)
+                projected_cost = cost_analysis.get('projected_monthly_cost', 0)
+                savings = cost_analysis.get('potential_savings', 0)
+                roi = cost_analysis.get('roi_projection', {}).get('twelve_months', 0)
+
                 context_parts.append(f"""
-Cost Analysis:
-- Current Monthly: ${cost_analysis.get('current_monthly_cost', 0):,.2f}
-- Projected Monthly: ${cost_analysis.get('projected_monthly_cost', 0):,.2f}
-- Potential Savings: ${cost_analysis.get('potential_savings', 0):,.2f}
-- ROI: {cost_analysis.get('roi_projection', {}).get('twelve_months', 0):,.2f} (12 months)""")
+💰 COST ANALYSIS:
+• Current Monthly Spend: ${current_cost:,.2f}
+• Projected Monthly Cost: ${projected_cost:,.2f}
+• Potential Monthly Savings: ${savings:,.2f}
+• 12-Month ROI Projection: {roi:,.1f}%""")
 
             if perf_analysis := analytics.get('performance_analysis'):
                 context_parts.append(f"""
-Performance Analysis:
-- Current Response Time: {perf_analysis.get('current_response_time_ms', 0)}ms
-- Target Response Time: {perf_analysis.get('target_response_time_ms', 0)}ms
-- Scalability Score: {perf_analysis.get('scalability_score', 0):.0%}
-- Reliability Score: {perf_analysis.get('reliability_score', 0):.0%}""")
+⚡ PERFORMANCE ANALYSIS:
+• Current Response Time: {perf_analysis.get('current_response_time_ms', 0)}ms
+• Target Response Time: {perf_analysis.get('target_response_time_ms', 0)}ms
+• Scalability Score: {perf_analysis.get('scalability_score', 0) * 100:.0f}%
+• Reliability Score: {perf_analysis.get('reliability_score', 0) * 100:.0f}%""")
+
+            if risk_assessment := analytics.get('risk_assessment'):
+                context_parts.append(f"""
+⚠️ RISK ASSESSMENT:
+• Overall Risk Level: {risk_assessment.get('overall_risk_level', 'Unknown')}
+• Critical Risks: {len(risk_assessment.get('critical_risks', []))}
+• Mitigation Strategies: {len(risk_assessment.get('mitigation_strategies', []))}""")
 
         # Quality metrics
         if quality := assessment_data.get('quality_metrics'):
-            if quality.get('overall_score'):
+            if quality.get('overall_score') is not None:
+                overall = quality.get('overall_score', 0)
+                if isinstance(overall, (int, float)) and overall > 1:
+                    overall = overall / 100
+
+                completeness = quality.get('completeness', 0)
+                accuracy = quality.get('accuracy', 0)
+                confidence = quality.get('confidence', 0)
+
                 context_parts.append(f"""
-Quality Metrics:
-- Overall Score: {quality.get('overall_score', 0):.0%}
-- Completeness: {quality.get('completeness', 0):.0%}
-- Accuracy: {quality.get('accuracy', 0):.0%}
-- Confidence: {quality.get('confidence', 0):.0%}""")
+✅ QUALITY METRICS:
+• Overall Quality Score: {overall * 100:.0f}%
+• Data Completeness: {completeness * 100 if completeness <= 1 else completeness:.0f}%
+• Accuracy Rating: {accuracy * 100 if accuracy <= 1 else accuracy:.0f}%
+• Confidence Level: {confidence * 100 if confidence <= 1 else confidence:.0f}%""")
+
+        # Reports available
+        if reports := assessment_data.get('reports'):
+            report_count = reports.get('count', 0)
+            report_types = reports.get('available_types', [])
+            types_str = ', '.join(report_types) if report_types else 'None yet'
+
+            context_parts.append(f"""
+📄 REPORTS GENERATED:
+• Total Reports: {report_count}
+• Available Types: {types_str}""")
 
         # Agents involved
         if agents := assessment_data.get('agents_involved'):
-            context_parts.append(f"\nAI Agents Involved: {', '.join(agents)}")
+            agents_str = ', '.join(agents) if agents else 'Multiple AI agents'
+            context_parts.append(f"""
+🤖 AI AGENTS INVOLVED:
+• {agents_str}""")
 
-        context_parts.append("\n\nUSE THIS CONTEXT to provide specific, data-driven answers. Reference actual numbers and recommendations from this assessment.")
+        context_parts.append("""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+IMPORTANT INSTRUCTIONS:
+✓ Use the SPECIFIC data above when answering questions about this assessment
+✓ Reference ACTUAL numbers, percentages, and recommendations shown above
+✓ Mention the company name, industry, and business goals when relevant
+✓ Provide DATA-DRIVEN insights based on this assessment context
+✓ If asked "tell me about the assessment", describe the details above comprehensively
+✓ When discussing recommendations, refer to the actual recommendations listed
+✓ When asked about costs, use the cost analysis figures provided
+✓ When asked about status, mention the completion percentage and current status
+
+DO NOT say "information is unavailable" when the data is clearly provided above!
+""")
 
         return "\n".join(context_parts)
-    
+
+    def _format_report_context(self, report_data: Dict[str, Any]) -> str:
+        """Format report data into rich, structured context for the LLM."""
+        context_parts = ["\n\n━━━ CURRENT REPORT CONTEXT ━━━"]
+
+        # Report Overview
+        context_parts.append(f"""
+📄 REPORT OVERVIEW:
+• Title: {report_data.get('title', 'Unknown Report')}
+• Type: {report_data.get('report_type', 'General')}
+• Generated: {report_data.get('created_at', 'Recently')}
+• Status: {report_data.get('status', 'Available')}""")
+
+        # Key Findings
+        if key_findings := report_data.get('key_findings'):
+            if isinstance(key_findings, list) and key_findings:
+                context_parts.append("\n🔍 KEY FINDINGS:")
+                for i, finding in enumerate(key_findings[:5], 1):
+                    finding_text = finding if isinstance(finding, str) else str(finding)
+                    context_parts.append(f"   {i}. {finding_text}")
+
+        # Recommendations
+        if recommendations := report_data.get('recommendations'):
+            if isinstance(recommendations, list) and recommendations:
+                context_parts.append("\n💡 TOP RECOMMENDATIONS:")
+                for i, rec in enumerate(recommendations[:3], 1):
+                    rec_text = rec if isinstance(rec, str) else str(rec)
+                    context_parts.append(f"   {i}. {rec_text}")
+
+        # Compliance & Security
+        if compliance_score := report_data.get('compliance_score'):
+            context_parts.append(f"""
+✅ COMPLIANCE & SECURITY:
+• Compliance Score: {compliance_score}%
+• Security Rating: {report_data.get('security_rating', 'Not specified')}
+• Standards Met: {', '.join(report_data.get('standards_met', [])) if report_data.get('standards_met') else 'To be determined'}""")
+
+        # Cost & Savings
+        estimated_savings = report_data.get('estimated_savings')
+        if estimated_savings:
+            context_parts.append(f"""
+💰 COST ANALYSIS:
+• Estimated Savings: ${estimated_savings:,.2f}
+• Current Costs: ${report_data.get('current_costs', 0):,.2f}
+• Optimized Costs: ${report_data.get('optimized_costs', 0):,.2f}
+• ROI Timeline: {report_data.get('roi_timeline', 'TBD')}""")
+
+        # Performance Metrics
+        if performance := report_data.get('performance_metrics'):
+            context_parts.append(f"""
+⚡ PERFORMANCE METRICS:
+• Current Performance: {performance.get('current', 'N/A')}
+• Target Performance: {performance.get('target', 'N/A')}
+• Expected Improvement: {performance.get('improvement', 'N/A')}""")
+
+        # Risk Assessment
+        if risks := report_data.get('risks'):
+            if isinstance(risks, list) and risks:
+                context_parts.append("\n⚠️ IDENTIFIED RISKS:")
+                for i, risk in enumerate(risks[:3], 1):
+                    risk_text = risk if isinstance(risk, str) else str(risk)
+                    context_parts.append(f"   {i}. {risk_text}")
+
+        # Next Steps
+        if next_steps := report_data.get('next_steps'):
+            if isinstance(next_steps, list) and next_steps:
+                context_parts.append("\n📋 RECOMMENDED NEXT STEPS:")
+                for i, step in enumerate(next_steps[:3], 1):
+                    step_text = step if isinstance(step, str) else str(step)
+                    context_parts.append(f"   {i}. {step_text}")
+
+        context_parts.append("""
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+IMPORTANT INSTRUCTIONS FOR REPORT ANALYSIS:
+✓ Reference SPECIFIC findings and recommendations from this report
+✓ Use ACTUAL numbers for compliance, costs, and savings
+✓ Explain the IMPLICATIONS of the findings for the user's business
+✓ Provide ACTIONABLE guidance based on the recommendations
+✓ If asked about the report, summarize the key findings comprehensively
+✓ When discussing compliance, mention the actual score and standards
+✓ When discussing costs, reference the specific savings and ROI
+✓ Prioritize recommendations based on their potential impact
+
+DO NOT provide generic advice when specific report data is available!
+""")
+
+        return "\n".join(context_parts)
+
     async def _check_faq(self, message: str, context: ConversationContext) -> Optional[Dict[str, Any]]:
         """
         Check FAQ knowledge base for relevant answers using the FAQ service.

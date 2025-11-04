@@ -442,25 +442,29 @@ class AnalyticsDashboard:
                     perf["success_rate"] = 0
                     perf["avg_confidence"] = 0
             
-            # Mock additional quality metrics
-            user_satisfaction_score = 4.2  # TODO: Get from user feedback
-            implementation_success_rate = 0.78  # TODO: Track actual implementations
-            recommendation_accuracy = 0.85  # TODO: Calculate from validation data
-            
-            # Quality trends
+            # Real quality metrics from actual data
+            # Get feedback data from database if available
+            user_satisfaction_score = None  # Will be calculated from feedback
+            implementation_success_rate = None  # Will be tracked from implementations
+            recommendation_accuracy = None  # Will be calculated from validation
+
+            # Quality trends (only if we have historical data)
             quality_trends = {
-                "confidence": TrendAnalysis.calculate([0.82, 0.84, 0.83, 0.85, avg_confidence_score]),
-                "satisfaction": TrendAnalysis.calculate([4.0, 4.1, 4.3, 4.2, user_satisfaction_score]),
-                "accuracy": TrendAnalysis.calculate([0.83, 0.84, 0.86, 0.85, recommendation_accuracy])
+                "confidence": TrendAnalysis.calculate([avg_confidence_score]) if avg_confidence_score > 0 else {},
+                "satisfaction": {},  # Requires feedback data
+                "accuracy": {}  # Requires validation data
             }
-            
-            feedback_distribution = {
-                "excellent": 35, "good": 40, "average": 20, "poor": 4, "very_poor": 1
-            }
-            
-            recommendation_categories = {
-                "infrastructure": 45, "security": 25, "cost_optimization": 20, "compliance": 10
-            }
+
+            # Feedback distribution (will be empty until feedback is collected)
+            feedback_distribution = {}
+
+            # Recommendation categories from actual data
+            recommendation_categories = {}
+            category_counts = {}
+            for rec in recommendations:
+                category = rec.get("category", "other")
+                category_counts[category] = category_counts.get(category, 0) + 1
+            recommendation_categories = category_counts
             
             return RecommendationQualityMetrics(
                 total_recommendations=total_recommendations,
@@ -472,8 +476,8 @@ class AnalyticsDashboard:
                 quality_trends=quality_trends,
                 feedback_distribution=feedback_distribution,
                 recommendation_categories=recommendation_categories,
-                cost_savings_achieved=2.5e6,  # $2.5M saved
-                time_to_implementation=14.5  # days
+                cost_savings_achieved=0.0,  # Will be calculated from actual implementations
+                time_to_implementation=0.0  # Will be calculated from actual data
             )
             
         except Exception as e:
@@ -494,21 +498,21 @@ class AnalyticsDashboard:
             p99_response_time_ms = avg_response_time_ms * 2.0
             
             error_rate_percent = health.error_rate_percent
-            throughput_requests_per_minute = 150.0  # TODO: Calculate from actual data
-            system_availability_percent = 99.2  # TODO: Calculate from uptime data
-            
+            throughput_requests_per_minute = 0.0  # Will be calculated from actual request metrics
+            system_availability_percent = 0.0  # Will be calculated from uptime tracking
+
             resource_utilization = {
                 "cpu": health.cpu_usage_percent,
                 "memory": health.memory_usage_percent,
                 "disk": health.disk_usage_percent,
-                "network": 45.2  # TODO: Get actual network utilization
+                "network": 0.0  # Will be tracked from actual network metrics
             }
-            
-            # Performance trends
+
+            # Performance trends (only with historical data)
             performance_trends = {
-                "response_time": TrendAnalysis.calculate([950, 1020, 980, 1100, avg_response_time_ms]),
-                "error_rate": TrendAnalysis.calculate([0.8, 1.2, 0.9, 1.5, error_rate_percent]),
-                "throughput": TrendAnalysis.calculate([140, 145, 148, 152, throughput_requests_per_minute])
+                "response_time": TrendAnalysis.calculate([avg_response_time_ms]) if avg_response_time_ms > 0 else {},
+                "error_rate": TrendAnalysis.calculate([error_rate_percent]) if error_rate_percent >= 0 else {},
+                "throughput": {}  # Requires historical throughput data
             }
             
             # Bottleneck analysis
@@ -784,39 +788,42 @@ class AnalyticsDashboard:
             return []
     
     async def _generate_predictive_analytics(self) -> Dict[str, Any]:
-        """Generate predictive analytics and forecasts."""
+        """Generate predictive analytics and forecasts - requires historical data."""
         try:
-            # User growth prediction
-            current_users = 1250  # TODO: Get from actual data
-            growth_rate = 0.12  # 12% monthly
-            
+            # User growth prediction (requires actual user data)
+            current_users = 0  # Will be populated from actual user tracking
+            growth_rate = 0.0  # Will be calculated from historical data
+
             user_forecast = {
-                "next_month": int(current_users * (1 + growth_rate)),
-                "next_quarter": int(current_users * (1 + growth_rate) ** 3),
-                "next_year": int(current_users * (1 + growth_rate) ** 12),
-                "confidence": 0.75
+                "next_month": 0,
+                "next_quarter": 0,
+                "next_year": 0,
+                "confidence": 0.0,
+                "message": "Insufficient historical data for prediction"
             }
-            
-            # System load prediction
-            current_load = 150  # requests per minute
-            load_growth_rate = 0.15  # 15% monthly
-            
+
+            # System load prediction (requires actual metrics)
+            current_load = 0  # requests per minute from actual metrics
+            load_growth_rate = 0.0  # Will be calculated from historical trends
+
             load_forecast = {
-                "next_month_rpm": int(current_load * (1 + load_growth_rate)),
-                "next_quarter_rpm": int(current_load * (1 + load_growth_rate) ** 3),
-                "scaling_needed_date": "2024-03-15",  # When scaling will be needed
-                "confidence": 0.68
+                "next_month_rpm": 0,
+                "next_quarter_rpm": 0,
+                "scaling_needed_date": None,
+                "confidence": 0.0,
+                "message": "Insufficient historical data for prediction"
             }
-            
-            # Cost prediction
-            current_monthly_cost = 15000  # TODO: Get from actual data
-            cost_growth_rate = 0.10  # 10% monthly
-            
+
+            # Cost prediction (requires actual cost tracking)
+            current_monthly_cost = 0  # Will be populated from actual cost data
+            cost_growth_rate = 0.0  # Will be calculated from historical trends
+
             cost_forecast = {
-                "next_month": int(current_monthly_cost * (1 + cost_growth_rate)),
-                "next_quarter": int(current_monthly_cost * (1 + cost_growth_rate) ** 3),
-                "optimization_potential": 0.20,  # 20% potential savings
-                "confidence": 0.72
+                "next_month": 0,
+                "next_quarter": 0,
+                "optimization_potential": 0.0,
+                "confidence": 0.0,
+                "message": "Insufficient historical data for prediction"
             }
             
             # Failure prediction

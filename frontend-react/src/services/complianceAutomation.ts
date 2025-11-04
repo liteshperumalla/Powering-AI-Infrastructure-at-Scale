@@ -389,10 +389,16 @@ export interface ComplianceDashboard {
 class ComplianceAutomationService {
     private baseUrl: string;
     private token: string | null = null;
+    private assessmentId: string | null = null;
 
-    constructor() {
+    constructor(assessmentId?: string) {
         this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
         this.token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+        this.assessmentId = assessmentId || null;
+    }
+
+    setAssessmentId(assessmentId: string) {
+        this.assessmentId = assessmentId;
     }
 
     private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
@@ -414,8 +420,11 @@ class ComplianceAutomationService {
 
     // Dashboard and Overview
     async getComplianceDashboard(): Promise<ComplianceDashboard> {
-        const response = await this.makeRequest('/api/v2/compliance/dashboard');
-        return response.data || {};
+        if (!this.assessmentId) {
+            return {} as ComplianceDashboard;
+        }
+        const response = await this.makeRequest(`/api/v1/features/assessment/${this.assessmentId}/compliance`);
+        return response || {};
     }
 
     async getComplianceOverview(timeframe: string = '30d'): Promise<{
@@ -429,7 +438,10 @@ class ComplianceAutomationService {
 
     // Framework Management
     async getComplianceFrameworks(): Promise<ComplianceFramework[]> {
-        const response = await this.makeRequest('/api/v2/compliance/frameworks');
+        if (!this.assessmentId) {
+            return [];
+        }
+        const response = await this.makeRequest(`/api/v1/features/assessment/${this.assessmentId}/compliance`);
         return response.frameworks || [];
     }
 
@@ -839,9 +851,11 @@ class ComplianceAutomationService {
 // Singleton instance
 let complianceAutomationService: ComplianceAutomationService | null = null;
 
-export const getComplianceAutomationService = (): ComplianceAutomationService => {
+export const getComplianceAutomationService = (assessmentId?: string): ComplianceAutomationService => {
     if (!complianceAutomationService) {
-        complianceAutomationService = new ComplianceAutomationService();
+        complianceAutomationService = new ComplianceAutomationService(assessmentId);
+    } else if (assessmentId) {
+        complianceAutomationService.setAssessmentId(assessmentId);
     }
     return complianceAutomationService;
 };

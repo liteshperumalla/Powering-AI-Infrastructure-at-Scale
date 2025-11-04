@@ -1053,7 +1053,8 @@ async def get_current_user_optional(
         token = credentials.credentials
         user = await auth_service.get_current_user(token)
         return user
-    except:
+    except Exception as e:
+        logger.warning(f"Optional authentication failed: {e}")
         return None
 
 

@@ -9,8 +9,10 @@
  * - Audit trail access
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { safeSlice } from '../utils/numberUtils';
+import { useApiData, useApiMutation } from '../hooks/useOptimizedApi';
+import { SkeletonComplianceDashboard } from './skeletons/SkeletonCard';
 import {
     Box,
     Card,
@@ -100,11 +102,28 @@ interface AuditEvent {
 }
 
 const ComplianceDashboard: React.FC = () => {
-    // State management
-    const [consentSummary, setConsentSummary] = useState<ConsentSummary>({});
-    const [retentionPolicies, setRetentionPolicies] = useState<Record<string, RetentionPolicy>>({});
-    const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
-    const [loading, setLoading] = useState(true);
+    // ✅ Use optimized API hooks instead of manual fetch
+    const { data: consentData, loading: consentLoading, refetch: refetchConsent } = useApiData<{ consent_summary?: ConsentSummary }>(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v2/compliance/consent`,
+        { enabled: !!localStorage.getItem('auth_token') }
+    );
+
+    const { data: policiesData, loading: policiesLoading } = useApiData<{ policies?: Record<string, RetentionPolicy> }>(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v2/compliance/retention/policies`,
+        { enabled: !!localStorage.getItem('auth_token') }
+    );
+
+    const { data: auditData, loading: auditLoading } = useApiData<{ audit_summary?: { recent_events?: AuditEvent[] } }>(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v2/compliance/audit/summary?days=7`,
+        { enabled: !!localStorage.getItem('auth_token') }
+    );
+
+    // Extract data from API responses
+    const consentSummary = consentData?.consent_summary || consentData || {};
+    const retentionPolicies = policiesData?.policies || {};
+    const auditEvents = auditData?.audit_summary?.recent_events || [];
+    const loading = consentLoading || policiesLoading || auditLoading;
+
     const [error, setError] = useState<string | null>(null);
 
     // Dialog states
@@ -138,94 +157,8 @@ const ComplianceDashboard: React.FC = () => {
         { key: 'profiling', label: 'Profiling', description: 'Create profiles for personalization' }
     ];
 
-    // Load data on component mount
-    useEffect(() => {
-        loadComplianceData();
-    }, []);
 
-    const loadComplianceData = async () => {
-        try {
-            setLoading(true);
-
-            // Check if user is authenticated
-            const authToken = localStorage.getItem('auth_token');
-            if (!authToken) {
-                console.warn('No auth token found, skipping compliance data load');
-                setLoading(false);
-                return;
-            }
-
-            // Load consent status
-            try {
-                const consentResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v2/compliance/consent`, {
-                    headers: { 
-                        'Authorization': `Bearer ${authToken}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                
-                if (consentResponse.ok) {
-                    const consentData = await consentResponse.json();
-                    setConsentSummary(consentData.consent_summary || consentData || {});
-                } else if (consentResponse.status === 401) {
-                    // Silently handle auth issues
-                    localStorage.removeItem('auth_token');
-                } else {
-                    // Silently handle missing compliance endpoints - feature not implemented
-                }
-            } catch (consentError) {
-                console.error('Error fetching consent data:', consentError);
-                // Set default consent summary to prevent UI errors
-                setConsentSummary({});
-            }
-
-            // Load retention policies (admin only)
-            try {
-                const policiesResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v2/compliance/retention/policies`, {
-                    headers: { 
-                        'Authorization': `Bearer ${authToken}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                if (policiesResponse.ok) {
-                    const policiesData = await policiesResponse.json();
-                    setRetentionPolicies(policiesData.policies || {});
-                } else {
-                    // Silently handle missing endpoints
-                }
-            } catch (e) {
-                // Silently handle missing compliance endpoints
-                setRetentionPolicies({});
-            }
-
-            // Load recent audit events (admin only)
-            try {
-                const auditResponse = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v2/compliance/audit/summary?days=7`, {
-                    headers: { 
-                        'Authorization': `Bearer ${authToken}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-                if (auditResponse.ok) {
-                    const auditData = await auditResponse.json();
-                    setAuditEvents(auditData.audit_summary?.recent_events || []);
-                } else {
-                    // Silently handle missing endpoints
-                }
-            } catch (e) {
-                // Silently handle missing compliance endpoints
-                setAuditEvents([]);
-            }
-
-        } catch (err) {
-            setError('Failed to load compliance data');
-            console.error('Error loading compliance data:', err);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const handleConsentChange = async (consentType: string, granted: boolean) => {
+    const handleConsentChange = useCallback(async (consentType: string, granted: boolean) => {
         try {
             const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/v2/compliance/consent`, {
                 method: 'POST',
@@ -242,8 +175,8 @@ const ComplianceDashboard: React.FC = () => {
             });
 
             if (response.ok) {
-                // Reload consent data
-                loadComplianceData();
+                // ✅ Refetch consent data
+                refetchConsent();
             } else {
                 setError('Failed to update consent');
             }
@@ -251,7 +184,7 @@ const ComplianceDashboard: React.FC = () => {
             setError('Failed to update consent');
             console.error('Error updating consent:', err);
         }
-    };
+    }, [refetchConsent]);
 
     const handleDataExport = async () => {
         try {
@@ -349,15 +282,9 @@ const ComplianceDashboard: React.FC = () => {
         }
     };
 
-    if (loading) {
-        return (
-            <Box sx={{ width: '100%', mt: 2 }}>
-                <LinearProgress />
-                <Typography variant="body2" sx={{ mt: 1, textAlign: 'center' }}>
-                    Loading compliance data...
-                </Typography>
-            </Box>
-        );
+    // ✅ Show skeleton during loading
+    if (loading && Object.keys(consentSummary).length === 0) {
+        return <SkeletonComplianceDashboard />;
     }
 
     return (

@@ -25,6 +25,7 @@ from ...models.compliance import (
     ComplianceDashboardMetrics,
     ComplianceFrameworkType,
     ComplianceStatus,
+    AuditFrequency,
     Priority,
     CheckStatus,
     CheckResult
@@ -41,7 +42,7 @@ from ...core.compliance import (
     export_user_data_request,
     delete_user_data_request
 )
-from ...core.audit import audit_logger, AuditEventType, AuditSeverity
+from ...core.audit import audit_logger, AuditEvent, AuditEventType, AuditSeverity
 
 logger = logging.getLogger(__name__)
 
@@ -905,14 +906,17 @@ async def get_compliance_dashboard(
         }
         
         try:
-            await audit_logger.log_event(
+            audit_event = AuditEvent(
+                event_type=AuditEventType.DATA_ACCESSED,
                 user_id=str(current_user.id),
-                event_type=AuditEventType.DATA_ACCESS,
-                description="Accessed compliance dashboard",
+                user_email=current_user.email,
                 severity=AuditSeverity.LOW,
                 resource_type="compliance_dashboard",
-                resource_id="dashboard_overview"
+                resource_id="dashboard_overview",
+                action="Accessed compliance dashboard",
+                timestamp=datetime.now(timezone.utc)
             )
+            audit_logger.log_event(audit_event)
         except Exception as audit_error:
             logger.warning(f"Failed to log audit event: {audit_error}")
         
@@ -1134,14 +1138,17 @@ async def add_compliance_framework(
         # Save to database
         await new_framework.insert()
         
-        await audit_logger.log_event(
+        audit_event = AuditEvent(
+            event_type=AuditEventType.ASSESSMENT_CREATED,
             user_id=str(current_user.id),
-            event_type=AuditEventType.CREATE,
-            description=f"Added compliance framework: {framework.name}",
+            user_email=current_user.email,
             severity=AuditSeverity.MEDIUM,
             resource_type="compliance_framework",
-            resource_id=str(new_framework.id)
+            resource_id=str(new_framework.id),
+            action=f"Added compliance framework: {framework.name}",
+            timestamp=datetime.now(timezone.utc)
         )
+        audit_logger.log_event(audit_event)
         
         # Format response
         framework_data = {
@@ -1245,14 +1252,17 @@ async def create_automated_check(
         # Save to database
         await new_check.insert()
         
-        await audit_logger.log_event(
+        audit_event = AuditEvent(
+            event_type=AuditEventType.ASSESSMENT_CREATED,
             user_id=str(current_user.id),
-            event_type=AuditEventType.CREATE,
-            description=f"Created automated check: {check.check_name}",
+            user_email=current_user.email,
             severity=AuditSeverity.MEDIUM,
             resource_type="automated_check",
-            resource_id=str(new_check.id)
+            resource_id=str(new_check.id),
+            action=f"Created automated check: {check.check_name}",
+            timestamp=datetime.now(timezone.utc)
         )
+        audit_logger.log_event(audit_event)
         
         # Format response
         check_data = {

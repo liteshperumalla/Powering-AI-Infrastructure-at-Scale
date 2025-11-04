@@ -15,6 +15,7 @@ from .base import BaseAgent, AgentConfig, AgentRole
 from .tools import ToolResult
 from ..models.assessment import Assessment
 from ..core.smart_defaults import smart_get, SmartDefaults
+from ..llm.prompt_sanitizer import PromptSanitizer
 
 logger = logging.getLogger(__name__)
 
@@ -62,7 +63,10 @@ class CloudEngineerAgent(BaseAgent):
             )
         
         super().__init__(config)
-        
+
+        # Initialize prompt sanitizer for security
+        self.prompt_sanitizer = PromptSanitizer(security_level="balanced")
+
         # Cloud Engineer-specific attributes
         self.cloud_platforms = ["aws", "azure", "gcp", "ibm", "alibaba"]
         self.service_categories = [
@@ -135,11 +139,15 @@ class CloudEngineerAgent(BaseAgent):
     async def _assess_infrastructure_needs(self, requirements: Dict[str, Any]) -> Dict[str, Any]:
         """Assess infrastructure needs based on requirements using real analysis."""
         try:
+            # ✅ SECURITY: Sanitize requirements before using in prompt
+            safe_requirements = self.prompt_sanitizer.sanitize_dict(requirements, raise_on_violation=False)
+            logger.debug("Requirements sanitized for prompt injection protection")
+
             # Use LLM to analyze infrastructure needs from business requirements
             analysis_prompt = f"""
             Analyze the following business requirements and determine specific infrastructure needs:
-            
-            Company Size: {smart_get(requirements, "company_size")}
+
+            Company Size: {smart_get(safe_requirements, "company_size")}
             Industry: {smart_get(requirements, "industry")}
             Primary Goals: {requirements.get("primary_goals", [])}
             Compliance Requirements: {requirements.get("compliance_requirements", {})}

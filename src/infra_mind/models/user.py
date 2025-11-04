@@ -5,7 +5,7 @@ Defines user authentication and profile data structure.
 """
 
 from datetime import datetime, timedelta
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Annotated
 from beanie import Document, Indexed
 from pydantic import Field, EmailStr, field_validator
 import bcrypt
@@ -19,13 +19,13 @@ from ..schemas.base import CompanySize, Industry
 class User(Document):
     """
     User document model for authentication and profile management.
-    
+
     Learning Note: This model handles user authentication, profile data,
     and tracks user activity for analytics and personalization.
     """
-    
+
     # Authentication
-    email: EmailStr = Indexed(unique=True)
+    email: Annotated[EmailStr, Indexed(unique=True)] = Field(description="User email address")
     hashed_password: str = Field(description="Bcrypt hashed password")
     is_active: bool = Field(default=True, description="Whether user account is active")
     is_verified: bool = Field(default=False, description="Whether email is verified")
@@ -137,7 +137,8 @@ class User(Document):
     @classmethod
     async def authenticate(cls, email: str, password: str) -> Optional["User"]:
         """Authenticate a user by email and password."""
-        user = await cls.find_one(cls.email == email.lower(), cls.is_active == True)
+        # Use dictionary query syntax instead of class attribute syntax
+        user = await cls.find_one({"email": email.lower(), "is_active": True})
         if user and user.verify_password(password):
             user.update_login_info()
             await user.save()

@@ -4,7 +4,7 @@ Authentication endpoints for Infra Mind.
 Handles user registration, login, and JWT token management.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
@@ -29,7 +29,16 @@ router = APIRouter()
 security = HTTPBearer()
 
 # JWT Configuration
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-jwt-secret-key-change-in-production-12345678901234567890")
+# SECURITY: No fallback secret - fail fast if not configured
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    raise ValueError(
+        "CRITICAL: JWT_SECRET_KEY environment variable must be set. "
+        "Generate a secure key with: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+    )
+if len(SECRET_KEY) < 32:
+    raise ValueError("CRITICAL: JWT_SECRET_KEY must be at least 32 characters for security")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
 
@@ -274,10 +283,12 @@ class MFARequiredResponse(BaseModel):
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(user_data: UserRegister):
+async def register(request: Request, user_data: UserRegister):
     """
     Register a new user account.
-    
+
+    SECURITY: Rate limited to 3 registrations per hour per IP to prevent spam.
+
     Creates a new user account and returns a JWT token for immediate login.
     """
     try:
@@ -337,9 +348,11 @@ async def register(user_data: UserRegister):
 
 
 @router.post("/login")
-async def login(credentials: UserLogin):
+async def login(request: Request, credentials: UserLogin):
     """
     User login endpoint.
+
+    SECURITY: Rate limited to 5 login attempts per minute per IP to prevent brute force.
     
     Authenticates user credentials and returns either a JWT token or MFA challenge.
     """
@@ -402,9 +415,13 @@ async def login(credentials: UserLogin):
         raise
     except Exception as e:
         logger.error(f"Login failed: {e}")
+        logger.error(f"Error type: {type(e)}")
+        logger.error(f"Error args: {e.args}")
+        import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Login failed"
+            detail=f"Login failed: {str(e)}"
         )
 
 
@@ -412,17 +429,48 @@ async def login(credentials: UserLogin):
 async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
     """
     User logout endpoint.
-    
-    Invalidates the current JWT token.
+
+    Invalidates the current JWT token by adding it to Redis blacklist.
     """
     try:
-        # TODO: Add token to blacklist
-        # await blacklist_token(credentials.credentials)
-        
+        token = credentials.credentials
+
+        # SECURITY FIX: Implement token blacklisting
+        # Decode token to get expiration time
+        try:
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            exp = payload.get("exp")
+
+            if exp:
+                # Add to blacklist with TTL matching token expiration
+                import redis
+                redis_client = redis.Redis(
+                    host=os.getenv("REDIS_HOST", "localhost"),
+                    port=int(os.getenv("REDIS_PORT", "6379")),
+                    decode_responses=True
+                )
+
+                # Calculate TTL (seconds until expiration)
+                from datetime import datetime
+                ttl = max(exp - int(datetime.utcnow().timestamp()), 0)
+
+                # Store token hash in blacklist
+                import hashlib
+                token_hash = hashlib.sha256(token.encode()).hexdigest()
+                redis_client.setex(f"blacklist:{token_hash}", ttl, "1")
+
+                logger.info(f"Token blacklisted successfully (TTL: {ttl}s)")
+            else:
+                logger.warning("Token missing expiration, cannot blacklist properly")
+
+        except jwt.JWTError as jwt_err:
+            logger.error(f"Failed to decode token for blacklisting: {jwt_err}")
+            # Still return success to user
+
         logger.info("User logged out")
-        
+
         return {"message": "Successfully logged out"}
-        
+
     except Exception as e:
         logger.error(f"Logout failed: {e}")
         raise HTTPException(

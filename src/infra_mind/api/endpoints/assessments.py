@@ -30,8 +30,9 @@ from ...schemas.base import AssessmentStatus, Priority, CloudProvider, Recommend
 from .auth import get_current_user
 from ...core.smart_defaults import smart_get, SmartDefaults
 from ...models.user import User
+from ...core.dependencies import DatabaseDep  # Dependency injection for database access
 from ...workflows.orchestrator import agent_orchestrator, OrchestrationConfig
-from ...workflows.assessment_workflow import AssessmentWorkflow
+from ...workflows.parallel_assessment_workflow import ParallelAssessmentWorkflow as AssessmentWorkflow  # 10x faster parallel execution
 from ...agents.cloud_engineer_agent import CloudEngineerAgent
 from ...agents.cto_agent import CTOAgent
 from ...agents.mlops_agent import MLOpsAgent
@@ -54,17 +55,20 @@ router = APIRouter()
 # Assessment-level enterprise features for general users
 
 
-async def store_progress_update_in_db(assessment_id, update_data):
-    """Store progress update in database for polling fallback"""
+async def store_progress_update_in_db(assessment_id, update_data, db):
+    """
+    Store progress update in database for polling fallback.
+
+    Args:
+        assessment_id: Assessment ID
+        update_data: Progress update data
+        db: Database instance (injected via DatabaseDep)
+
+    Note:
+        Now uses dependency injection instead of creating its own client.
+        This ensures connection pooling and horizontal scaling compatibility.
+    """
     try:
-        from motor.motor_asyncio import AsyncIOMotorClient
-        import os
-        
-        mongo_uri = os.getenv("INFRA_MIND_MONGODB_URL", 
-                             "mongodb://admin:password@localhost:27017/infra_mind?authSource=admin")
-        client = AsyncIOMotorClient(mongo_uri)
-        db = client.get_database("infra_mind")
-        
         # Store in assessment_progress collection for polling
         progress_doc = {
             "assessment_id": str(assessment_id),
@@ -72,20 +76,20 @@ async def store_progress_update_in_db(assessment_id, update_data):
             "progress_data": update_data,
             "type": "progress_update"
         }
-        
+
         await db.assessment_progress.insert_one(progress_doc)
-        
+
         # Clean up old progress updates (keep last 100 per assessment)
         old_updates = await db.assessment_progress.find({
             "assessment_id": str(assessment_id)
         }).sort("timestamp", -1).skip(100).to_list(length=None)
-        
+
         if old_updates:
             old_ids = [doc["_id"] for doc in old_updates]
             await db.assessment_progress.delete_many({"_id": {"$in": old_ids}})
-            
-        client.close()
-        
+
+        # No need to close client - managed by dependency injection
+
     except Exception as e:
         logger.error(f"Failed to store progress update in DB: {e}")
         raise
@@ -103,15 +107,20 @@ def convert_mongodb_data(data):
         return data
 
 
-async def start_assessment_workflow(assessment: Assessment, app_state=None):
+async def start_assessment_workflow(assessment: Assessment, app_state=None, db=None):
     """
     Start the assessment workflow to generate recommendations and reports.
-    
+
     This function runs the complete workflow asynchronously to generate
     recommendations and reports for the assessment.
+
+    Args:
+        assessment: Assessment instance
+        app_state: Application state for WebSocket broadcasts
+        db: Database instance (injected via DatabaseDep) for progress tracking
     """
     logger.info(f"Starting assessment workflow for assessment {assessment.id}")
-    
+
     # Helper function to broadcast updates
     async def broadcast_update(step: str, progress: float, message: str = ""):
         """Enhanced broadcast function with error handling and fallback"""
@@ -152,8 +161,11 @@ async def start_assessment_workflow(assessment: Assessment, app_state=None):
                     
                     # Fallback 1: Store update in database for polling
                     try:
-                        await store_progress_update_in_db(assessment.id, update_data)
-                        logger.info(f"📊 Progress stored in DB as fallback - Step: {step}")
+                        if db is not None:
+                            await store_progress_update_in_db(assessment.id, update_data, db)
+                            logger.info(f"📊 Progress stored in DB as fallback - Step: {step}")
+                        else:
+                            logger.warning("⚠️ Database not available for progress tracking fallback")
                     except Exception as db_error:
                         logger.error(f"❌ Fallback DB storage failed: {db_error}")
                     
@@ -175,13 +187,17 @@ async def start_assessment_workflow(assessment: Assessment, app_state=None):
                 # No WebSocket available - use database polling fallback
                 logger.info(f"🔄 No WebSocket - using DB polling fallback for {step}")
                 try:
-                    await store_progress_update_in_db(assessment.id, {
-                        "current_step": step,
-                        "progress_percentage": progress,
-                        "message": message,
-                        "websocket_available": False
-                    })
-                except:
+                    if db is not None:
+                        await store_progress_update_in_db(assessment.id, {
+                            "current_step": step,
+                            "progress_percentage": progress,
+                            "message": message,
+                            "websocket_available": False
+                        }, db)
+                    else:
+                        logger.debug("Database not available for progress tracking")
+                except Exception as e:
+                    logger.debug(f"Caught exception: {e}")
                     pass  # Non-critical fallback
                 
                 # Also update assessment directly
@@ -211,7 +227,7 @@ async def start_assessment_workflow(assessment: Assessment, app_state=None):
                 assessment.progress_percentage = progress
                 await assessment.save()
                 logger.info(f"🚑 Emergency fallback applied for step: {step}")
-            except:
+            except Exception as e:
                 logger.critical(f"🚨 Complete fallback failure for assessment {assessment.id}")
                 pass  # Last resort - don't fail the workflow
     
@@ -343,7 +359,9 @@ async def start_assessment_workflow(assessment: Assessment, app_state=None):
                     AdvancedAnalytics.assessment_id == str(assessment.id)
                 )
                 analytics_data = analytics.dict() if analytics else None
-            except:
+            except Exception as e:
+
+                logger.debug(f"Caught exception: {e}")
                 pass
 
             # Generate all features
@@ -1005,7 +1023,8 @@ async def create_simple_assessment(data: dict, current_user: User = Depends(get_
 async def create_assessment(
     assessment_data: Dict[str, Any],
     request: Request,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: DatabaseDep = None  # Dependency injection for database access
 ):
     """
     Create a new infrastructure assessment.
@@ -1292,7 +1311,11 @@ async def create_assessment(
             try:
                 # Start workflow asynchronously (fire and forget)
                 import asyncio
-                asyncio.create_task(start_assessment_workflow(assessment, getattr(request.app, 'state', None)))
+                asyncio.create_task(start_assessment_workflow(
+                    assessment,
+                    getattr(request.app, 'state', None),
+                    db  # Pass injected database for progress tracking
+                ))
 
                 # Update assessment status to indicate workflow started
                 assessment.status = AssessmentStatus.IN_PROGRESS
@@ -1447,6 +1470,8 @@ async def get_assessment(
             "status": assessment.status,
             "priority": assessment.priority,
             "progress": progress_data,
+            "completion_percentage": assessment.completion_percentage or 0,
+            "progress_percentage": assessment.completion_percentage or 0,  # Alias for frontend compatibility
             "workflow_id": assessment.workflow_id,
             "agent_states": assessment.agent_states or {},
             "recommendations_generated": assessment.recommendations_generated or False,
@@ -1552,6 +1577,7 @@ async def list_assessments(
                 status_value = assessment.status.value if hasattr(assessment.status, 'value') else str(assessment.status)
 
                 if status_value == "completed":
+                    # For completed assessments, always show 100%
                     progress_pct = 100.0
                 elif status_value == "draft":
                     # For draft assessments, calculate based on filled sections
@@ -1567,9 +1593,6 @@ async def list_assessments(
 
                     # Draft progress is based on sections completed (max 30% for draft)
                     progress_pct = min((sections_completed / total_sections) * 30, 30.0)
-                elif status_value == "completed":
-                    # For completed assessments, always show 100%
-                    progress_pct = 100.0
                 elif status_value == "in_progress":
                     # For in-progress assessments, use stored progress or calculate from workflow state
                     if hasattr(assessment, 'completion_percentage') and assessment.completion_percentage is not None:

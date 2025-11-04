@@ -28,7 +28,8 @@ class SmartDefaults:
             if isinstance(users, str):
                 try:
                     users = int(users.replace(",", "").replace("+", ""))
-                except:
+                except (ValueError, AttributeError) as e:
+                    logger.debug(f"Failed to parse user count: {e}")
                     users = 0
 
             if users < 50:

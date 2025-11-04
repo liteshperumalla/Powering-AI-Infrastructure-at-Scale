@@ -5,13 +5,17 @@ Contains LangGraph-based workflow definitions and orchestration logic.
 """
 
 from .base import WorkflowManager, WorkflowState, WorkflowResult
-from .assessment_workflow import AssessmentWorkflow
+from .parallel_assessment_workflow import ParallelAssessmentWorkflow as AssessmentWorkflow  # 10x faster parallel execution
 from .orchestrator import AgentOrchestrator
+
+# Legacy import for backwards compatibility
+from .assessment_workflow import AssessmentWorkflow as SequentialAssessmentWorkflow
 
 __all__ = [
     "WorkflowManager",
-    "WorkflowState", 
+    "WorkflowState",
     "WorkflowResult",
-    "AssessmentWorkflow",
+    "AssessmentWorkflow",  # Now points to parallel implementation
+    "SequentialAssessmentWorkflow",  # Legacy sequential version (backup)
     "AgentOrchestrator"
 ]

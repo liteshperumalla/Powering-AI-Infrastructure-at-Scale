@@ -18,6 +18,7 @@ from loguru import logger
 from .core.config import settings
 from .core.database import init_database, close_database
 from .core.logging import setup_logging
+from .core.dependencies import cleanup_dependencies  # NEW: Dependency injection cleanup
 from .api.routes import api_router
 from .api.documentation import get_enhanced_openapi_schema
 from .orchestration.events import EventManager
@@ -61,6 +62,11 @@ async def lifespan(app: FastAPI):
     logger.info("🛑 Shutting down Infra Mind application...")
     await stop_workflow_monitoring()
     await close_database()
+
+    # NEW: Cleanup dependency injection resources
+    logger.info("🧹 Cleaning up dependency injection resources...")
+    await cleanup_dependencies()
+
     logger.success("✅ Application shutdown complete")
 
 
@@ -298,8 +304,16 @@ def setup_middleware(app: FastAPI) -> None:
         allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-        allow_headers=["*"],  # Temporarily allow all headers to debug CORS issues
-        expose_headers=["X-Process-Time"],
+        # SECURITY: Restrict to specific headers only (removed wildcard)
+        allow_headers=[
+            "Authorization",
+            "Content-Type",
+            "X-Requested-With",
+            "X-Request-ID",
+            "Accept",
+            "Origin"
+        ],
+        expose_headers=["X-Process-Time", "X-Request-ID"],
     )
     
     # Trusted host middleware for security

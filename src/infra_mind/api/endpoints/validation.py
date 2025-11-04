@@ -14,6 +14,7 @@ from ...services.assessment_data_validator import assessment_validator
 from .auth import get_current_user
 from ...models.user import User
 from ...core.rbac import require_permission, Permission
+from ...core.dependencies import DatabaseDep  # Dependency injection for database access
 
 router = APIRouter()
 
@@ -405,23 +406,18 @@ async def validation_health_check():
 
 @router.get("/validation/stats")
 async def get_validation_stats(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: DatabaseDep = None
 ):
     """
     Get validation statistics and data quality metrics.
-    
+
     Provides insights into overall data quality across all assessments.
+
+    Note: Now uses dependency injection for database access.
     """
     try:
-        from motor.motor_asyncio import AsyncIOMotorClient
-        import os
-        
-        # Get database connection
-        mongodb_url = os.getenv('INFRA_MIND_MONGODB_URL', 'mongodb://admin:password@localhost:27017/infra_mind?authSource=admin')
-        client = AsyncIOMotorClient(mongodb_url)
-        db = client.get_database('infra_mind')
-        
-        # Get basic statistics
+        # Get basic statistics (database injected)
         total_assessments = await db.assessments.count_documents({})
         completed_assessments = await db.assessments.count_documents({"status": "completed"})
         validated_assessments = await db.assessments.count_documents({"validation_status": "validated"})

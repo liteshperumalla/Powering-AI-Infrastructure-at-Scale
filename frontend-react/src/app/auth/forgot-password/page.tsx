@@ -15,14 +15,21 @@ import {
 import { Email, ArrowBack } from '@mui/icons-material';
 import { useRouter } from 'next/navigation';
 import ResponsiveLayout from '@/components/ResponsiveLayout';
+import { useApiMutation } from '@/hooks/useOptimizedApi';
 
 export default function ForgotPasswordPage() {
     const router = useRouter();
     const [email, setEmail] = useState('');
-    const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
-    const [error, setError] = useState('');
     const [validationError, setValidationError] = useState('');
+
+    // ✅ Use optimized mutation hook
+    const { mutate, loading, error: apiError } = useApiMutation<any, { email: string }>(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/forgot-password`,
+        'POST'
+    );
+
+    const error = apiError?.message || '';
 
     const validateEmail = (email: string) => {
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -31,40 +38,23 @@ export default function ForgotPasswordPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         if (!email) {
             setValidationError('Email is required');
             return;
         }
-        
+
         if (!validateEmail(email)) {
             setValidationError('Please enter a valid email address');
             return;
         }
 
-        setLoading(true);
-        setError('');
         setValidationError('');
 
-        try {
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/forgot-password`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ email }),
-            });
-
-            if (response.ok) {
-                setSuccess(true);
-            } else {
-                const errorData = await response.json();
-                setError(errorData.detail || 'Failed to send reset email');
-            }
-        } catch (error) {
-            setError('Network error. Please try again.');
-        } finally {
-            setLoading(false);
+        // ✅ Use mutation hook
+        const result = await mutate({ email });
+        if (result) {
+            setSuccess(true);
         }
     };
 

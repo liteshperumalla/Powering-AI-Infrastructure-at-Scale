@@ -212,6 +212,10 @@ class Report(Document):
         default_factory=list,
         description="List of section IDs or full section objects (flexible structure)"
     )
+    recommendations: List[Dict[str, Any]] = Field(
+        default_factory=list,
+        description="List of recommendations included in the report"
+    )
     total_pages: Optional[int] = Field(default=None, description="Total number of pages")
     word_count: Optional[int] = Field(default=None, description="Approximate word count")
     

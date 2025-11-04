@@ -13,6 +13,7 @@ import math
 from .base import BaseAgent, AgentConfig, AgentRole
 from .tools import ToolResult
 from ..models.assessment import Assessment
+from ..llm.prompt_sanitizer import PromptSanitizer
 from ..llm.manager import LLMManager
 
 logger = logging.getLogger(__name__)
@@ -65,6 +66,9 @@ class InfrastructureAgent(BaseAgent):
         
         super().__init__(config)
         
+
+        # Initialize prompt sanitizer for security
+        self.prompt_sanitizer = PromptSanitizer(security_level="balanced")
         # Infrastructure-specific attributes
         self.compute_types = [
             "cpu_optimized", "memory_optimized", "gpu_accelerated",

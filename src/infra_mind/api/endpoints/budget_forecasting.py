@@ -426,8 +426,8 @@ async def get_optimization_recommendations(
             timeframe="45_days",
             impact_analysis={
                 "developer_impact": "requires schedule coordination",
-                "automation_required": true,
-                "monitoring_needed": true
+                "automation_required": True,
+                "monitoring_needed": True
             }
         )
     ]

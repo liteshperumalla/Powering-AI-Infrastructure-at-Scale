@@ -4,59 +4,60 @@ metadata:
   name: infra-mind-config
   namespace: infra-mind
 data:
-  # Application configuration
+  # Application Configuration
   INFRA_MIND_ENVIRONMENT: "production"
-  INFRA_MIND_DEBUG: "false"
+  INFRA_MIND_LOG_LEVEL: "info"
+  
+  # Database Configuration
+  INFRA_MIND_MONGODB_DATABASE: "infra_mind"
+  INFRA_MIND_MONGODB_MAX_CONNECTIONS: "50"
+  INFRA_MIND_MONGODB_MIN_CONNECTIONS: "10"
+  
+  # Redis Configuration
+  INFRA_MIND_REDIS_DB: "0"
+  INFRA_MIND_REDIS_MAX_CONNECTIONS: "50"
+  
+  # API Configuration
   INFRA_MIND_API_HOST: "0.0.0.0"
   INFRA_MIND_API_PORT: "8000"
+  INFRA_MIND_CORS_ORIGINS: "https://inframind.ai,https://www.inframind.ai"
   
-  # Database configuration
-  INFRA_MIND_MONGODB_URL: "mongodb://mongodb-service:27017/infra_mind"
-  INFRA_MIND_REDIS_URL: "redis://redis-service:6379"
+  # Cache Configuration
+  INFRA_MIND_CACHE_DEFAULT_TTL: "300"
+  INFRA_MIND_CACHE_ENABLED: "true"
   
-  # LLM configuration
-  INFRA_MIND_LLM_MODEL: "gpt-4"
-  INFRA_MIND_LLM_TEMPERATURE: "0.1"
-  
-  # Cloud provider configuration
-  INFRA_MIND_AWS_REGION: "us-east-1"
-  
-  # API configuration
-  INFRA_MIND_CORS_ORIGINS: '["https://infra-mind.example.com"]'
-  INFRA_MIND_RATE_LIMIT_REQUESTS: "1000"
-  
-  # Frontend configuration
-  FRONTEND_API_URL: "https://api.infra-mind.example.com"
-  FRONTEND_WS_URL: "wss://api.infra-mind.example.com/ws"
-
+  # Monitoring
+  INFRA_MIND_METRICS_ENABLED: "true"
+  INFRA_MIND_METRICS_PORT: "8000"
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: infra-mind-config-staging
+  name: infra-mind-config
   namespace: infra-mind-staging
 data:
-  # Application configuration
+  # Application Configuration
   INFRA_MIND_ENVIRONMENT: "staging"
-  INFRA_MIND_DEBUG: "true"
+  INFRA_MIND_LOG_LEVEL: "debug"
+  
+  # Database Configuration
+  INFRA_MIND_MONGODB_DATABASE: "infra_mind_staging"
+  INFRA_MIND_MONGODB_MAX_CONNECTIONS: "20"
+  INFRA_MIND_MONGODB_MIN_CONNECTIONS: "5"
+  
+  # Redis Configuration
+  INFRA_MIND_REDIS_DB: "1"
+  INFRA_MIND_REDIS_MAX_CONNECTIONS: "20"
+  
+  # API Configuration
   INFRA_MIND_API_HOST: "0.0.0.0"
   INFRA_MIND_API_PORT: "8000"
+  INFRA_MIND_CORS_ORIGINS: "https://staging.inframind.ai"
   
-  # Database configuration
-  INFRA_MIND_MONGODB_URL: "mongodb://mongodb-service:27017/infra_mind_staging"
-  INFRA_MIND_REDIS_URL: "redis://redis-service:6379"
+  # Cache Configuration
+  INFRA_MIND_CACHE_DEFAULT_TTL: "60"
+  INFRA_MIND_CACHE_ENABLED: "true"
   
-  # LLM configuration
-  INFRA_MIND_LLM_MODEL: "gpt-3.5-turbo"
-  INFRA_MIND_LLM_TEMPERATURE: "0.2"
-  
-  # Cloud provider configuration
-  INFRA_MIND_AWS_REGION: "us-east-1"
-  
-  # API configuration
-  INFRA_MIND_CORS_ORIGINS: '["https://staging.infra-mind.example.com"]'
-  INFRA_MIND_RATE_LIMIT_REQUESTS: "500"
-  
-  # Frontend configuration
-  FRONTEND_API_URL: "https://api-staging.infra-mind.example.com"
-  FRONTEND_WS_URL: "wss://api-staging.infra-mind.example.com/ws"
+  # Monitoring
+  INFRA_MIND_METRICS_ENABLED: "true"
+  INFRA_MIND_METRICS_PORT: "8000"

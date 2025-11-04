@@ -15,6 +15,7 @@ from .base import BaseAgent, AgentConfig, AgentRole
 from .tools import ToolResult
 from .web_search import get_web_search_client, search_cloud_infrastructure_topics
 from ..models.assessment import Assessment
+from ..llm.prompt_sanitizer import PromptSanitizer
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,9 @@ class ResearchAgent(BaseAgent):
         
         super().__init__(config)
         
+
+        # Initialize prompt sanitizer for security
+        self.prompt_sanitizer = PromptSanitizer(security_level="balanced")
         # Research Agent-specific attributes
         self.data_sources = [
             "aws_pricing_api",

@@ -13,6 +13,7 @@ from .base import BaseAgent, AgentConfig, AgentRole
 from .tools import ToolResult
 from ..models.assessment import Assessment
 from ..core.smart_defaults import smart_get, SmartDefaults
+from ..llm.prompt_sanitizer import PromptSanitizer, sanitize_assessment_data
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +33,7 @@ class CTOAgent(BaseAgent):
     def __init__(self, config: Optional[AgentConfig] = None):
         """
         Initialize CTO Agent.
-        
+
         Args:
             config: Agent configuration (uses defaults if None)
         """
@@ -46,7 +47,7 @@ class CTOAgent(BaseAgent):
                 custom_config={
                     "focus_areas": [
                         "strategic_alignment",
-                        "roi_optimization", 
+                        "roi_optimization",
                         "budget_planning",
                         "risk_assessment",
                         "executive_communication"
@@ -59,9 +60,12 @@ class CTOAgent(BaseAgent):
                     ]
                 }
             )
-        
+
         super().__init__(config)
-        
+
+        # Initialize prompt sanitizer for security
+        self.prompt_sanitizer = PromptSanitizer(security_level="balanced")
+
         # CTO-specific attributes
         self.strategic_frameworks = [
             "Total Cost of Ownership (TCO)",
@@ -70,7 +74,7 @@ class CTOAgent(BaseAgent):
             "Risk-Adjusted Returns",
             "Strategic Alignment Matrix"
         ]
-        
+
         self.business_priorities = [
             "cost_optimization",
             "scalability",
@@ -79,8 +83,8 @@ class CTOAgent(BaseAgent):
             "time_to_market",
             "competitive_advantage"
         ]
-        
-        logger.info("CTO Agent initialized with strategic planning capabilities")
+
+        logger.info("CTO Agent initialized with strategic planning capabilities and prompt injection protection")
 
     def _clean_json_response(self, response: str) -> str:
         """Clean LLM response by removing markdown code blocks."""
@@ -130,11 +134,17 @@ class CTOAgent(BaseAgent):
     async def _assess_strategic_fit(self, requirements: Dict[str, Any]) -> Dict[str, Any]:
         """Assess strategic fit of requirements using LLM analysis."""
         try:
+            # ✅ SECURITY: Sanitize requirements before using in prompt
+            safe_requirements = self.prompt_sanitizer.sanitize_dict(
+                requirements, raise_on_violation=False
+            )
+            logger.debug("Requirements sanitized for prompt injection protection")
+
             strategic_prompt = f"""
             As a CTO, assess the strategic fit of these infrastructure requirements for the business:
-            
+
             BUSINESS CONTEXT:
-            {self._format_requirements_for_llm(requirements)}
+            {self._format_requirements_for_llm(safe_requirements)}
             
             Analyze strategic alignment across these dimensions:
             1. Industry Alignment - How well do these requirements align with industry best practices and trends?
