@@ -16,6 +16,14 @@ const roboto = Roboto({
 export const metadata: Metadata = {
   title: "Infra Mind - AI Infrastructure Advisory Platform",
   description: "Intelligent AI-powered advisory platform for strategic AI infrastructure planning, compliance, and scaling recommendations.",
+  icons: {
+    icon: [
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+      { url: '/infra-mind-icon.svg', type: 'image/svg+xml', sizes: 'any' }
+    ],
+    shortcut: '/favicon.svg',
+    apple: '/infra-mind-icon.svg',
+  },
 };
 
 export default function RootLayout({

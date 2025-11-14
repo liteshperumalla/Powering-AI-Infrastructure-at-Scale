@@ -134,7 +134,7 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
             <Card>
                 <CardContent>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                        <Typography variant="h6">
+                        <Typography variant="h6" color="text.primary">
                             {title}
                         </Typography>
                     </Box>
@@ -170,7 +170,7 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
         <Card>
             <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="h6">
+                    <Typography variant="h6" color="text.primary">
                         {title}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -184,7 +184,7 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
                         <Typography variant="body2" color="text.secondary">
                             Average Cost
                         </Typography>
-                        <Typography variant="h6">
+                        <Typography variant="h6" color="text.primary">
                             ${avgCost.toFixed(2)}/month
                         </Typography>
                     </Box>
@@ -202,7 +202,7 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
                         <Typography variant="body2" color="text.secondary">
                             Avg Confidence
                         </Typography>
-                        <Typography variant="h6">
+                        <Typography variant="h6" color="text.primary">
                             {safeRecommendations.length > 0 
                                 ? (safeRecommendations.reduce((sum, r) => sum + r.confidenceScore, 0) / safeRecommendations.length).toFixed(1)
                                 : '0'}%

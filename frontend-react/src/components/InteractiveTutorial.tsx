@@ -304,7 +304,7 @@ export default function InteractiveTutorial({ open, onClose }: InteractiveTutori
                     <Avatar sx={{ bgcolor: 'rgba(255,255,255,0.2)' }}>
                         <PlayArrow />
                     </Avatar>
-                    <Typography variant="h5" fontWeight={600}>
+                    <Typography variant="h5" color="text.primary" fontWeight={600}>
                         Interactive Platform Tutorial
                     </Typography>
                 </Box>
@@ -326,7 +326,7 @@ export default function InteractiveTutorial({ open, onClose }: InteractiveTutori
                         }}
                     >
                         <Box sx={{ p: 2 }}>
-                            <Typography variant="h6" gutterBottom fontWeight={600}>
+                            <Typography variant="h6" color="text.primary" gutterBottom fontWeight={600}>
                                 Tutorial Steps
                             </Typography>
                             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
@@ -397,7 +397,7 @@ export default function InteractiveTutorial({ open, onClose }: InteractiveTutori
                                                 {currentStep.icon}
                                             </Avatar>
                                             <Box>
-                                                <Typography variant="h4" fontWeight={700} gutterBottom>
+                                                <Typography variant="h4" color="text.primary" fontWeight={700} gutterBottom>
                                                     {currentStep.title}
                                                 </Typography>
                                                 <Chip
@@ -417,7 +417,7 @@ export default function InteractiveTutorial({ open, onClose }: InteractiveTutori
                                         <Grid item xs={12} md={6}>
                                             <Card elevation={2}>
                                                 <CardContent>
-                                                    <Typography variant="h6" gutterBottom fontWeight={600}>
+                                                    <Typography variant="h6" color="text.primary" gutterBottom fontWeight={600}>
                                                         <Star sx={{ mr: 1, verticalAlign: 'middle', color: currentStep.color }} />
                                                         Key Features
                                                     </Typography>
@@ -447,7 +447,7 @@ export default function InteractiveTutorial({ open, onClose }: InteractiveTutori
                                         <Grid item xs={12} md={6}>
                                             <Card elevation={2}>
                                                 <CardContent>
-                                                    <Typography variant="h6" gutterBottom fontWeight={600}>
+                                                    <Typography variant="h6" color="text.primary" gutterBottom fontWeight={600}>
                                                         <TrendingUp sx={{ mr: 1, verticalAlign: 'middle', color: currentStep.color }} />
                                                         Benefits
                                                     </Typography>
@@ -478,7 +478,7 @@ export default function InteractiveTutorial({ open, onClose }: InteractiveTutori
                                             <Grid item xs={12}>
                                                 <Card elevation={2}>
                                                     <CardContent>
-                                                        <Typography variant="h6" gutterBottom fontWeight={600}>
+                                                        <Typography variant="h6" color="text.primary" gutterBottom fontWeight={600}>
                                                             <PlayArrow sx={{ mr: 1, verticalAlign: 'middle', color: currentStep.color }} />
                                                             Video Demonstration
                                                         </Typography>
@@ -507,7 +507,7 @@ export default function InteractiveTutorial({ open, onClose }: InteractiveTutori
                                                                 >
                                                                     <PlayArrow sx={{ fontSize: 32 }} />
                                                                 </Avatar>
-                                                                <Typography variant="h6" gutterBottom>
+                                                                <Typography variant="h6" color="text.primary" gutterBottom>
                                                                     Interactive Demo Coming Soon
                                                                 </Typography>
                                                                 <Typography variant="body2" color="text.secondary">

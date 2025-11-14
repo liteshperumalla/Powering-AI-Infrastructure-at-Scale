@@ -83,7 +83,7 @@ const AssessmentSelector: React.FC<AssessmentSelectorProps> = ({
         <Box sx={{ p: 3, maxWidth: 600, mx: 'auto' }}>
             <Card>
                 <CardContent>
-                    <Typography variant="h5" gutterBottom>
+                    <Typography variant="h5" color="text.primary" gutterBottom>
                         {title}
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>

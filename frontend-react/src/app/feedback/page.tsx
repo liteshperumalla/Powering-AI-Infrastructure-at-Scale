@@ -163,7 +163,7 @@ export default function FeedbackPage() {
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
         <Box>
-          <Typography variant="h4" component="h1" gutterBottom>
+          <Typography variant="h4" color="text.primary" component="h1" gutterBottom>
             <Feedback sx={{ mr: 2, verticalAlign: 'middle' }} />
             User Feedback
           </Typography>
@@ -191,7 +191,7 @@ export default function FeedbackPage() {
                     <Typography color="textSecondary" gutterBottom>
                       Total Feedback
                     </Typography>
-                    <Typography variant="h5">
+                    <Typography variant="h5" color="text.primary">
                       {analytics.total_feedback.toLocaleString()}
                     </Typography>
                   </Box>
@@ -209,7 +209,7 @@ export default function FeedbackPage() {
                       Average Rating
                     </Typography>
                     <Box display="flex" alignItems="center">
-                      <Typography variant="h5" sx={{ mr: 1 }}>
+                      <Typography variant="h5" color="text.primary" sx={{ mr: 1 }}>
                         {analytics.average_rating.toFixed(1)}
                       </Typography>
                       <Rating value={analytics.average_rating} readOnly size="small" />
@@ -228,7 +228,7 @@ export default function FeedbackPage() {
                     <Typography color="textSecondary" gutterBottom>
                       Positive Sentiment
                     </Typography>
-                    <Typography variant="h5">
+                    <Typography variant="h5" color="text.primary">
                       {analytics.sentiment_breakdown.positive}%
                     </Typography>
                   </Box>
@@ -245,7 +245,7 @@ export default function FeedbackPage() {
                     <Typography color="textSecondary" gutterBottom>
                       Response Rate
                     </Typography>
-                    <Typography variant="h5">
+                    <Typography variant="h5" color="text.primary">
                       {((analytics.total_feedback / 1000) * 100).toFixed(1)}%
                     </Typography>
                   </Box>
@@ -267,7 +267,7 @@ export default function FeedbackPage() {
         <TabPanel value={tabValue} index={0}>
           {/* Submit Feedback Form */}
           <Box maxWidth="md">
-            <Typography variant="h6" gutterBottom>
+            <Typography variant="h6" color="text.primary" gutterBottom>
               Share Your Feedback
             </Typography>
             <Typography variant="body2" color="textSecondary" paragraph>
@@ -343,7 +343,7 @@ export default function FeedbackPage() {
 
         <TabPanel value={tabValue} index={1}>
           {/* Recent Feedback */}
-          <Typography variant="h6" gutterBottom>Recent Feedback</Typography>
+          <Typography variant="h6" color="text.primary" gutterBottom>Recent Feedback</Typography>
           
           <TableContainer>
             <Table>
@@ -406,14 +406,14 @@ export default function FeedbackPage() {
 
         <TabPanel value={tabValue} index={2}>
           {/* Analytics */}
-          <Typography variant="h6" gutterBottom>Feedback Analytics</Typography>
+          <Typography variant="h6" color="text.primary" gutterBottom>Feedback Analytics</Typography>
           
           {analytics && (
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
                 <Card>
                   <CardContent>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="h6" color="text.primary" gutterBottom>
                       Feedback by Type
                     </Typography>
                     {Object.entries(analytics.by_type).map(([type, data]) => (
@@ -440,7 +440,7 @@ export default function FeedbackPage() {
               <Grid item xs={12} md={6}>
                 <Card>
                   <CardContent>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="h6" color="text.primary" gutterBottom>
                       Sentiment Distribution
                     </Typography>
                     <Box sx={{ mb: 3 }}>

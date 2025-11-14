@@ -68,9 +68,8 @@ export default function About() {
               About Infra Mind
             </Typography>
             <Typography
-              variant="h6"
+              variant="h6" color="text.secondary"
               component="p"
-              color="text.secondary"
               sx={{ maxWidth: 800, mx: 'auto' }}
             >
               Empowering businesses to strategically plan, simulate, and scale their AI infrastructure with confidence through intelligent AI-powered advisory services.
@@ -83,7 +82,7 @@ export default function About() {
       <Container maxWidth="lg" sx={{ py: 8 }}>
         <Grid container spacing={6} alignItems="center">
           <Grid item xs={12} md={6}>
-            <Typography variant="h3" component="h2" gutterBottom>
+            <Typography variant="h3" color="text.primary" component="h2" gutterBottom>
               Our Mission
             </Typography>
             <Typography variant="body1" paragraph sx={{ fontSize: '1.1rem', lineHeight: 1.7 }}>
@@ -105,7 +104,7 @@ export default function About() {
               }}
             >
               <CloudQueue sx={{ fontSize: 100, color: 'primary.main', mb: 2 }} />
-              <Typography variant="h5" sx={{ textAlign: 'center', mb: 1 }}>
+              <Typography variant="h5" color="text.primary" sx={{ textAlign: 'center', mb: 1 }}>
                 AI-First Approach
               </Typography>
               <Typography variant="body1" sx={{ textAlign: 'center', opacity: 0.8 }}>
@@ -121,7 +120,7 @@ export default function About() {
       {/* What We Do Section */}
       <Container maxWidth="lg" sx={{ py: 8 }}>
         <Typography
-          variant="h3"
+          variant="h3" color="text.primary"
           component="h2"
           textAlign="center"
           gutterBottom
@@ -157,7 +156,7 @@ export default function About() {
                 >
                   <Analytics sx={{ fontSize: 32, color: 'white' }} />
                 </Box>
-                <Typography variant="h5" component="h3" gutterBottom fontWeight={600}>
+                <Typography variant="h5" color="text.primary" component="h3" gutterBottom fontWeight={600}>
                   Infrastructure Assessment
                 </Typography>
                 <Typography variant="body1" color="text.secondary">
@@ -193,7 +192,7 @@ export default function About() {
                 >
                   <Security sx={{ fontSize: 32, color: 'white' }} />
                 </Box>
-                <Typography variant="h5" component="h3" gutterBottom fontWeight={600}>
+                <Typography variant="h5" color="text.primary" component="h3" gutterBottom fontWeight={600}>
                   Compliance & Security
                 </Typography>
                 <Typography variant="body1" color="text.secondary">
@@ -229,7 +228,7 @@ export default function About() {
                 >
                   <TrendingUp sx={{ fontSize: 32, color: 'white' }} />
                 </Box>
-                <Typography variant="h5" component="h3" gutterBottom fontWeight={600}>
+                <Typography variant="h5" color="text.primary" component="h3" gutterBottom fontWeight={600}>
                   Cost Optimization
                 </Typography>
                 <Typography variant="body1" color="text.secondary">
@@ -246,7 +245,7 @@ export default function About() {
       {/* Technology Section */}
       <Container maxWidth="lg" sx={{ py: 8 }}>
         <Typography
-          variant="h3"
+          variant="h3" color="text.primary"
           component="h2"
           textAlign="center"
           gutterBottom
@@ -256,7 +255,7 @@ export default function About() {
         </Typography>
         <Grid container spacing={6} alignItems="center">
           <Grid item xs={12} md={6}>
-            <Typography variant="h4" component="h3" gutterBottom>
+            <Typography variant="h4" color="text.primary" component="h3" gutterBottom>
               Multi-Agent AI System
             </Typography>
             <Typography variant="body1" paragraph sx={{ fontSize: '1.1rem', lineHeight: 1.7 }}>
@@ -297,7 +296,7 @@ export default function About() {
                 <Box sx={{ color: theme.palette.primary.main, mb: 1 }}>
                   <People sx={{ fontSize: 40 }} />
                 </Box>
-                <Typography variant="h6" fontWeight={600}>Multi-Cloud</Typography>
+                <Typography variant="h6" color="text.primary" fontWeight={600}>Multi-Cloud</Typography>
                 <Typography variant="body2" color="text.secondary">
                   AWS, Azure, GCP, Alibaba, IBM
                 </Typography>
@@ -314,7 +313,7 @@ export default function About() {
                 <Box sx={{ color: theme.palette.warning.main, mb: 1 }}>
                   <Speed sx={{ fontSize: 40 }} />
                 </Box>
-                <Typography variant="h6" fontWeight={600}>Real-Time</Typography>
+                <Typography variant="h6" color="text.primary" fontWeight={600}>Real-Time</Typography>
                 <Typography variant="body2" color="text.secondary">
                   Live pricing & analysis
                 </Typography>
@@ -331,7 +330,7 @@ export default function About() {
                 <Box sx={{ color: theme.palette.success.main, mb: 1 }}>
                   <Security sx={{ fontSize: 40 }} />
                 </Box>
-                <Typography variant="h6" fontWeight={600}>Secure</Typography>
+                <Typography variant="h6" color="text.primary" fontWeight={600}>Secure</Typography>
                 <Typography variant="body2" color="text.secondary">
                   Enterprise-grade security
                 </Typography>
@@ -348,7 +347,7 @@ export default function About() {
                 <Box sx={{ color: theme.palette.secondary.main, mb: 1 }}>
                   <Analytics sx={{ fontSize: 40 }} />
                 </Box>
-                <Typography variant="h6" fontWeight={600}>Intelligent</Typography>
+                <Typography variant="h6" color="text.primary" fontWeight={600}>Intelligent</Typography>
                 <Typography variant="body2" color="text.secondary">
                   AI-powered insights
                 </Typography>
@@ -364,12 +363,11 @@ export default function About() {
         py: 8 
       }}>
         <Container maxWidth="md" sx={{ textAlign: 'center' }}>
-          <Typography variant="h4" component="h2" gutterBottom>
+          <Typography variant="h4" color="text.primary" component="h2" gutterBottom>
             Ready to Get Started?
           </Typography>
           <Typography 
-            variant="h6" 
-            color="text.secondary" 
+            variant="h6" color="text.secondary" 
             sx={{ mb: 4 }}
           >
             Join organizations worldwide who trust Infra Mind for their AI infrastructure planning
@@ -422,7 +420,7 @@ export default function About() {
             }}
           >
             <Box>
-              <Typography variant="h6" gutterBottom>
+              <Typography variant="h6" color="text.primary" gutterBottom>
                 Infra Mind
               </Typography>
               <Typography variant="body2" color="grey.400">

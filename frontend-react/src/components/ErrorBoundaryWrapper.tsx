@@ -52,7 +52,7 @@ export class ErrorBoundaryWrapper extends Component<Props, State> {
       return (
         <Paper sx={{ p: 3, m: 2, textAlign: 'center' }}>
           <ErrorOutlineIcon sx={{ fontSize: 48, color: 'error.main', mb: 2 }} />
-          <Typography variant="h6" gutterBottom>
+          <Typography variant="h6" color="text.primary" gutterBottom>
             Something went wrong
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>

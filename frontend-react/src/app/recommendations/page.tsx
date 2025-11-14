@@ -83,6 +83,12 @@ function RecommendationsPageContent() {
     interactionType: 'view' | 'click' | 'implement' | 'save' | 'share' | 'rate' | 'dismiss',
     interactionValue?: number
   ) => {
+    // Validate recommendation ID before tracking
+    if (!recommendationId || recommendationId === 'undefined') {
+      console.warn(`⚠️ Skipping ${interactionType} tracking: Invalid recommendation ID`);
+      return;
+    }
+
     try {
       await apiClient.trackRecommendationInteraction(
         recommendationId,
@@ -92,7 +98,7 @@ function RecommendationsPageContent() {
       );
       console.log(`✅ Tracked ${interactionType} for recommendation ${recommendationId}`);
     } catch (error) {
-      console.error(`Failed to track ${interactionType}:`, error);
+      console.error(`Failed to track ${interactionType} interaction for ${recommendationId}:`, error);
     }
   };
 
@@ -100,8 +106,11 @@ function RecommendationsPageContent() {
   useEffect(() => {
     if (recommendations.length > 0) {
       recommendations.forEach((rec) => {
-        // Record view start time
-        setViewStartTimes(prev => ({ ...prev, [rec._id]: Date.now() }));
+        // Only track if recommendation has a valid ID
+        if (rec._id) {
+          // Record view start time
+          setViewStartTimes(prev => ({ ...prev, [rec._id]: Date.now() }));
+        }
       });
     }
   }, [recommendations]);
@@ -499,7 +508,7 @@ Generated: ${new Date().toLocaleString()}
             <RecommendIcon 
               sx={{ fontSize: 80, color: 'error.main', mb: 3, opacity: 0.7 }} 
             />
-            <Typography variant="h4" gutterBottom color="error.main">
+            <Typography variant="h4" color="error.main" gutterBottom>
               Unable to Load Recommendations
             </Typography>
             <Typography variant="body1" color="text.secondary" sx={{ mb: 3, maxWidth: 600, mx: 'auto' }}>
@@ -572,7 +581,7 @@ Generated: ${new Date().toLocaleString()}
         </Button>
         
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h4" gutterBottom>
+          <Typography variant="h4" color="text.primary" gutterBottom>
             <RecommendIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
             Recommendations
           </Typography>
@@ -622,7 +631,7 @@ Generated: ${new Date().toLocaleString()}
       {recommendations.length === 0 ? (
         <Paper sx={{ p: 4, textAlign: 'center' }}>
           <RecommendIcon sx={{ fontSize: 64, color: 'text.secondary', mb: 2 }} />
-          <Typography variant="h6" gutterBottom>
+          <Typography variant="h6" color="text.primary" gutterBottom>
             AI Analysis in Progress
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
@@ -658,7 +667,7 @@ Generated: ${new Date().toLocaleString()}
                   {/* Header */}
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                     <Box sx={{ flex: 1 }}>
-                      <Typography variant="h6" gutterBottom>
+                      <Typography variant="h6" color="text.primary" gutterBottom>
                         {rec.title || 'Infrastructure Optimization Recommendation'}
                       </Typography>
                       <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
@@ -708,12 +717,12 @@ Generated: ${new Date().toLocaleString()}
                   {/* Key Metrics */}
                   <Grid container spacing={2} sx={{ mb: 3 }}>
                     {[
-                      rec.estimated_cost_savings > 0 && {
+                      ...(rec.estimated_cost_savings > 0 ? [{
                         key: `cost-savings-${rec._id}`,
                         content: (
                           <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'success.light', color: 'success.contrastText' }}>
                             <MonetizationOnIcon sx={{ mb: 1 }} />
-                            <Typography variant="h6">
+                            <Typography variant="h6" color="text.primary">
                               ${rec.estimated_cost_savings.toLocaleString()}
                             </Typography>
                             <Typography variant="caption">
@@ -721,13 +730,13 @@ Generated: ${new Date().toLocaleString()}
                             </Typography>
                           </Paper>
                         )
-                      },
+                      }] : []),
                       {
                         key: `implementation-effort-${rec._id}`,
                         content: (
                           <Paper sx={{ p: 2, textAlign: 'center' }}>
                             <TrendingUpIcon sx={{ mb: 1 }} />
-                            <Typography variant="h6">
+                            <Typography variant="h6" color="text.primary">
                               {rec.implementation_effort || 'Medium'}
                             </Typography>
                             <Typography variant="caption">
@@ -736,11 +745,11 @@ Generated: ${new Date().toLocaleString()}
                           </Paper>
                         )
                       },
-                      rec.estimated_implementation_time && {
+                      ...(rec.estimated_implementation_time ? [{
                         key: `timeline-${rec._id}`,
                         content: (
                           <Paper sx={{ p: 2, textAlign: 'center' }}>
-                            <Typography variant="h6">
+                            <Typography variant="h6" color="text.primary">
                               {rec.estimated_implementation_time}
                             </Typography>
                             <Typography variant="caption">
@@ -748,13 +757,13 @@ Generated: ${new Date().toLocaleString()}
                             </Typography>
                           </Paper>
                         )
-                      },
-                      rec.cloud_provider && {
+                      }] : []),
+                      ...(rec.cloud_provider ? [{
                         key: `cloud-provider-${rec._id}`,
                         content: (
                           <Paper sx={{ p: 2, textAlign: 'center' }}>
                             <CloudIcon sx={{ mb: 1 }} />
-                            <Typography variant="h6">
+                            <Typography variant="h6" color="text.primary">
                               {rec.cloud_provider.toUpperCase()}
                             </Typography>
                             <Typography variant="caption">
@@ -762,8 +771,8 @@ Generated: ${new Date().toLocaleString()}
                             </Typography>
                           </Paper>
                         )
-                      }
-                    ].filter(Boolean).map((metric: any) => (
+                      }] : [])
+                    ].map((metric: any) => (
                       <Grid item xs={12} sm={6} md={3} key={metric.key}>
                         {metric.content}
                       </Grid>

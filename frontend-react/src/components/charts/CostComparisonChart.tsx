@@ -54,7 +54,7 @@ const CostComparisonChart: React.FC<CostComparisonChartProps> = ({
         return (
             <Card>
                 <CardContent>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="h6" color="text.primary" gutterBottom>
                         {title}
                     </Typography>
                     <Box sx={{ 
@@ -145,7 +145,7 @@ const CostComparisonChart: React.FC<CostComparisonChartProps> = ({
         <Card>
             <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="h6">
+                    <Typography variant="h6" color="text.primary">
                         {title}
                     </Typography>
                     <ToggleButtonGroup

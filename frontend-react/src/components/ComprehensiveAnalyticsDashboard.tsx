@@ -289,7 +289,7 @@ export default function ComprehensiveAnalyticsDashboard() {
         <Box>
             {/* Header and Filters */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h5" gutterBottom>
+                <Typography variant="h5" color="text.primary" gutterBottom>
                     Comprehensive Analytics
                 </Typography>
                 <Stack direction="row" spacing={2}>
@@ -326,7 +326,7 @@ export default function ComprehensiveAnalyticsDashboard() {
                 <Grid item xs={12} sm={6} md={4}>
                     <Card>
                         <CardContent>
-                            <Typography variant="h6" gutterBottom>
+                            <Typography variant="h6" color="text.primary" gutterBottom>
                                 Overall Performance
                             </Typography>
                             <Stack direction="row" alignItems="center" spacing={1}>
@@ -350,7 +350,7 @@ export default function ComprehensiveAnalyticsDashboard() {
                 <Grid item xs={12} sm={6} md={4}>
                     <Card>
                         <CardContent>
-                            <Typography variant="h6" gutterBottom>
+                            <Typography variant="h6" color="text.primary" gutterBottom>
                                 Cost Efficiency
                             </Typography>
                             <Stack direction="row" alignItems="center" spacing={1}>
@@ -375,7 +375,7 @@ export default function ComprehensiveAnalyticsDashboard() {
                 <Grid item xs={12} sm={6} md={4}>
                     <Card>
                         <CardContent>
-                            <Typography variant="h6" gutterBottom>
+                            <Typography variant="h6" color="text.primary" gutterBottom>
                                 Security & Compliance
                             </Typography>
                             <Stack direction="row" alignItems="center" spacing={1}>
@@ -413,7 +413,7 @@ export default function ComprehensiveAnalyticsDashboard() {
             {activeTab === 0 && (
                 <Card>
                     <CardContent>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             Operational Insights
                         </Typography>
                         <List>
@@ -446,7 +446,7 @@ export default function ComprehensiveAnalyticsDashboard() {
             {activeTab === 1 && (
                 <Card>
                     <CardContent>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             Performance by Service
                         </Typography>
                         <RecommendationScoreChart
@@ -465,7 +465,7 @@ export default function ComprehensiveAnalyticsDashboard() {
             {activeTab === 2 && (
                 <Card>
                     <CardContent>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             Cost Breakdown by Provider
                         </Typography>
                         <CostComparisonChart
@@ -486,7 +486,7 @@ export default function ComprehensiveAnalyticsDashboard() {
             {activeTab === 3 && (
                 <Card>
                     <CardContent>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             Feature Usage & Engagement
                         </Typography>
                         <Grid container spacing={2}>
@@ -516,7 +516,7 @@ export default function ComprehensiveAnalyticsDashboard() {
             {/* Alerts Summary */}
             <Card sx={{ mt: 3 }}>
                 <CardContent>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="h6" color="text.primary" gutterBottom>
                         Alerts Summary
                     </Typography>
                     <Grid container spacing={2}>
@@ -526,7 +526,7 @@ export default function ComprehensiveAnalyticsDashboard() {
                                     variant="outlined"
                                     sx={{ p: 2, textAlign: 'center' }}
                                 >
-                                    <Typography variant="h5" color={
+                                    <Typography variant="h5" color="text.primary" color={
                                         severity === 'critical' ? 'error' :
                                             severity === 'high' ? 'error' :
                                                 severity === 'medium' ? 'warning' : 'info'

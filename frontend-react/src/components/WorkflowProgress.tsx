@@ -168,7 +168,7 @@ const WorkflowProgress: React.FC<WorkflowProgressProps> = ({
         <Card sx={{ mb: 3 }}>
             <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="h6">
+                    <Typography variant="h6" color="text.primary">
                         Workflow Progress
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>

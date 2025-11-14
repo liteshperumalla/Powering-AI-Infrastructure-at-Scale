@@ -141,7 +141,7 @@ const EnhancedDashboardDemo: React.FC = () => {
             {/* Dashboard Header */}
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
                 <div>
-                    <Typography variant="h4" fontWeight={600} sx={{ mb: 1 }}>
+                    <Typography variant="h4" color="text.primary" fontWeight={600} sx={{ mb: 1 }}>
                         Enhanced Analytics Dashboard
                     </Typography>
                     <Typography variant="body1" color="text.secondary">
@@ -173,7 +173,7 @@ const EnhancedDashboardDemo: React.FC = () => {
             {/* Global Filters */}
             <Card sx={{ mb: 3 }}>
                 <CardContent>
-                    <Typography variant="h6" sx={{ mb: 2 }}>
+                    <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
                         Dashboard Filters
                     </Typography>
                     <Stack direction="row" spacing={2}>
@@ -239,7 +239,7 @@ const EnhancedDashboardDemo: React.FC = () => {
             {/* Feature Highlights */}
             <Card sx={{ mt: 3 }}>
                 <CardContent>
-                    <Typography variant="h6" sx={{ mb: 2 }}>
+                    <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
                         🚀 Enhanced Features Demonstrated
                     </Typography>
                     <Grid container spacing={2}>

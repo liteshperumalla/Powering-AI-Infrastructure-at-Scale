@@ -72,7 +72,7 @@ export default function SystemStatusPage() {
                     <Box sx={{ mb: 4 }}>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
                             <MonitorHeart sx={{ fontSize: 32, color: 'primary.main' }} />
-                            <Typography variant="h4" gutterBottom sx={{ mb: 0 }}>
+                            <Typography variant="h4" color="text.primary" gutterBottom sx={{ mb: 0 }}>
                                 Admin System Status
                             </Typography>
                             <Button
@@ -102,7 +102,7 @@ export default function SystemStatusPage() {
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                         <CloudQueue color="primary" />
                                         <Box>
-                                            <Typography variant="h6">System Health</Typography>
+                                            <Typography variant="h6" color="text.primary">System Health</Typography>
                                             {systemHealth ? (
                                                 <Chip
                                                     label={systemHealth.status || 'Unknown'}
@@ -124,7 +124,7 @@ export default function SystemStatusPage() {
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                         <MonitorHeart color="primary" />
                                         <Box>
-                                            <Typography variant="h6">Active Workflows</Typography>
+                                            <Typography variant="h6" color="text.primary">Active Workflows</Typography>
                                             <Typography variant="h4" color="primary.main">
                                                 {systemMetrics?.active_workflows || '0'}
                                             </Typography>
@@ -140,7 +140,7 @@ export default function SystemStatusPage() {
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                         <CloudQueue color="primary" />
                                         <Box>
-                                            <Typography variant="h6">WebSocket</Typography>
+                                            <Typography variant="h6" color="text.primary">WebSocket</Typography>
                                             <Chip
                                                 label={wsConnected ? 'Connected' : 'Disconnected'}
                                                 color={wsConnected ? 'success' : 'error'}
@@ -158,7 +158,7 @@ export default function SystemStatusPage() {
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                         <MonitorHeart color="primary" />
                                         <Box>
-                                            <Typography variant="h6">Database</Typography>
+                                            <Typography variant="h6" color="text.primary">Database</Typography>
                                             <Chip
                                                 label={systemHealth?.database_status || 'Unknown'}
                                                 color={systemHealth?.database_status === 'connected' ? 'success' : 'warning'}
@@ -175,7 +175,7 @@ export default function SystemStatusPage() {
                     {systemHealth && (
                         <Card sx={{ mb: 4 }}>
                             <CardContent>
-                                <Typography variant="h6" gutterBottom>
+                                <Typography variant="h6" color="text.primary" gutterBottom>
                                     System Details
                                 </Typography>
                                 <Grid container spacing={2}>

@@ -356,7 +356,7 @@ const InteractiveCharts: React.FC<InteractiveChartsProps> = ({
             <CardContent sx={{ p: 2 }}>
                 {/* Chart Header */}
                 <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                    <Typography variant="h6" component="h2">
+                    <Typography variant="h6" color="text.primary" component="h2">
                         {config.title}
                     </Typography>
                     
@@ -612,7 +612,7 @@ const InteractiveCharts: React.FC<InteractiveChartsProps> = ({
             >
                 <DialogTitle>
                     <Stack direction="row" justifyContent="space-between" alignItems="center">
-                        <Typography variant="h5">{config.title}</Typography>
+                        <Typography variant="h5" color="text.primary">{config.title}</Typography>
                         <IconButton onClick={() => setFullscreen(false)}>
                             <CloseIcon />
                         </IconButton>

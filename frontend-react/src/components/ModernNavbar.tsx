@@ -230,9 +230,12 @@ const ModernNavbar = React.memo(function ModernNavbar({
                 borderBottom: 1,
                 borderColor: 'divider'
             }}>
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    Infra Mind
-                </Typography>
+                <Box
+                    component="img"
+                    src={theme.palette.mode === 'dark' ? '/infra-mind-logo-dark.svg' : '/infra-mind-logo.svg'}
+                    alt="Infra Mind"
+                    sx={{ height: 28 }}
+                />
                 <IconButton 
                     onClick={handleMobileDrawerToggle}
                     aria-label="Close navigation menu"
@@ -290,7 +293,7 @@ const ModernNavbar = React.memo(function ModernNavbar({
                         )}
                         
                         <Typography
-                            variant="h6"
+                            variant="h6" color="text.primary"
                             component={pathname === '/' ? 'div' : Link}
                             href={pathname === '/' ? undefined : '/'}
                             sx={{
@@ -306,12 +309,16 @@ const ModernNavbar = React.memo(function ModernNavbar({
                                 }
                             }}
                         >
-                            <CloudQueue />
-                            Infra Mind
+                            <Box
+                                component="img"
+                                src={theme.palette.mode === 'dark' ? '/infra-mind-logo-dark.svg' : '/infra-mind-logo.svg'}
+                                alt="Infra Mind"
+                                sx={{ height: 32 }}
+                            />
                         </Typography>
 
                         {/* Desktop Navigation */}
-                        {!isMobile && (
+                        {!isMobile && isAuthenticated && (
                             <Box sx={{ ml: 4, display: 'flex', gap: 1 }}>
                                 {primaryNavigationItems.slice(0, 5).map((item) => (
                                     <Button
@@ -342,11 +349,10 @@ const ModernNavbar = React.memo(function ModernNavbar({
                                         ) : item.label}
                                     </Button>
                                 ))}
-                                {isAuthenticated && (
-                                    <Button
-                                        variant="outlined"
-                                        size="small"
-                                        onClick={handleMoreMenuOpen}
+                                <Button
+                                    variant="outlined"
+                                    size="small"
+                                    onClick={handleMoreMenuOpen}
                                         sx={{
                                             minWidth: 'auto',
                                             textTransform: 'none',
@@ -357,7 +363,6 @@ const ModernNavbar = React.memo(function ModernNavbar({
                                     >
                                         More
                                     </Button>
-                                )}
                             </Box>
                         )}
                     </Box>
@@ -634,7 +639,7 @@ const ModernNavbar = React.memo(function ModernNavbar({
                 }}
             >
                 <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-                    <Typography variant="h6" fontWeight={600}>
+                    <Typography variant="h6" color="text.primary" fontWeight={600}>
                         Notifications
                     </Typography>
                 </Box>

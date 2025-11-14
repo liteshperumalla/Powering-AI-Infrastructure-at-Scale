@@ -208,7 +208,7 @@ function MFAVerifyPageComponent() {
                             
                             <Typography 
                                 component="h1" 
-                                variant="h4" 
+                                variant="h4" color="text.primary" 
                                 gutterBottom
                                 sx={{
                                     fontWeight: 700,
@@ -255,7 +255,7 @@ function MFAVerifyPageComponent() {
                                         <CardContent sx={{ p: 3 }}>
                                             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                                                 <Smartphone sx={{ fontSize: 32, mr: 2, color: 'primary.main' }} />
-                                                <Typography variant="h6" fontWeight="bold">
+                                                <Typography variant="h6" color="text.primary" fontWeight="bold">
                                                     Authenticator App
                                                 </Typography>
                                             </Box>
@@ -332,7 +332,7 @@ function MFAVerifyPageComponent() {
                                         <CardContent sx={{ p: 3 }}>
                                             <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                                                 <VpnKey sx={{ fontSize: 32, mr: 2, color: 'warning.main' }} />
-                                                <Typography variant="h6" fontWeight="bold">
+                                                <Typography variant="h6" color="text.primary" fontWeight="bold">
                                                     Backup Code
                                                 </Typography>
                                             </Box>

@@ -237,7 +237,7 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
     <Grid container spacing={3}>
       <Grid item xs={12}>
         <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-          <Typography variant="h6">Active Deployments</Typography>
+          <Typography variant="h6" color="text.primary">Active Deployments</Typography>
           <Button startIcon={<Refresh />} onClick={loadInitialData} disabled={loading}>
             Refresh
           </Button>
@@ -249,7 +249,7 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
           <Card>
             <CardContent>
               <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                <Typography variant="h6" noWrap>{deployment.name}</Typography>
+                <Typography variant="h6" color="text.primary" noWrap>{deployment.name}</Typography>
                 <Chip 
                   label={deployment.status} 
                   color={deployment.status === 'success' ? 'success' : deployment.status === 'failed' ? 'error' : 'default'}
@@ -296,7 +296,7 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
   const renderRollbackPlansTab = () => (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h6">Rollback Plans</Typography>
+        <Typography variant="h6" color="text.primary">Rollback Plans</Typography>
         <Button 
           variant="contained" 
           startIcon={<PlayArrow />}
@@ -373,13 +373,13 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
 
   const renderExecutionHistoryTab = () => (
     <Box>
-      <Typography variant="h6" mb={3}>Execution History</Typography>
+      <Typography variant="h6" color="text.primary" mb={3}>Execution History</Typography>
       
       {Array.isArray(executions) ? executions.map((execution) => (
         <Card key={execution.id} sx={{ mb: 2 }}>
           <CardContent>
             <Box display="flex" justifyContent="between" alignItems="center" mb={2}>
-              <Typography variant="h6">{execution.rollback_plan_id}</Typography>
+              <Typography variant="h6" color="text.primary">{execution.rollback_plan_id}</Typography>
               <Chip 
                 label={execution.status}
                 color={execution.status === 'completed' ? 'success' : execution.status === 'failed' ? 'error' : 'default'}
@@ -454,7 +454,7 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
       <Grid item xs={12} md={6}>
         <Card>
           <CardContent>
-            <Typography variant="h6" mb={2}>System Health Overview</Typography>
+            <Typography variant="h6" color="text.primary" mb={2}>System Health Overview</Typography>
             {healthChecks.length > 0 && (
               <ResponsiveContainer width="100%" height={300}>
                 <LineChart data={healthChecks.slice(0, 10)}>
@@ -473,7 +473,7 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
       <Grid item xs={12} md={6}>
         <Card>
           <CardContent>
-            <Typography variant="h6" mb={2}>Health Metrics</Typography>
+            <Typography variant="h6" color="text.primary" mb={2}>Health Metrics</Typography>
             <List>
               {Array.isArray(healthChecks) ? healthChecks.slice(0, 5).map((check, index) => (
                 <ListItem key={index}>
@@ -500,7 +500,7 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
       <Grid item xs={12}>
         <Card>
           <CardContent>
-            <Typography variant="h6" mb={2}>Auto-Trigger Rules</Typography>
+            <Typography variant="h6" color="text.primary" mb={2}>Auto-Trigger Rules</Typography>
             <TableContainer>
               <Table>
                 <TableHead>
@@ -565,7 +565,7 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
               <CardContent>
                 <Box display="flex" alignItems="center" mb={2}>
                   <TrendingUp color="primary" sx={{ mr: 1 }} />
-                  <Typography variant="h6">Success Rate</Typography>
+                  <Typography variant="h6" color="text.primary">Success Rate</Typography>
                 </Box>
                 <Typography variant="h4" color="success.main">
                   {metrics.success_rate ? metrics.success_rate.toFixed(1) : '0.0'}%
@@ -579,9 +579,9 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
               <CardContent>
                 <Box display="flex" alignItems="center" mb={2}>
                   <Speed color="primary" sx={{ mr: 1 }} />
-                  <Typography variant="h6">Avg Duration</Typography>
+                  <Typography variant="h6" color="text.primary">Avg Duration</Typography>
                 </Box>
-                <Typography variant="h4">
+                <Typography variant="h4" color="text.primary">
                   {metrics.average_duration || '0 min'}
                 </Typography>
               </CardContent>
@@ -593,9 +593,9 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
               <CardContent>
                 <Box display="flex" alignItems="center" mb={2}>
                   <History color="primary" sx={{ mr: 1 }} />
-                  <Typography variant="h6">Total Executions</Typography>
+                  <Typography variant="h6" color="text.primary">Total Executions</Typography>
                 </Box>
-                <Typography variant="h4">
+                <Typography variant="h4" color="text.primary">
                   {metrics.total_executions || 0}
                 </Typography>
               </CardContent>
@@ -607,7 +607,7 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
               <CardContent>
                 <Box display="flex" alignItems="center" mb={2}>
                   <Error color="primary" sx={{ mr: 1 }} />
-                  <Typography variant="h6">Failed Executions</Typography>
+                  <Typography variant="h6" color="text.primary">Failed Executions</Typography>
                 </Box>
                 <Typography variant="h4" color="error.main">
                   {metrics.failed_executions || 0}
@@ -619,7 +619,7 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
           <Grid item xs={12} md={8}>
             <Card>
               <CardContent>
-                <Typography variant="h6" mb={2}>Rollback Trends</Typography>
+                <Typography variant="h6" color="text.primary" mb={2}>Rollback Trends</Typography>
                 {metrics.execution_trends && metrics.execution_trends.length > 0 && (
                   <ResponsiveContainer width="100%" height={400}>
                     <AreaChart data={metrics.execution_trends}>
@@ -639,7 +639,7 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
           <Grid item xs={12} md={4}>
             <Card>
               <CardContent>
-                <Typography variant="h6" mb={2}>Rollback by Strategy</Typography>
+                <Typography variant="h6" color="text.primary" mb={2}>Rollback by Strategy</Typography>
                 {metrics.strategy_distribution && metrics.strategy_distribution.length > 0 && (
                   <ResponsiveContainer width="100%" height={400}>
                     <PieChart>
@@ -682,7 +682,7 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom>
+      <Typography variant="h4" color="text.primary" gutterBottom>
         Rollback Automation
       </Typography>
       <Typography variant="subtitle1" color="text.secondary" mb={3}>

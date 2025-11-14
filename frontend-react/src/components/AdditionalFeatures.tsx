@@ -113,7 +113,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
   return (
     <Card>
       <CardContent>
-        <Typography variant="h5" gutterBottom sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
+        <Typography variant="h5" color="text.primary" gutterBottom sx={{ mb: 3, display: 'flex', alignItems: 'center' }}>
           <BarChart sx={{ mr: 1 }} />
           Additional Features & Insights
         </Typography>
@@ -137,7 +137,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
           {features.budget && (
             <Grid container spacing={3}>
               <Grid item xs={12}>
-                <Typography variant="h6" gutterBottom>Budget Forecast Summary</Typography>
+                <Typography variant="h6" color="text.primary" gutterBottom>Budget Forecast Summary</Typography>
                 <Typography variant="body2" color="text.secondary" paragraph>
                   {features.budget.summary?.description || 'Financial planning and budget forecasting for your infrastructure'}
                 </Typography>
@@ -212,14 +212,14 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
           {features.executive && (
             <Grid container spacing={3}>
               <Grid item xs={12}>
-                <Typography variant="h6" gutterBottom>Executive Summary</Typography>
+                <Typography variant="h6" color="text.primary" gutterBottom>Executive Summary</Typography>
               </Grid>
 
               {features.executive.key_metrics && (
                 <>
                   <Grid item xs={12} sm={6} md={3}>
                     <Paper sx={{ p: 2, textAlign: 'center' }}>
-                      <Typography variant="h4">
+                      <Typography variant="h4" color="text.primary">
                         {features.executive.key_metrics.total_recommendations || 0}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
@@ -230,7 +230,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
 
                   <Grid item xs={12} sm={6} md={3}>
                     <Paper sx={{ p: 2, textAlign: 'center' }}>
-                      <Typography variant="h4">
+                      <Typography variant="h4" color="text.primary">
                         ${features.executive.key_metrics.total_cost_savings?.toLocaleString() || 0}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
@@ -241,7 +241,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
 
                   <Grid item xs={12} sm={6} md={3}>
                     <Paper sx={{ p: 2, textAlign: 'center' }}>
-                      <Typography variant="h4">
+                      <Typography variant="h4" color="text.primary">
                         {features.executive.key_metrics.avg_confidence_score
                           ? `${Math.round(features.executive.key_metrics.avg_confidence_score * 100)}%`
                           : 'N/A'}
@@ -254,7 +254,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
 
                   <Grid item xs={12} sm={6} md={3}>
                     <Paper sx={{ p: 2, textAlign: 'center' }}>
-                      <Typography variant="h4">
+                      <Typography variant="h4" color="text.primary">
                         {features.executive.key_metrics.implementation_timeline || 'N/A'}
                       </Typography>
                       <Typography variant="body2" color="text.secondary">
@@ -288,7 +288,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
           {features.vendor_lockin && (
             <Grid container spacing={3}>
               <Grid item xs={12}>
-                <Typography variant="h6" gutterBottom>Vendor Lock-in Risk Assessment</Typography>
+                <Typography variant="h6" color="text.primary" gutterBottom>Vendor Lock-in Risk Assessment</Typography>
               </Grid>
 
               <Grid item xs={12} md={6}>
@@ -306,7 +306,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
                         sx={{ height: 10, borderRadius: 5 }}
                       />
                     </Box>
-                    <Typography variant="h6">
+                    <Typography variant="h6" color="text.primary">
                       {Math.round((features.vendor_lockin.risk_score || 0) * 100)}%
                     </Typography>
                   </Box>
@@ -351,7 +351,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
           {features.performance && (
             <Grid container spacing={3}>
               <Grid item xs={12}>
-                <Typography variant="h6" gutterBottom>Performance Metrics</Typography>
+                <Typography variant="h6" color="text.primary" gutterBottom>Performance Metrics</Typography>
               </Grid>
 
               {features.performance.summary && (
@@ -359,7 +359,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
                   <Grid item xs={12} sm={6} md={3}>
                     <Paper sx={{ p: 2, textAlign: 'center' }}>
                       <Typography variant="body2" color="text.secondary">Overall Health</Typography>
-                      <Typography variant="h5" sx={{ mt: 1, textTransform: 'capitalize' }}>
+                      <Typography variant="h5" color="text.primary" sx={{ mt: 1, textTransform: 'capitalize' }}>
                         {features.performance.summary.overall_health || 'Good'}
                       </Typography>
                     </Paper>
@@ -368,7 +368,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
                   <Grid item xs={12} sm={6} md={3}>
                     <Paper sx={{ p: 2, textAlign: 'center' }}>
                       <Typography variant="body2" color="text.secondary">Avg Response Time</Typography>
-                      <Typography variant="h5" sx={{ mt: 1 }}>
+                      <Typography variant="h5" color="text.primary" sx={{ mt: 1 }}>
                         {features.performance.summary.avg_response_time_ms || 0}ms
                       </Typography>
                     </Paper>
@@ -377,7 +377,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
                   <Grid item xs={12} sm={6} md={3}>
                     <Paper sx={{ p: 2, textAlign: 'center' }}>
                       <Typography variant="body2" color="text.secondary">Uptime</Typography>
-                      <Typography variant="h5" sx={{ mt: 1 }}>
+                      <Typography variant="h5" color="text.primary" sx={{ mt: 1 }}>
                         {features.performance.summary.uptime_percentage || 0}%
                       </Typography>
                     </Paper>
@@ -386,7 +386,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
                   <Grid item xs={12} sm={6} md={3}>
                     <Paper sx={{ p: 2, textAlign: 'center' }}>
                       <Typography variant="body2" color="text.secondary">Active Alerts</Typography>
-                      <Typography variant="h5" sx={{ mt: 1, color: features.performance.summary.active_alerts > 0 ? 'error.main' : 'success.main' }}>
+                      <Typography variant="h5" color="text.primary" sx={{ mt: 1, color: features.performance.summary.active_alerts > 0 ? 'error.main' : 'success.main' }}>
                         {features.performance.summary.active_alerts || 0}
                       </Typography>
                     </Paper>
@@ -402,7 +402,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
           {features.compliance && (
             <Grid container spacing={3}>
               <Grid item xs={12}>
-                <Typography variant="h6" gutterBottom>Compliance Status</Typography>
+                <Typography variant="h6" color="text.primary" gutterBottom>Compliance Status</Typography>
               </Grid>
 
               {features.compliance.summary && (
@@ -418,7 +418,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
                           sx={{ height: 10, borderRadius: 5 }}
                         />
                       </Box>
-                      <Typography variant="h6">
+                      <Typography variant="h6" color="text.primary">
                         {Math.round((features.compliance.summary.compliance_score || 0) * 100)}%
                       </Typography>
                     </Box>
@@ -452,7 +452,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
           {features.approvals && (
             <Grid container spacing={3}>
               <Grid item xs={12}>
-                <Typography variant="h6" gutterBottom>Approval Workflows</Typography>
+                <Typography variant="h6" color="text.primary" gutterBottom>Approval Workflows</Typography>
                 <Typography variant="body2" color="text.secondary" paragraph>
                   {features.approvals.description || 'Automated approval workflows for infrastructure changes'}
                 </Typography>
@@ -483,7 +483,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
           {features.impact && (
             <Grid container spacing={3}>
               <Grid item xs={12}>
-                <Typography variant="h6" gutterBottom>Change Impact Analysis</Typography>
+                <Typography variant="h6" color="text.primary" gutterBottom>Change Impact Analysis</Typography>
               </Grid>
 
               {features.impact.summary && (
@@ -512,7 +512,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
           {features.rollback && (
             <Grid container spacing={3}>
               <Grid item xs={12}>
-                <Typography variant="h6" gutterBottom>Rollback & Recovery Plans</Typography>
+                <Typography variant="h6" color="text.primary" gutterBottom>Rollback & Recovery Plans</Typography>
               </Grid>
 
               {features.rollback.plans?.length > 0 && (
@@ -545,7 +545,7 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
           {features.experiments && (
             <Grid container spacing={3}>
               <Grid item xs={12}>
-                <Typography variant="h6" gutterBottom>A/B Testing & Experiments</Typography>
+                <Typography variant="h6" color="text.primary" gutterBottom>A/B Testing & Experiments</Typography>
               </Grid>
 
               {features.experiments.active_experiments?.length > 0 && (

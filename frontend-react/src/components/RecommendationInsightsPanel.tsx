@@ -280,7 +280,7 @@ export default function RecommendationInsightsPanel({
   return (
     <Box>
       <Box sx={{ mb: 3, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Typography variant="h5" color="text.primary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Lightbulb color="primary" sx={{ fontSize: 32 }} />
           Actionable Insights
         </Typography>
@@ -322,7 +322,7 @@ export default function RecommendationInsightsPanel({
 
               <Box sx={{ flex: 1 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                  <Typography variant="h6" color="text.primary" sx={{ fontWeight: 600 }}>
                     {insight.title}
                   </Typography>
                   <Chip
@@ -357,7 +357,7 @@ export default function RecommendationInsightsPanel({
                       <Typography variant="caption" color="text.secondary" display="block">
                         ROI
                       </Typography>
-                      <Typography variant="h6" fontWeight="bold" color={insight.color}>
+                      <Typography variant="h6" color="text.primary" fontWeight="bold" color={insight.color}>
                         {insight.metrics.roi.toFixed(1)}x
                       </Typography>
                     </Box>
@@ -368,7 +368,7 @@ export default function RecommendationInsightsPanel({
                       <Typography variant="caption" color="text.secondary" display="block">
                         Potential Savings
                       </Typography>
-                      <Typography variant="h6" fontWeight="bold" color="success.main">
+                      <Typography variant="h6" color="success.main" fontWeight="bold">
                         ${insight.metrics.potential_savings.toLocaleString()}
                       </Typography>
                     </Box>
@@ -378,7 +378,7 @@ export default function RecommendationInsightsPanel({
                     <Typography variant="caption" color="text.secondary" display="block">
                       Time to Implement
                     </Typography>
-                    <Typography variant="h6" fontWeight="bold">
+                    <Typography variant="h6" color="text.primary" fontWeight="bold">
                       {insight.metrics.implementation_time}
                     </Typography>
                   </Box>

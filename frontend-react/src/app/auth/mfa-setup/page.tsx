@@ -203,7 +203,7 @@ export default function MFASetupPage() {
                             
                             <Typography 
                                 component="h1" 
-                                variant="h4" 
+                                variant="h4" color="text.primary" 
                                 gutterBottom
                                 sx={{
                                     fontWeight: 700,
@@ -267,7 +267,7 @@ export default function MFASetupPage() {
                                                         <Card>
                                                             <CardContent sx={{ textAlign: 'center' }}>
                                                                 <QrCode sx={{ fontSize: 40, mb: 2, color: 'primary.main' }} />
-                                                                <Typography variant="h6" gutterBottom>
+                                                                <Typography variant="h6" color="text.primary" gutterBottom>
                                                                     Scan QR Code
                                                                 </Typography>
                                                                 <Box sx={{ p: 2, mb: 2 }}>
@@ -293,7 +293,7 @@ export default function MFASetupPage() {
                                                         <Card>
                                                             <CardContent>
                                                                 <Smartphone sx={{ fontSize: 40, mb: 2, color: 'primary.main' }} />
-                                                                <Typography variant="h6" gutterBottom>
+                                                                <Typography variant="h6" color="text.primary" gutterBottom>
                                                                     Manual Setup
                                                                 </Typography>
                                                                 <Typography variant="body2" sx={{ mb: 2 }}>

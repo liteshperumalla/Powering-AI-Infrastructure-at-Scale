@@ -165,7 +165,7 @@ function AssessmentDetailPage() {
           Back to Dashboard
         </Button>
         
-        <Typography variant="h4" gutterBottom>
+        <Typography variant="h4" color="text.primary" gutterBottom>
           {assessment.title}
         </Typography>
         
@@ -203,7 +203,7 @@ function AssessmentDetailPage() {
           {/* Progress Section */}
           <Card sx={{ mb: 3 }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
+              <Typography variant="h6" color="text.primary" gutterBottom>
                 Assessment Progress
               </Typography>
               <Box sx={{ mb: 2 }}>
@@ -223,7 +223,7 @@ function AssessmentDetailPage() {
           {assessment.business_requirements && (
             <Card sx={{ mb: 3 }}>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" color="text.primary" gutterBottom>
                   <BusinessIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
                   Business Requirements
                 </Typography>
@@ -340,7 +340,7 @@ function AssessmentDetailPage() {
           {assessment.technical_requirements && (
             <Card sx={{ mb: 3 }}>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" color="text.primary" gutterBottom>
                   <CloudIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
                   Technical Requirements
                 </Typography>
@@ -485,7 +485,7 @@ function AssessmentDetailPage() {
           {assessment.current_infrastructure && (
             <Card sx={{ mb: 3 }}>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" color="text.primary" gutterBottom>
                   <SecurityIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
                   Current Infrastructure
                 </Typography>
@@ -519,7 +519,7 @@ function AssessmentDetailPage() {
           {/* Quick Actions */}
           <Card sx={{ mb: 3 }}>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
+              <Typography variant="h6" color="text.primary" gutterBottom>
                 Quick Actions
               </Typography>
               <Stack spacing={2}>
@@ -547,7 +547,7 @@ function AssessmentDetailPage() {
           {/* Assessment Details */}
           <Card>
             <CardContent>
-              <Typography variant="h6" gutterBottom>
+              <Typography variant="h6" color="text.primary" gutterBottom>
                 Assessment Details
               </Typography>
               <Divider sx={{ mb: 2 }} />

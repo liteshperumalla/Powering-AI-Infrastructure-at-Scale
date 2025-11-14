@@ -290,7 +290,7 @@ export default function ResponsiveCard({
                         {metrics.slice(0, isMobile ? 4 : 6).map((metric, index) => (
                             <Box key={index} sx={{ textAlign: 'center' }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
-                                    <Typography variant="h6" component="div" sx={{ fontWeight: 600 }}>
+                                    <Typography variant="h6" color="text.primary" component="div" sx={{ fontWeight: 600 }}>
                                         {metric.value}
                                     </Typography>
                                     {metric.trend && (

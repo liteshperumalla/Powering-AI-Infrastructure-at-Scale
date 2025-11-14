@@ -81,7 +81,7 @@ export default function ExecutiveDashboardPage() {
     <ResponsiveLayout title="Executive Dashboard">
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
         <Box sx={{ mb: 4 }}>
-          <Typography variant="h4" component="h1" gutterBottom>
+          <Typography variant="h4" color="text.primary" component="h1" gutterBottom>
             Executive Dashboard
           </Typography>
           <Typography variant="subtitle1" color="text.secondary">
@@ -114,7 +114,7 @@ export default function ExecutiveDashboardPage() {
                     <CardContent>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                         <Assessment color="primary" sx={{ mr: 1 }} />
-                        <Typography variant="h6">Total Recommendations</Typography>
+                        <Typography variant="h6" color="text.primary">Total Recommendations</Typography>
                       </Box>
                       <Typography variant="h3" color="primary">
                         {executiveData.key_metrics.total_recommendations || 0}
@@ -128,7 +128,7 @@ export default function ExecutiveDashboardPage() {
                     <CardContent>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                         <AttachMoney color="success" sx={{ mr: 1 }} />
-                        <Typography variant="h6">Potential Savings</Typography>
+                        <Typography variant="h6" color="text.primary">Potential Savings</Typography>
                       </Box>
                       <Typography variant="h3" color="success.main">
                         ${(executiveData.key_metrics.total_cost_savings || 0).toLocaleString()}
@@ -142,7 +142,7 @@ export default function ExecutiveDashboardPage() {
                     <CardContent>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                         <Speed color="secondary" sx={{ mr: 1 }} />
-                        <Typography variant="h6">Avg Confidence</Typography>
+                        <Typography variant="h6" color="text.primary">Avg Confidence</Typography>
                       </Box>
                       <Typography variant="h3" color="secondary.main">
                         {executiveData.key_metrics.avg_confidence_score
@@ -158,7 +158,7 @@ export default function ExecutiveDashboardPage() {
                     <CardContent>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                         <TrendingUp color="info" sx={{ mr: 1 }} />
-                        <Typography variant="h6">Timeline</Typography>
+                        <Typography variant="h6" color="text.primary">Timeline</Typography>
                       </Box>
                       <Typography variant="h3" color="info.main">
                         {executiveData.key_metrics.implementation_timeline || 'N/A'}
@@ -172,7 +172,7 @@ export default function ExecutiveDashboardPage() {
             {/* Insights */}
             {executiveData.insights && Array.isArray(executiveData.insights) && executiveData.insights.length > 0 && (
               <Paper sx={{ p: 3, mb: 3 }}>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" color="text.primary" gutterBottom>
                   Key Insights
                 </Typography>
                 <Stack spacing={2}>
@@ -188,7 +188,7 @@ export default function ExecutiveDashboardPage() {
             {/* Strategic Initiatives */}
             {executiveData.strategic_initiatives && Array.isArray(executiveData.strategic_initiatives) && executiveData.strategic_initiatives.length > 0 && (
               <Paper sx={{ p: 3, mb: 3 }}>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" color="text.primary" gutterBottom>
                   Strategic Initiatives
                 </Typography>
                 <Grid container spacing={2}>
@@ -223,7 +223,7 @@ export default function ExecutiveDashboardPage() {
             {/* Risks */}
             {executiveData.risks && Array.isArray(executiveData.risks) && executiveData.risks.length > 0 && (
               <Paper sx={{ p: 3, mb: 3 }}>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" color="text.primary" gutterBottom>
                   Risk Factors
                 </Typography>
                 <Stack spacing={2}>
@@ -254,7 +254,7 @@ export default function ExecutiveDashboardPage() {
             {/* Summary */}
             {executiveData.summary && (
               <Paper sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" color="text.primary" gutterBottom>
                   Executive Summary
                 </Typography>
                 <Typography variant="body2" color="text.secondary">

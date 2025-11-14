@@ -366,7 +366,7 @@ const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardPro
         <Box sx={{ p: 3 }}>
             {/* Header */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h4">Performance Monitoring</Typography>
+                <Typography variant="h4" color="text.primary">Performance Monitoring</Typography>
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
                     <Chip
                         icon={isConnected ? <CheckCircleIcon /> : <ErrorIcon />}
@@ -400,7 +400,7 @@ const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardPro
                 <Grid item xs={12} md={3}>
                     <Card>
                         <CardContent>
-                            <Typography variant="h6" gutterBottom>System Health</Typography>
+                            <Typography variant="h6" color="text.primary" gutterBottom>System Health</Typography>
                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 {(dashboardData?.monitoringSummary?.activeAlertsCount ?? 0) === 0 ? (
                                     <>
@@ -423,7 +423,7 @@ const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardPro
                 <Grid item xs={12} md={3}>
                     <Card>
                         <CardContent>
-                            <Typography variant="h6" gutterBottom>Monitoring Status</Typography>
+                            <Typography variant="h6" color="text.primary" gutterBottom>Monitoring Status</Typography>
                             <Chip
                                 label={dashboardData?.monitoringSummary?.monitoringActive ? 'Active' : 'Inactive'}
                                 color={dashboardData?.monitoringSummary?.monitoringActive ? 'success' : 'error'}
@@ -435,8 +435,8 @@ const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardPro
                 <Grid item xs={12} md={3}>
                     <Card>
                         <CardContent>
-                            <Typography variant="h6" gutterBottom>Alert Rules</Typography>
-                            <Typography variant="h4">
+                            <Typography variant="h6" color="text.primary" gutterBottom>Alert Rules</Typography>
+                            <Typography variant="h4" color="text.primary">
                                 {dashboardData?.monitoringSummary?.alertRulesCount || 0}
                             </Typography>
                         </CardContent>
@@ -446,8 +446,8 @@ const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardPro
                 <Grid item xs={12} md={3}>
                     <Card>
                         <CardContent>
-                            <Typography variant="h6" gutterBottom>Connected Clients</Typography>
-                            <Typography variant="h4">
+                            <Typography variant="h6" color="text.primary" gutterBottom>Connected Clients</Typography>
+                            <Typography variant="h4" color="text.primary">
                                 {dashboardData?.monitoringSummary?.websocketClientsCount || 0}
                             </Typography>
                         </CardContent>
@@ -470,7 +470,7 @@ const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardPro
                                     {metric.trend === 'stable' && <TimelineIcon color="action" fontSize="small" />}
                                 </Box>
 
-                                <Typography variant="h4" sx={{ mb: 1 }}>
+                                <Typography variant="h4" color="text.primary" sx={{ mb: 1 }}>
                                     {safeToFixed(metric.value, 1)}{metric.unit}
                                 </Typography>
 
@@ -504,7 +504,7 @@ const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardPro
             {dashboardData?.activeAlerts && dashboardData.activeAlerts.length > 0 && (
                 <Card sx={{ mb: 3 }}>
                     <CardContent>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             <NotificationsIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
                             Active Alerts
                         </Typography>
@@ -567,7 +567,7 @@ const PerformanceMonitoringDashboard: React.FC<PerformanceMonitoringDashboardPro
             <Card>
                 <CardContent>
                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                        <Typography variant="h6">Performance Trends</Typography>
+                        <Typography variant="h6" color="text.primary">Performance Trends</Typography>
                         <FormControl size="small">
                             <InputLabel>Time Range</InputLabel>
                             <Select

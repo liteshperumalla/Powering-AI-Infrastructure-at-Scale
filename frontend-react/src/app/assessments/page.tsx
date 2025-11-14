@@ -294,7 +294,7 @@ const AssessmentsPage: React.FC = () => {
             <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Box>
                     <Typography
-                        variant="h4"
+                        variant="h4" color="text.primary"
                         component="h1"
                         gutterBottom
                         sx={{
@@ -354,7 +354,7 @@ const AssessmentsPage: React.FC = () => {
                 <Card sx={{ mb: 3 }}>
                     <CardContent>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                            <Typography variant="h6">
+                            <Typography variant="h6" color="text.primary">
                                 Workflow Progress
                             </Typography>
                             <IconButton onClick={handleHideWorkflowProgress}>
@@ -424,7 +424,7 @@ const AssessmentsPage: React.FC = () => {
                             <Typography color="text.secondary" gutterBottom>
                                 Total Assessments
                             </Typography>
-                            <Typography variant="h4">
+                            <Typography variant="h4" color="text.primary">
                                 {state.assessments.length}
                             </Typography>
                         </CardContent>
@@ -500,7 +500,7 @@ const AssessmentsPage: React.FC = () => {
             ) : (
                 <Card>
                     <CardContent>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             Your Assessments
                         </Typography>
                         <TableContainer component={Paper} elevation={0}>

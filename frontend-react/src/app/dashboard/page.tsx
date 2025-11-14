@@ -1504,7 +1504,7 @@ export default function DashboardPage() {
                     {/* Welcome Section */}
                     <Box sx={{ mb: 4 }}>
                         <Typography
-                            variant="h4"
+                            variant="h4" color="text.primary"
                             gutterBottom
                             sx={{
                                 color: 'text.primary',
@@ -1589,7 +1589,7 @@ export default function DashboardPage() {
                     <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', lg: 'repeat(4, 1fr)' }, gap: 3, mb: 4 }}>
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" gutterBottom>
+                                <Typography variant="h6" color="text.primary" gutterBottom>
                                     Start Assessment
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -1607,7 +1607,7 @@ export default function DashboardPage() {
 
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" gutterBottom>
+                                <Typography variant="h6" color="text.primary" gutterBottom>
                                     View Reports
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -1625,7 +1625,7 @@ export default function DashboardPage() {
 
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" gutterBottom>
+                                <Typography variant="h6" color="text.primary" gutterBottom>
                                     Cloud Services
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -1643,7 +1643,7 @@ export default function DashboardPage() {
 
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" gutterBottom>
+                                <Typography variant="h6" color="text.primary" gutterBottom>
                                     Compliance
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -1665,7 +1665,7 @@ export default function DashboardPage() {
                     {Array.isArray(assessments) && assessments.length > 0 && (
                         <Box sx={{ mb: 4 }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                                <Typography variant="h5" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography variant="h5" color="text.primary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <Business color="primary" />
                                     Assessment Portfolio ({assessments.length})
                                 </Typography>
@@ -1837,7 +1837,7 @@ export default function DashboardPage() {
                                                             size="small"
                                                         />
                                                         <Box>
-                                                            <Typography variant="h6" gutterBottom>
+                                                            <Typography variant="h6" color="text.primary" gutterBottom>
                                                                 {(() => {
                                                                     const companyName = assessment.companyName || assessment.business_requirements?.company_name;
                                                                     if (companyName) return companyName;
@@ -1980,7 +1980,7 @@ export default function DashboardPage() {
                     {/* Draft Assessments Section */}
                     {draftAssessments.length > 0 && (
                         <Box sx={{ mb: 4 }}>
-                            <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="h5" color="text.primary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <Schedule color="primary" />
                                 Continue Previous Assessments
                             </Typography>
@@ -1991,7 +1991,7 @@ export default function DashboardPage() {
                                 {draftAssessments.map((draft) => (
                                     <Card key={draft.id} sx={{ position: 'relative' }}>
                                         <CardContent>
-                                            <Typography variant="h6" gutterBottom>
+                                            <Typography variant="h6" color="text.primary" gutterBottom>
                                                 {draft.title}
                                             </Typography>
                                             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -2048,7 +2048,7 @@ export default function DashboardPage() {
                     {/* Recent Completed Assessments Section */}
                     {completedAssessments.length > 0 && (
                         <Box sx={{ mb: 4 }}>
-                            <Typography variant="h5" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography variant="h5" color="text.primary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                 <CheckCircle color="success" />
                                 Recent Completed Assessments
                             </Typography>
@@ -2063,7 +2063,7 @@ export default function DashboardPage() {
                                                 <CheckCircle color="success" sx={{ mr: 1, fontSize: '1.2rem' }} />
                                                 <Chip label="Completed" color="success" size="small" />
                                             </Box>
-                                            <Typography variant="h6" gutterBottom>
+                                            <Typography variant="h6" color="text.primary" gutterBottom>
                                                 {assessment.title}
                                             </Typography>
                                             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -2122,7 +2122,7 @@ export default function DashboardPage() {
                     <Card sx={{ mb: 4 }}>
                         <CardContent>
                             <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                                <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography variant="h6" color="text.primary" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                     <Analytics color="primary" />
                                     Dashboard Visualizations
                                 </Typography>
@@ -2382,7 +2382,7 @@ export default function DashboardPage() {
                             ) : (
                                 <Card>
                                     <CardContent>
-                                        <Typography variant="h6" gutterBottom>
+                                        <Typography variant="h6" color="text.primary" gutterBottom>
                                             No Reports Yet
                                         </Typography>
                                         <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -2433,7 +2433,7 @@ export default function DashboardPage() {
                             ) : (
                                 <Card>
                                     <CardContent>
-                                        <Typography variant="h6" gutterBottom>
+                                        <Typography variant="h6" color="text.primary" gutterBottom>
                                             Assessment Progress
                                         </Typography>
                                         <Box sx={{ 
@@ -2463,7 +2463,7 @@ export default function DashboardPage() {
 
                             <Card sx={{ mt: 2 }}>
                                 <CardContent>
-                                    <Typography variant="h6" gutterBottom>
+                                    <Typography variant="h6" color="text.primary" gutterBottom>
                                         Recent Activity
                                     </Typography>
                                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

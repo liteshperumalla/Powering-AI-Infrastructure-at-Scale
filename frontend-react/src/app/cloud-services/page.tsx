@@ -262,7 +262,7 @@ export default function CloudServicesPage() {
             <ResponsiveLayout title="Cloud Services">
                 <Container maxWidth="lg" sx={{ mt: 3 }}>
                     <Box sx={{ mb: 4 }}>
-                        <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Typography variant="h4" color="text.primary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                             <Cloud sx={{ fontSize: 40 }} />
                             Cloud Services Catalog
                         </Typography>
@@ -352,7 +352,7 @@ export default function CloudServicesPage() {
                         <Card>
                             <CardContent sx={{ textAlign: 'center', py: 6 }}>
                                 <Cloud sx={{ fontSize: 60, color: 'text.secondary', mb: 2 }} />
-                                <Typography variant="h6" gutterBottom>
+                                <Typography variant="h6" color="text.primary" gutterBottom>
                                     No Services Found
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">
@@ -370,7 +370,7 @@ export default function CloudServicesPage() {
                                                 <Box sx={{ color: getProviderColor(service.provider) }}>
                                                     {getProviderIcon(service.provider)}
                                                 </Box>
-                                                <Typography variant="h6" sx={{ flexGrow: 1 }}>
+                                                <Typography variant="h6" color="text.primary" sx={{ flexGrow: 1 }}>
                                                     {service.name}
                                                 </Typography>
                                                 <Chip 
@@ -459,7 +459,7 @@ export default function CloudServicesPage() {
                                         <Box sx={{ color: getProviderColor(selectedService.provider) }}>
                                             {getProviderIcon(selectedService.provider)}
                                         </Box>
-                                        <Typography variant="h5">
+                                        <Typography variant="h5" color="text.primary">
                                             {selectedService.name}
                                         </Typography>
                                         <Chip 
@@ -486,7 +486,7 @@ export default function CloudServicesPage() {
 
                                     <Grid container spacing={3}>
                                         <Grid item xs={12} md={6}>
-                                            <Typography variant="h6" gutterBottom>
+                                            <Typography variant="h6" color="text.primary" gutterBottom>
                                                 Pricing
                                             </Typography>
                                             <Typography variant="body2">
@@ -500,7 +500,7 @@ export default function CloudServicesPage() {
                                         </Grid>
 
                                         <Grid item xs={12} md={6}>
-                                            <Typography variant="h6" gutterBottom>
+                                            <Typography variant="h6" color="text.primary" gutterBottom>
                                                 Features
                                             </Typography>
                                             <List dense>
@@ -513,7 +513,7 @@ export default function CloudServicesPage() {
                                         </Grid>
 
                                         <Grid item xs={12} md={6}>
-                                            <Typography variant="h6" gutterBottom>
+                                            <Typography variant="h6" color="text.primary" gutterBottom>
                                                 Compliance
                                             </Typography>
                                             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
@@ -530,7 +530,7 @@ export default function CloudServicesPage() {
                                         </Grid>
 
                                         <Grid item xs={12} md={6}>
-                                            <Typography variant="h6" gutterBottom>
+                                            <Typography variant="h6" color="text.primary" gutterBottom>
                                                 Region Availability
                                             </Typography>
                                             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
@@ -555,7 +555,7 @@ export default function CloudServicesPage() {
 
                                         {selectedService.use_cases && (
                                             <Grid item xs={12}>
-                                                <Typography variant="h6" gutterBottom>
+                                                <Typography variant="h6" color="text.primary" gutterBottom>
                                                     Use Cases
                                                 </Typography>
                                                 <List dense>
@@ -570,7 +570,7 @@ export default function CloudServicesPage() {
 
                                         {selectedService.integration && (
                                             <Grid item xs={12}>
-                                                <Typography variant="h6" gutterBottom>
+                                                <Typography variant="h6" color="text.primary" gutterBottom>
                                                     Integrations
                                                 </Typography>
                                                 <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>

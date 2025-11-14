@@ -213,7 +213,7 @@ export default function AnalyticsPage() {
                     <Box sx={{ mb: 4 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                             <Box>
-                                <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                <Typography variant="h4" color="text.primary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                                     <AnalyticsIcon sx={{ fontSize: 40 }} />
                                     Advanced Analytics
                                 </Typography>
@@ -278,7 +278,7 @@ export default function AnalyticsPage() {
                                     <CardContent>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                                             <MonetizationOn color="primary" />
-                                            <Typography variant="h6">Cost Analysis</Typography>
+                                            <Typography variant="h6" color="text.primary">Cost Analysis</Typography>
                                         </Box>
                                         
                                         {analyticsData.analytics.cost_modeling?.current_analysis ? (
@@ -357,7 +357,7 @@ export default function AnalyticsPage() {
                                     <CardContent>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                                             <Speed color="primary" />
-                                            <Typography variant="h6">Performance Benchmarks</Typography>
+                                            <Typography variant="h6" color="text.primary">Performance Benchmarks</Typography>
                                         </Box>
                                         
                                         {analyticsData.analytics.performance_benchmarks?.performance_analysis ? (
@@ -400,14 +400,14 @@ export default function AnalyticsPage() {
                                     <CardContent>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                                             <Shield color="primary" />
-                                            <Typography variant="h6">Security Status</Typography>
+                                            <Typography variant="h6" color="text.primary">Security Status</Typography>
                                         </Box>
                                         
                                         {analyticsData.analytics.security_analytics?.global_security?.threat_landscape ? (
                                             <>
                                                 <Box sx={{ mb: 3 }}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                                                        <Typography variant="h4">
+                                                        <Typography variant="h4" color="text.primary">
                                                             {analyticsData.analytics.security_analytics.global_security.threat_landscape.security_score}
                                                         </Typography>
                                                         <Typography variant="body2" color="text.secondary">/100</Typography>
@@ -476,7 +476,7 @@ export default function AnalyticsPage() {
                                     <CardContent>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                                             <CloudQueue color="primary" />
-                                            <Typography variant="h6">Multi-Cloud Strategy</Typography>
+                                            <Typography variant="h6" color="text.primary">Multi-Cloud Strategy</Typography>
                                         </Box>
                                         
                                         {analyticsData.analytics.multi_cloud_analysis?.global_strategy?.recommended_distribution ? (
@@ -535,7 +535,7 @@ export default function AnalyticsPage() {
                                     <CardContent>
                                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                                             <TrendingUp color="primary" />
-                                            <Typography variant="h6">Optimization Opportunities</Typography>
+                                            <Typography variant="h6" color="text.primary">Optimization Opportunities</Typography>
                                         </Box>
                                         
                                         {analyticsData.optimization_opportunities?.length > 0 && (
@@ -544,7 +544,7 @@ export default function AnalyticsPage() {
                                                     <Grid item xs={12} md={6} lg={4} key={`opt-opp-${index}-${opportunity.title?.replace(/\s+/g, '-') || 'untitled'}`}>
                                                         <Paper sx={{ p: 2, height: '100%' }}>
                                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                                                                <Typography variant="h6" sx={{ fontSize: '1rem' }}>
+                                                                <Typography variant="h6" color="text.primary" sx={{ fontSize: '1rem' }}>
                                                                     {opportunity.title}
                                                                 </Typography>
                                                                 <Chip 
@@ -601,14 +601,14 @@ export default function AnalyticsPage() {
                                         <CardContent>
                                             <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                                                 <Timeline color="primary" />
-                                                <Typography variant="h6">Predictive Insights</Typography>
+                                                <Typography variant="h6" color="text.primary">Predictive Insights</Typography>
                                             </Box>
                                             
                                             <Grid container spacing={2}>
                                                 {analyticsData.predictive_insights.cost_predictions && (
                                                     <Grid item xs={12} md={4}>
                                                         <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
-                                                            <Typography variant="h5">
+                                                            <Typography variant="h5" color="text.primary">
                                                                 {formatCurrency(analyticsData.predictive_insights.cost_predictions.annual_cost_forecast)}
                                                             </Typography>
                                                             <Typography variant="body2" color="text.secondary">

@@ -1,0 +1,88 @@
+<svg width="180" height="48" viewBox="0 0 180 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Icon: Neural network + Infrastructure symbol (Dark Mode) -->
+  <g id="logo-icon">
+    <!-- Outer hexagon (Infrastructure) -->
+    <path d="M24 4L36 11V26L24 33L12 26V11L24 4Z"
+          stroke="url(#gradient-primary-dark)"
+          stroke-width="2.5"
+          fill="none"
+          filter="url(#glow)"/>
+
+    <!-- Inner neural network nodes -->
+    <circle cx="24" cy="12" r="2.5" fill="url(#gradient-primary-dark)" filter="url(#glow)"/>
+    <circle cx="18" cy="18" r="2.5" fill="url(#gradient-secondary-dark)" filter="url(#glow)"/>
+    <circle cx="30" cy="18" r="2.5" fill="url(#gradient-secondary-dark)" filter="url(#glow)"/>
+    <circle cx="24" cy="24" r="2.5" fill="url(#gradient-accent-dark)" filter="url(#glow)"/>
+    <circle cx="18" cy="30" r="2.5" fill="url(#gradient-accent-dark)" filter="url(#glow)"/>
+    <circle cx="30" cy="30" r="2.5" fill="url(#gradient-accent-dark)" filter="url(#glow)"/>
+
+    <!-- Connections (neural pathways) -->
+    <line x1="24" y1="12" x2="18" y2="18" stroke="url(#gradient-primary-dark)" stroke-width="1.5" opacity="0.7"/>
+    <line x1="24" y1="12" x2="30" y2="18" stroke="url(#gradient-primary-dark)" stroke-width="1.5" opacity="0.7"/>
+    <line x1="18" y1="18" x2="24" y2="24" stroke="url(#gradient-secondary-dark)" stroke-width="1.5" opacity="0.7"/>
+    <line x1="30" y1="18" x2="24" y2="24" stroke="url(#gradient-secondary-dark)" stroke-width="1.5" opacity="0.7"/>
+    <line x1="24" y1="24" x2="18" y2="30" stroke="url(#gradient-accent-dark)" stroke-width="1.5" opacity="0.7"/>
+    <line x1="24" y1="24" x2="30" y2="30" stroke="url(#gradient-accent-dark)" stroke-width="1.5" opacity="0.7"/>
+
+    <!-- Glow effect -->
+    <circle cx="24" cy="18" r="18" fill="url(#gradient-glow-dark)" opacity="0.2"/>
+  </g>
+
+  <!-- Wordmark -->
+  <g id="wordmark">
+    <!-- INFRA -->
+    <text x="52" y="22" font-family="'Inter', sans-serif" font-size="20" font-weight="700" fill="url(#gradient-text-primary-dark)">
+      Infra
+    </text>
+    <!-- MIND -->
+    <text x="101" y="22" font-family="'Inter', sans-serif" font-size="20" font-weight="700" fill="url(#gradient-text-accent-dark)">
+      Mind
+    </text>
+    <!-- Tagline -->
+    <text x="52" y="36" font-family="'Inter', sans-serif" font-size="6.5" font-weight="500" fill="#9CA3AF" letter-spacing="1">
+      AI-POWERED INFRASTRUCTURE
+    </text>
+  </g>
+
+  <!-- Gradients -->
+  <defs>
+    <linearGradient id="gradient-primary-dark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#42a5f5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0066FF;stop-opacity:1" />
+    </linearGradient>
+
+    <linearGradient id="gradient-secondary-dark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#A78BFA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#7C3AED;stop-opacity:1" />
+    </linearGradient>
+
+    <linearGradient id="gradient-accent-dark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#33DFFF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00D9FF;stop-opacity:1" />
+    </linearGradient>
+
+    <linearGradient id="gradient-text-primary-dark" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#42a5f5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0066FF;stop-opacity:1" />
+    </linearGradient>
+
+    <linearGradient id="gradient-text-accent-dark" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#A78BFA;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#33DFFF;stop-opacity:1" />
+    </linearGradient>
+
+    <radialGradient id="gradient-glow-dark" cx="50%" cy="50%">
+      <stop offset="0%" style="stop-color:#42a5f5;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0066FF;stop-opacity:0" />
+    </radialGradient>
+
+    <!-- Glow filter -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+</svg>

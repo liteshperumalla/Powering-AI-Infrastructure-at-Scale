@@ -39,7 +39,7 @@ export default function UnauthorizedPage() {
                             }} 
                         />
                         
-                        <Typography variant="h4" gutterBottom>
+                        <Typography variant="h4" color="text.primary" gutterBottom>
                             Access Denied
                         </Typography>
                         

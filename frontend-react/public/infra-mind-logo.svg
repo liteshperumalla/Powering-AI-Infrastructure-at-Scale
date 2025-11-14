@@ -1,0 +1,78 @@
+<svg width="180" height="48" viewBox="0 0 180 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Icon: Neural network + Infrastructure symbol -->
+  <g id="logo-icon">
+    <!-- Outer hexagon (Infrastructure) -->
+    <path d="M24 4L36 11V26L24 33L12 26V11L24 4Z"
+          stroke="url(#gradient-primary)"
+          stroke-width="2"
+          fill="none"/>
+
+    <!-- Inner neural network nodes -->
+    <circle cx="24" cy="12" r="2.5" fill="url(#gradient-primary)"/>
+    <circle cx="18" cy="18" r="2.5" fill="url(#gradient-secondary)"/>
+    <circle cx="30" cy="18" r="2.5" fill="url(#gradient-secondary)"/>
+    <circle cx="24" cy="24" r="2.5" fill="url(#gradient-accent)"/>
+    <circle cx="18" cy="30" r="2.5" fill="url(#gradient-accent)"/>
+    <circle cx="30" cy="30" r="2.5" fill="url(#gradient-accent)"/>
+
+    <!-- Connections (neural pathways) -->
+    <line x1="24" y1="12" x2="18" y2="18" stroke="url(#gradient-primary)" stroke-width="1.5" opacity="0.6"/>
+    <line x1="24" y1="12" x2="30" y2="18" stroke="url(#gradient-primary)" stroke-width="1.5" opacity="0.6"/>
+    <line x1="18" y1="18" x2="24" y2="24" stroke="url(#gradient-secondary)" stroke-width="1.5" opacity="0.6"/>
+    <line x1="30" y1="18" x2="24" y2="24" stroke="url(#gradient-secondary)" stroke-width="1.5" opacity="0.6"/>
+    <line x1="24" y1="24" x2="18" y2="30" stroke="url(#gradient-accent)" stroke-width="1.5" opacity="0.6"/>
+    <line x1="24" y1="24" x2="30" y2="30" stroke="url(#gradient-accent)" stroke-width="1.5" opacity="0.6"/>
+
+    <!-- Glow effect -->
+    <circle cx="24" cy="18" r="15" fill="url(#gradient-glow)" opacity="0.15"/>
+  </g>
+
+  <!-- Wordmark -->
+  <g id="wordmark">
+    <!-- INFRA -->
+    <text x="52" y="22" font-family="'Inter', sans-serif" font-size="20" font-weight="700" fill="url(#gradient-text-primary)">
+      Infra
+    </text>
+    <!-- MIND -->
+    <text x="101" y="22" font-family="'Inter', sans-serif" font-size="20" font-weight="700" fill="url(#gradient-text-accent)">
+      Mind
+    </text>
+    <!-- Tagline -->
+    <text x="52" y="36" font-family="'Inter', sans-serif" font-size="6.5" font-weight="500" fill="#6B7280" letter-spacing="1">
+      AI-POWERED INFRASTRUCTURE
+    </text>
+  </g>
+
+  <!-- Gradients -->
+  <defs>
+    <linearGradient id="gradient-primary" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0066FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0052CC;stop-opacity:1" />
+    </linearGradient>
+
+    <linearGradient id="gradient-secondary" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6D28D9;stop-opacity:1" />
+    </linearGradient>
+
+    <linearGradient id="gradient-accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00D9FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00B8D9;stop-opacity:1" />
+    </linearGradient>
+
+    <linearGradient id="gradient-text-primary" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#0066FF;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0052CC;stop-opacity:1" />
+    </linearGradient>
+
+    <linearGradient id="gradient-text-accent" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#7C3AED;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00D9FF;stop-opacity:1" />
+    </linearGradient>
+
+    <radialGradient id="gradient-glow" cx="50%" cy="50%">
+      <stop offset="0%" style="stop-color:#0066FF;stop-opacity:0.8" />
+      <stop offset="100%" style="stop-color:#0066FF;stop-opacity:0" />
+    </radialGradient>
+  </defs>
+</svg>

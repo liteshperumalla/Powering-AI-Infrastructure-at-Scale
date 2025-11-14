@@ -131,7 +131,7 @@ export default function MFASettings({ onMFAToggle }: MFASettingsProps) {
                 <CardContent>
                     <Box display="flex" alignItems="center" mb={2}>
                         <Security sx={{ mr: 2, color: 'primary.main' }} />
-                        <Typography variant="h6" fontWeight="bold">
+                        <Typography variant="h6" color="text.primary" fontWeight="bold">
                             Multi-Factor Authentication
                         </Typography>
                     </Box>

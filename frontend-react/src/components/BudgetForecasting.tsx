@@ -281,7 +281,7 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
       <Grid item xs={12} md={8}>
         <Card>
           <CardContent>
-            <Typography variant="h6" mb={2}>Forecast vs Actual Spending</Typography>
+            <Typography variant="h6" color="text.primary" mb={2}>Forecast vs Actual Spending</Typography>
             {forecasts.length > 0 && forecasts[0].forecast_data.length > 0 && (
               <ResponsiveContainer width="100%" height={400}>
                 <ComposedChart data={forecasts[0].forecast_data}>
@@ -302,7 +302,7 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
       <Grid item xs={12} md={4}>
         <Card>
           <CardContent>
-            <Typography variant="h6" mb={2}>Budget Alerts</Typography>
+            <Typography variant="h6" color="text.primary" mb={2}>Budget Alerts</Typography>
             {Array.isArray(budgetAlerts) ? budgetAlerts.slice(0, 5).map((alert) => (
               <Alert 
                 key={alert.id}
@@ -327,7 +327,7 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
         <Grid item xs={12}>
           <Card>
             <CardContent>
-              <Typography variant="h6" mb={2}>Top Spending Services</Typography>
+              <Typography variant="h6" color="text.primary" mb={2}>Top Spending Services</Typography>
               <ResponsiveContainer width="100%" height={300}>
                 <RechartsBarChart data={currentSpending.top_spending_services}>
                   <CartesianGrid strokeDasharray="3 3" />
@@ -347,7 +347,7 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
   const renderForecastsTab = () => (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h6">Cost Forecasts</Typography>
+        <Typography variant="h6" color="text.primary">Cost Forecasts</Typography>
         <Button 
           variant="contained" 
           startIcon={<PlayArrow />}
@@ -363,7 +363,7 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
             <Card>
               <CardContent>
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                  <Typography variant="h6">{forecast.forecast_name}</Typography>
+                  <Typography variant="h6" color="text.primary">{forecast.forecast_name}</Typography>
                   <Chip 
                     label={`${forecast.accuracy_score.toFixed(1)}% accurate`}
                     color={forecast.accuracy_score >= 80 ? 'success' : 'warning'}
@@ -433,7 +433,7 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
 
   const renderOptimizationTab = () => (
     <Box>
-      <Typography variant="h6" mb={3}>Cost Optimization Opportunities</Typography>
+      <Typography variant="h6" color="text.primary" mb={3}>Cost Optimization Opportunities</Typography>
       
       <Grid container spacing={3}>
         {Array.isArray(optimizationOpportunities) && optimizationOpportunities.length > 0 ? optimizationOpportunities.map((opportunity) => (
@@ -441,7 +441,7 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
             <Card>
               <CardContent>
                 <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
-                  <Typography variant="h6">{opportunity.title}</Typography>
+                  <Typography variant="h6" color="text.primary">{opportunity.title}</Typography>
                   <Chip 
                     label={opportunity.category}
                     size="small"
@@ -526,7 +526,7 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
   const renderModelsTab = () => (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h6">AI Cost Models</Typography>
+        <Typography variant="h6" color="text.primary">AI Cost Models</Typography>
         <Button 
           variant="contained" 
           startIcon={<ModelTraining />}
@@ -625,7 +625,7 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
     <Box sx={{ mt: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
         <Box>
-          <Typography variant="h4" gutterBottom>
+          <Typography variant="h4" color="text.primary" gutterBottom>
             Budget Forecasting
           </Typography>
           <Typography variant="subtitle1" color="text.secondary">

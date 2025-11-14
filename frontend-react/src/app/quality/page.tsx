@@ -80,7 +80,7 @@ export default function QualityPage() {
     <ResponsiveLayout title="Quality Metrics">
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
         <Box sx={{ mb: 4 }}>
-          <Typography variant="h4" component="h1" gutterBottom>
+          <Typography variant="h4" color="text.primary" component="h1" gutterBottom>
             Quality Metrics Dashboard
           </Typography>
           <Typography variant="subtitle1" color="text.secondary">
@@ -112,7 +112,7 @@ export default function QualityPage() {
                   <CardContent>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                       <Speed color="primary" sx={{ mr: 1 }} />
-                      <Typography variant="h6">Quality Score</Typography>
+                      <Typography variant="h6" color="text.primary">Quality Score</Typography>
                     </Box>
                     <Typography variant="h3" color="primary">
                       {qualityData.overall_quality_score || 85}
@@ -133,7 +133,7 @@ export default function QualityPage() {
                   <CardContent>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                       <Assessment color="secondary" sx={{ mr: 1 }} />
-                      <Typography variant="h6">Total Issues</Typography>
+                      <Typography variant="h6" color="text.primary">Total Issues</Typography>
                     </Box>
                     <Typography variant="h3" color="secondary">
                       {qualityData.total_issues || 12}
@@ -148,7 +148,7 @@ export default function QualityPage() {
                   <CardContent>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                       <Warning color="warning" sx={{ mr: 1 }} />
-                      <Typography variant="h6">Critical</Typography>
+                      <Typography variant="h6" color="text.primary">Critical</Typography>
                     </Box>
                     <Typography variant="h3" color="warning.main">
                       {qualityData.critical_issues || 3}
@@ -163,7 +163,7 @@ export default function QualityPage() {
                   <CardContent>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                       <CheckCircle color="success" sx={{ mr: 1 }} />
-                      <Typography variant="h6">Resolved</Typography>
+                      <Typography variant="h6" color="text.primary">Resolved</Typography>
                     </Box>
                     <Typography variant="h3" color="success.main">
                       {qualityData.resolved_issues || 45}
@@ -176,7 +176,7 @@ export default function QualityPage() {
             {/* Quality Metrics */}
             {qualityData.metrics && Array.isArray(qualityData.metrics) && qualityData.metrics.length > 0 && (
               <Paper sx={{ p: 3, mb: 3 }}>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" color="text.primary" gutterBottom>
                   Quality Metrics
                 </Typography>
                 <Stack spacing={2}>
@@ -207,7 +207,7 @@ export default function QualityPage() {
             {/* Recommendations */}
             {qualityData.recommendations && Array.isArray(qualityData.recommendations) && qualityData.recommendations.length > 0 && (
               <Paper sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" color="text.primary" gutterBottom>
                   Quality Improvement Recommendations
                 </Typography>
                 <Stack spacing={2}>
@@ -239,7 +239,7 @@ export default function QualityPage() {
             {/* If no specific data structure, show raw data */}
             {!qualityData.metrics && !qualityData.recommendations && (
               <Paper sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" color="text.primary" gutterBottom>
                   Quality Data
                 </Typography>
                 <Typography variant="body2" color="text.secondary">

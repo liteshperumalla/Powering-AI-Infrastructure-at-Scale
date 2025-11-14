@@ -370,7 +370,7 @@ export default function IntelligentFormField({
                 }}
             >
                 <Paper sx={{ p: 2, maxWidth: 400 }}>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="h6" color="text.primary" gutterBottom>
                         {contextualHelp.title}
                     </Typography>
                     <Typography variant="body2" paragraph>

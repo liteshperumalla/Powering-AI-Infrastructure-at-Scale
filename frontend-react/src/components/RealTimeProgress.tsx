@@ -320,7 +320,7 @@ export default function RealTimeProgress({
         return (
             <Card>
                 <CardContent>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="h6" color="text.primary" gutterBottom>
                         Workflow Progress
                     </Typography>
                     <Typography color="text.secondary">
@@ -339,7 +339,7 @@ export default function RealTimeProgress({
         <Card>
             <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-                    <Typography variant="h6">
+                    <Typography variant="h6" color="text.primary">
                         Workflow Progress
                     </Typography>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>

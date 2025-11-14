@@ -7,7 +7,7 @@ export default function MFATestPage() {
     return (
         <Container maxWidth="sm">
             <Box sx={{ mt: 4, textAlign: 'center' }}>
-                <Typography variant="h4" gutterBottom>
+                <Typography variant="h4" color="text.primary" gutterBottom>
                     MFA Test Page
                 </Typography>
                 <Typography variant="body1">

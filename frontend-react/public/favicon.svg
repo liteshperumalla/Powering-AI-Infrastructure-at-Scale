@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Hexagon background -->
+  <path d="M16 2L26 8V24L16 30L6 24V8L16 2Z"
+        fill="url(#gradient)"
+        stroke="#0066FF"
+        stroke-width="1.5"/>
+
+  <!-- Neural network nodes -->
+  <circle cx="16" cy="10" r="1.5" fill="#FFFFFF"/>
+  <circle cx="12" cy="14" r="1.5" fill="#FFFFFF"/>
+  <circle cx="20" cy="14" r="1.5" fill="#FFFFFF"/>
+  <circle cx="16" cy="18" r="1.5" fill="#FFFFFF"/>
+  <circle cx="12" cy="22" r="1.5" fill="#FFFFFF"/>
+  <circle cx="20" cy="22" r="1.5" fill="#FFFFFF"/>
+
+  <!-- Connections -->
+  <line x1="16" y1="10" x2="12" y2="14" stroke="#FFFFFF" stroke-width="1" opacity="0.6"/>
+  <line x1="16" y1="10" x2="20" y2="14" stroke="#FFFFFF" stroke-width="1" opacity="0.6"/>
+  <line x1="12" y1="14" x2="16" y2="18" stroke="#FFFFFF" stroke-width="1" opacity="0.6"/>
+  <line x1="20" y1="14" x2="16" y2="18" stroke="#FFFFFF" stroke-width="1" opacity="0.6"/>
+  <line x1="16" y1="18" x2="12" y2="22" stroke="#FFFFFF" stroke-width="1" opacity="0.6"/>
+  <line x1="16" y1="18" x2="20" y2="22" stroke="#FFFFFF" stroke-width="1" opacity="0.6"/>
+
+  <!-- Gradient -->
+  <defs>
+    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0066FF;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#7C3AED;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#00D9FF;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+</svg>

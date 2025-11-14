@@ -318,7 +318,93 @@ async def cleanup_dependencies():
     """
     await close_database_client()
     await close_event_manager()
+    await close_cache_manager()
     logger.info("✅ All dependencies cleaned up")
+
+
+# ============================================================================
+# Cache Manager Dependencies (Phase 2: Performance & Caching)
+# ============================================================================
+
+_cache_manager = None
+
+
+async def get_cache_manager():
+    """
+    Provide CacheManager instance for multi-layer caching.
+
+    Implements L1 (in-memory) and L2 (Redis) caching for optimal performance.
+    Single instance per application for cache coherency.
+
+    Returns:
+        CacheManager instance
+
+    Usage:
+        @router.get("/users/{user_id}")
+        async def get_user(
+            user_id: str,
+            cache: CacheManagerDep
+        ):
+            # Try cache first
+            cached = await cache.get(f"user:{user_id}")
+            if cached:
+                return cached
+
+            # Cache miss - query database
+            user = await db.users.find_one({"_id": user_id})
+
+            # Store in cache
+            await cache.set(f"user:{user_id}", user, ttl=300)
+
+            return user
+
+    Performance Impact:
+        - L1 cache hits: <1ms
+        - L2 cache hits: <5ms
+        - Database queries: 50-200ms
+        - Expected 80%+ cache hit rate
+    """
+    global _cache_manager
+
+    if _cache_manager is None:
+        from ..core.cache_manager import CacheManager
+        from ..core.config import settings
+        import os
+
+        logger.info("🔌 Initializing cache manager")
+
+        redis_url = getattr(settings, 'redis_url', None) or os.getenv("REDIS_URL") or "redis://localhost:6379/0"
+
+        _cache_manager = CacheManager(
+            redis_url=redis_url,
+            l1_max_size=1000,  # 1000 items in memory
+            l1_ttl=300,  # 5 minutes
+            l2_ttl=3600,  # 1 hour
+            enabled=True
+        )
+
+        # Connect to Redis
+        try:
+            await _cache_manager.connect_redis()
+            logger.info("✅ Cache manager initialized (L1 + L2 caching)")
+        except Exception as e:
+            logger.warning(f"⚠️ Redis unavailable, L1-only caching: {e}")
+
+    return _cache_manager
+
+
+async def close_cache_manager():
+    """Close cache manager and Redis connection."""
+    global _cache_manager
+
+    if _cache_manager is not None:
+        await _cache_manager.close()
+        _cache_manager = None
+        logger.info("Cache manager closed")
+
+
+# Type alias for cache manager dependency (using string literal to avoid circular import)
+CacheManagerDep = Annotated["CacheManager", Depends(get_cache_manager)]
 
 
 # ============================================================================

@@ -225,6 +225,101 @@ services:
     profiles:
       - tools  # Only start with: docker-compose --profile tools up
 
+  # Celery Worker - Background task processing
+  celery_worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    # container_name removed to enable replicas
+    restart: unless-stopped
+    command: celery -A infra_mind.tasks.celery_app worker --loglevel=info --concurrency=4 --max-tasks-per-child=100
+    deploy:
+      replicas: 2  # Run 2 workers for redundancy
+      resources:
+        limits:
+          cpus: '2.0'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    environment:
+      PYTHONUNBUFFERED: 1
+      INFRA_MIND_MONGODB_URL: mongodb://admin:password@mongodb:27017/infra_mind?authSource=admin
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-dev-jwt-secret-key-change-in-production-12345678901234567890}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    depends_on:
+      - mongodb
+      - redis
+    networks:
+      - infra_mind_network
+    healthcheck:
+      test: ["CMD", "celery", "-A", "infra_mind.tasks.celery_app", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Celery Beat - Periodic task scheduler (optional)
+  celery_beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: infra_mind_celery_beat
+    restart: unless-stopped
+    command: celery -A infra_mind.tasks.celery_app beat --loglevel=info
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    environment:
+      PYTHONUNBUFFERED: 1
+      INFRA_MIND_MONGODB_URL: mongodb://admin:password@mongodb:27017/infra_mind?authSource=admin
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - redis
+    networks:
+      - infra_mind_network
+    profiles:
+      - beat  # Only start with: docker-compose --profile beat up
+
+  # Flower - Celery monitoring dashboard (optional)
+  flower:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: infra_mind_flower
+    restart: unless-stopped
+    command: celery -A infra_mind.tasks.celery_app flower --port=5555
+    ports:
+      - "5555:5555"
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          cpus: '0.1'
+          memory: 128M
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      CELERY_RESULT_BACKEND: redis://redis:6379/0
+    depends_on:
+      - redis
+      - celery_worker
+    networks:
+      - infra_mind_network
+    profiles:
+      - tools  # Only start with: docker-compose --profile tools up
+
 # Named volumes for data persistence
 volumes:
   mongodb_data:

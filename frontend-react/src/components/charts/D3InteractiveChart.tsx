@@ -211,7 +211,7 @@ export default function D3InteractiveChart({
         <Card>
             <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="h6">{title}</Typography>
+                    <Typography variant="h6" color="text.primary">{title}</Typography>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <FormControl size="small" sx={{ minWidth: 120 }}>
                             <InputLabel>Category</InputLabel>

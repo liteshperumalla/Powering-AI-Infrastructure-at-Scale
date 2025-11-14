@@ -66,7 +66,7 @@ export default function UserProfile({ open, onClose }: UserProfileProps) {
                         {user.full_name?.charAt(0).toUpperCase() || 'U'}
                     </Avatar>
                     <Box>
-                        <Typography variant="h6">{user.full_name}</Typography>
+                        <Typography variant="h6" color="text.primary">{user.full_name}</Typography>
                         <Typography variant="body2" color="text.secondary">
                             {user.email}
                         </Typography>

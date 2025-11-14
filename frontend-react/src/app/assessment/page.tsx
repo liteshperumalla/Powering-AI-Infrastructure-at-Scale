@@ -1108,7 +1108,7 @@ function AssessmentPageInner() {
             case 0:
                 return (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             Tell us about your business
                         </Typography>
                         <ErrorSummary step={0} />
@@ -1334,7 +1334,7 @@ function AssessmentPageInner() {
             case 1:
                 return (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             Current Infrastructure Setup
                         </Typography>
                         <ErrorSummary step={1} />
@@ -1562,7 +1562,7 @@ function AssessmentPageInner() {
             case 2:
                 return (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             Technical Architecture Details
                         </Typography>
                         <ErrorSummary step={2} />
@@ -1774,7 +1774,7 @@ function AssessmentPageInner() {
             case 3:
                 return (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             AI Requirements & Use Cases
                         </Typography>
                         <ErrorSummary step={3} />
@@ -1991,7 +1991,7 @@ function AssessmentPageInner() {
             case 4:
                 return (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             Performance & Scalability Requirements
                         </Typography>
                         <ErrorSummary step={4} />
@@ -2116,7 +2116,7 @@ function AssessmentPageInner() {
             case 5:
                 return (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             Security & Compliance Requirements
                         </Typography>
                         <ErrorSummary step={5} />
@@ -2280,7 +2280,7 @@ function AssessmentPageInner() {
             case 6:
                 return (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             Budget & Timeline Planning
                         </Typography>
                         <ErrorSummary step={6} />
@@ -2414,7 +2414,7 @@ function AssessmentPageInner() {
             case 7:
                 return (
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             Review Your Information
                         </Typography>
 
@@ -2780,7 +2780,7 @@ function AssessmentPageInner() {
                             <Grid item xs={12} md={8}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1 }}>
                                     <Assignment sx={{ fontSize: 32 }} />
-                                    <Typography variant="h4" component="h1" fontWeight="bold">
+                                    <Typography variant="h4" color="text.primary" component="h1" fontWeight="bold">
                                         AI Infrastructure Assessment
                                     </Typography>
                                 </Box>
@@ -3012,7 +3012,7 @@ function AssessmentPageInner() {
                                 {/* Progress Card */}
                                 <Card>
                                     <CardContent>
-                                        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                        <Typography variant="h6" color="text.primary" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                                             <Schedule color="primary" />
                                             Progress Overview
                                         </Typography>
@@ -3031,7 +3031,7 @@ function AssessmentPageInner() {
                                 {/* Help Card */}
                                 <Card>
                                     <CardContent>
-                                        <Typography variant="h6" gutterBottom color="primary">
+                                        <Typography variant="h6" color="primary" gutterBottom>
                                             💡 Tips & Guidance
                                         </Typography>
                                         <Typography variant="body2" color="text.secondary" paragraph>

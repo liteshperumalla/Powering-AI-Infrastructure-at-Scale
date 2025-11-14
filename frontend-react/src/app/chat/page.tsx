@@ -701,7 +701,7 @@ export default function ChatPage() {
     const sidebarContent = (
         <Box sx={{ p: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                <Typography variant="h6">
+                <Typography variant="h6" color="text.primary">
                     Chat History
                 </Typography>
                 {conversations.length > 0 && (
@@ -864,7 +864,7 @@ export default function ChatPage() {
                                 
                                 {currentConversation ? (
                                     <>
-                                        <Typography variant="h6">
+                                        <Typography variant="h6" color="text.primary">
                                             {currentConversation.title}
                                         </Typography>
                                         <Chip
@@ -883,7 +883,7 @@ export default function ChatPage() {
                                 ) : (
                                     <>
                                         <Box>
-                                            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                                            <Typography variant="h6" color="text.primary" sx={{ fontWeight: 600 }}>
                                                 AI Infrastructure Assistant
                                             </Typography>
                                             <Typography variant="caption" color="text.secondary">
@@ -1004,7 +1004,7 @@ export default function ChatPage() {
                                     </Avatar>
 
                                     <Typography 
-                                        variant="h3" 
+                                        variant="h3" color="text.primary" 
                                         gutterBottom 
                                         sx={{ 
                                             fontWeight: 700,
@@ -1347,7 +1347,7 @@ export default function ChatPage() {
                         </Typography>
                         
                         <Box sx={{ mb: 3 }}>
-                            <Typography variant="h6" sx={{ mb: 2 }}>Chat Preferences</Typography>
+                            <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>Chat Preferences</Typography>
                             
                             <FormControl fullWidth sx={{ mb: 2 }}>
                                 <InputLabel>Default Context</InputLabel>
@@ -1366,7 +1366,7 @@ export default function ChatPage() {
                         </Box>
                         
                         <Box sx={{ mb: 3 }}>
-                            <Typography variant="h6" sx={{ mb: 2 }}>About</Typography>
+                            <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>About</Typography>
                             <Typography variant="body2" color="text.secondary">
                                 AI Infrastructure Assistant helps you with cloud architecture, DevOps, 
                                 and infrastructure planning. The assistant uses advanced AI to provide 

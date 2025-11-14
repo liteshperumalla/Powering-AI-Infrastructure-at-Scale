@@ -179,7 +179,7 @@ const ReportPreview: React.FC<ReportPreviewProps> = ({
                 {/* Header */}
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                     <Box>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             {safeReport.title}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">

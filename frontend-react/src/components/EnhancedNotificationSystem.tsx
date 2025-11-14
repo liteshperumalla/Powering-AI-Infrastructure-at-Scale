@@ -193,7 +193,7 @@ const EnhancedNotificationSystem: React.FC = () => {
                 }}
             >
                 <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-                    <Typography variant="h6" fontWeight={600}>
+                    <Typography variant="h6" color="text.primary" fontWeight={600}>
                         Notifications {loading && '(Loading...)'}
                     </Typography>
                     {unreadCount > 0 && (

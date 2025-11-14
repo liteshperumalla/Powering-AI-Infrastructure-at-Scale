@@ -206,7 +206,7 @@ const ReportTemplateManager: React.FC<ReportTemplateManagerProps> = ({
             <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                     <Box>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             {template.name}
                         </Typography>
                         <Typography variant="body2" color="text.secondary" paragraph>
@@ -323,7 +323,7 @@ const ReportTemplateManager: React.FC<ReportTemplateManagerProps> = ({
 
     const renderBrandingEditor = () => (
         <Box>
-            <Typography variant="h6" gutterBottom>
+            <Typography variant="h6" color="text.primary" gutterBottom>
                 Branding Configuration
             </Typography>
 
@@ -399,7 +399,7 @@ const ReportTemplateManager: React.FC<ReportTemplateManagerProps> = ({
         <Box>
             {/* Header */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h4">Report Templates</Typography>
+                <Typography variant="h4" color="text.primary">Report Templates</Typography>
                 <Button
                     variant="contained"
                     startIcon={<Add />}
@@ -512,7 +512,7 @@ const ReportTemplateManager: React.FC<ReportTemplateManagerProps> = ({
                         {/* Sections Configuration */}
                         <Box sx={{ mb: 3 }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                                <Typography variant="h6">Sections</Typography>
+                                <Typography variant="h6" color="text.primary">Sections</Typography>
                                 <Button startIcon={<Add />} onClick={addSection}>
                                     Add Section
                                 </Button>
@@ -618,7 +618,7 @@ const ReportTemplateManager: React.FC<ReportTemplateManagerProps> = ({
                         {/* Sections Configuration */}
                         <Box sx={{ mb: 3 }}>
                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                                <Typography variant="h6">Sections</Typography>
+                                <Typography variant="h6" color="text.primary">Sections</Typography>
                                 <Button startIcon={<Add />} onClick={addSection}>
                                     Add Section
                                 </Button>

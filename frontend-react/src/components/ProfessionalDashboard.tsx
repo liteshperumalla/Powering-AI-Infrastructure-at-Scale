@@ -253,11 +253,11 @@ const ProfessionalDashboard: React.FC<ProfessionalDashboardProps> = ({
                                     }}>
                                         {kpi.icon}
                                     </Box>
-                                    <Typography variant="h4" fontWeight="bold">
+                                    <Typography variant="h4" color="text.primary" fontWeight="bold">
                                         {kpi.value}
                                     </Typography>
                                 </Box>
-                                <Typography variant="h6" gutterBottom>
+                                <Typography variant="h6" color="text.primary" gutterBottom>
                                     {kpi.title}
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">
@@ -372,7 +372,7 @@ const ProfessionalDashboard: React.FC<ProfessionalDashboardProps> = ({
         <Grid container spacing={3}>
             <Grid item xs={12} md={8}>
                 <Paper sx={{ p: 3, mb: 3 }}>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="h6" color="text.primary" gutterBottom>
                         Compliance Framework Assessment
                     </Typography>
                     {renderComplianceChart()}
@@ -380,7 +380,7 @@ const ProfessionalDashboard: React.FC<ProfessionalDashboardProps> = ({
             </Grid>
             <Grid item xs={12} md={4}>
                 <Paper sx={{ p: 3, mb: 3 }}>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="h6" color="text.primary" gutterBottom>
                         Strategic Priorities
                     </Typography>
                     <Box sx={{ mb: 2 }}>
@@ -404,7 +404,7 @@ const ProfessionalDashboard: React.FC<ProfessionalDashboardProps> = ({
                         <Typography variant="body2" color="text.secondary">
                             Implementation Timeline
                         </Typography>
-                        <Typography variant="h6">
+                        <Typography variant="h6" color="text.primary">
                             {dashboardData?.compliance_overview.estimated_remediation_timeline}
                         </Typography>
                     </Box>
@@ -412,7 +412,7 @@ const ProfessionalDashboard: React.FC<ProfessionalDashboardProps> = ({
             </Grid>
             <Grid item xs={12}>
                 <Paper sx={{ p: 3 }}>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="h6" color="text.primary" gutterBottom>
                         Cost Optimization Projections
                     </Typography>
                     {renderCostProjectionsChart()}
@@ -425,7 +425,7 @@ const ProfessionalDashboard: React.FC<ProfessionalDashboardProps> = ({
         <Grid container spacing={3}>
             <Grid item xs={12} md={6}>
                 <Paper sx={{ p: 3 }}>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="h6" color="text.primary" gutterBottom>
                         Financial Impact Analysis
                     </Typography>
                     <Box sx={{ mb: 3 }}>
@@ -448,7 +448,7 @@ const ProfessionalDashboard: React.FC<ProfessionalDashboardProps> = ({
                         <Typography variant="body2" color="text.secondary">
                             ROI Timeline
                         </Typography>
-                        <Typography variant="h6">
+                        <Typography variant="h6" color="text.primary">
                             {dashboardData?.cost_insights.roi_timeline}
                         </Typography>
                     </Box>
@@ -456,7 +456,7 @@ const ProfessionalDashboard: React.FC<ProfessionalDashboardProps> = ({
             </Grid>
             <Grid item xs={12} md={6}>
                 <Paper sx={{ p: 3 }}>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="h6" color="text.primary" gutterBottom>
                         Investment Requirements
                     </Typography>
                     <Box sx={{ mb: 2 }}>
@@ -494,7 +494,7 @@ const ProfessionalDashboard: React.FC<ProfessionalDashboardProps> = ({
         <Grid container spacing={3}>
             <Grid item xs={12} md={8}>
                 <Paper sx={{ p: 3 }}>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="h6" color="text.primary" gutterBottom>
                         Security Compliance Overview
                     </Typography>
                     {renderComplianceChart()}
@@ -502,14 +502,14 @@ const ProfessionalDashboard: React.FC<ProfessionalDashboardProps> = ({
             </Grid>
             <Grid item xs={12} md={4}>
                 <Paper sx={{ p: 3 }}>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="h6" color="text.primary" gutterBottom>
                         Security Metrics
                     </Typography>
                     <Box sx={{ mb: 2 }}>
                         <Typography variant="body2" color="text.secondary">
                             Security Posture Score
                         </Typography>
-                        <Typography variant="h4">
+                        <Typography variant="h4" color="text.primary">
                             {dashboardData?.technical_metrics.security_posture}%
                         </Typography>
                         <LinearProgress 
@@ -536,7 +536,7 @@ const ProfessionalDashboard: React.FC<ProfessionalDashboardProps> = ({
         <Grid container spacing={3}>
             <Grid item xs={12}>
                 <Paper sx={{ p: 3 }}>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="h6" color="text.primary" gutterBottom>
                         Technical Architecture Metrics
                     </Typography>
                     <Grid container spacing={3}>
@@ -582,7 +582,7 @@ const ProfessionalDashboard: React.FC<ProfessionalDashboardProps> = ({
         return (
             <Box display="flex" justifyContent="center" alignItems="center" minHeight={400}>
                 <CircularProgress />
-                <Typography variant="h6" sx={{ ml: 2 }}>
+                <Typography variant="h6" color="text.primary" sx={{ ml: 2 }}>
                     Loading Professional Dashboard...
                 </Typography>
             </Box>
@@ -605,7 +605,7 @@ const ProfessionalDashboard: React.FC<ProfessionalDashboardProps> = ({
             {/* Header */}
             <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <Box>
-                    <Typography variant="h3" gutterBottom sx={{ fontWeight: 'bold' }}>
+                    <Typography variant="h3" color="text.primary" gutterBottom sx={{ fontWeight: 'bold' }}>
                         Professional Infrastructure Dashboard
                     </Typography>
                     <Typography variant="h6" color="text.secondary">

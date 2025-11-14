@@ -226,7 +226,7 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
 
     return (
         <Box sx={{ p: 3 }}>
-            <Typography variant="h4" fontWeight={600} sx={{ mb: 3 }}>
+            <Typography variant="h4" color="text.primary" fontWeight={600} sx={{ mb: 3 }}>
                 Change Impact Analysis
             </Typography>
 
@@ -302,7 +302,7 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
 
                                 {/* Resource Selection */}
                                 <Box sx={{ mt: 3 }}>
-                                    <Typography variant="h6" sx={{ mb: 2 }}>
+                                    <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
                                         Select Resources to Analyze
                                     </Typography>
                                     <Grid container spacing={2}>
@@ -399,7 +399,7 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
                                                             justifyContent: 'center',
                                                         }}
                                                     >
-                                                        <Typography variant="h4" component="div" color="text.secondary">
+                                                        <Typography variant="h4" color="text.secondary" component="div">
                                                             {analysisResult.overall_risk_score}
                                                         </Typography>
                                                     </Box>
@@ -422,14 +422,14 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
                                 <Grid item xs={12} md={8}>
                                     <Card>
                                         <CardContent>
-                                            <Typography variant="h6" sx={{ mb: 2 }}>
+                                            <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
                                                 Impact Summary
                                             </Typography>
                                             <Grid container spacing={3}>
                                                 <Grid item xs={6} md={3}>
                                                     <Stack alignItems="center" spacing={1}>
                                                         <InfraIcon color="primary" fontSize="large" />
-                                                        <Typography variant="h4">
+                                                        <Typography variant="h4" color="text.primary">
                                                             {analysisResult.blast_radius.total_affected_count}
                                                         </Typography>
                                                         <Typography variant="caption" textAlign="center">
@@ -440,7 +440,7 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
                                                 <Grid item xs={6} md={3}>
                                                     <Stack alignItems="center" spacing={1}>
                                                         <UsersIcon color="warning" fontSize="large" />
-                                                        <Typography variant="h4">
+                                                        <Typography variant="h4" color="text.primary">
                                                             {analysisResult.business_impact.user_impact_assessment.affected_users.toLocaleString()}
                                                         </Typography>
                                                         <Typography variant="caption" textAlign="center">
@@ -451,7 +451,7 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
                                                 <Grid item xs={6} md={3}>
                                                     <Stack alignItems="center" spacing={1}>
                                                         <CostIcon color="error" fontSize="large" />
-                                                        <Typography variant="h4">
+                                                        <Typography variant="h4" color="text.primary">
                                                             ${analysisResult.business_impact.financial_impact.potential_cost_change.toLocaleString()}
                                                         </Typography>
                                                         <Typography variant="caption" textAlign="center">
@@ -462,7 +462,7 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
                                                 <Grid item xs={6} md={3}>
                                                     <Stack alignItems="center" spacing={1}>
                                                         <ScheduleIcon color="info" fontSize="large" />
-                                                        <Typography variant="h4">
+                                                        <Typography variant="h4" color="text.primary">
                                                             {analysisResult.timeline_analysis.estimated_duration}
                                                         </Typography>
                                                         <Typography variant="caption" textAlign="center">
@@ -479,7 +479,7 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
                                 <Grid item xs={12} md={6}>
                                     <Card>
                                         <CardContent>
-                                            <Typography variant="h6" sx={{ mb: 2 }}>
+                                            <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
                                                 Impact Distribution
                                             </Typography>
                                             <InteractiveCharts
@@ -499,7 +499,7 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
                                 <Grid item xs={12} md={6}>
                                     <Card>
                                         <CardContent>
-                                            <Typography variant="h6" sx={{ mb: 2 }}>
+                                            <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
                                                 Risk Breakdown
                                             </Typography>
                                             <InteractiveCharts
@@ -524,7 +524,7 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
                                             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                                                 <Stack direction="row" alignItems="center" spacing={2}>
                                                     <DependencyIcon />
-                                                    <Typography variant="h6">
+                                                    <Typography variant="h6" color="text.primary">
                                                         Blast Radius Analysis
                                                     </Typography>
                                                     <Badge
@@ -581,7 +581,7 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
                                             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                                                 <Stack direction="row" alignItems="center" spacing={2}>
                                                     <UsersIcon />
-                                                    <Typography variant="h6">
+                                                    <Typography variant="h6" color="text.primary">
                                                         Business Impact Assessment
                                                     </Typography>
                                                 </Stack>
@@ -627,7 +627,7 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
                                             <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                                                 <Stack direction="row" alignItems="center" spacing={2}>
                                                     <InfoIcon />
-                                                    <Typography variant="h6">
+                                                    <Typography variant="h6" color="text.primary">
                                                         Risk Mitigation Recommendations
                                                     </Typography>
                                                     <Badge

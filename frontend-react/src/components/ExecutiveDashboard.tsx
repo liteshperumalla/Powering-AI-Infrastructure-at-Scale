@@ -212,7 +212,7 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ assessmentId })
     <Grid container spacing={3}>
       {/* Key Metrics Cards */}
       <Grid item xs={12}>
-        <Typography variant="h6" mb={2}>Key Performance Indicators</Typography>
+        <Typography variant="h6" color="text.primary" mb={2}>Key Performance Indicators</Typography>
         <Grid container spacing={2}>
           {kpiCards.slice(0, 4).map((kpi) => (
             <Grid item xs={12} sm={6} md={3} key={kpi.id}>
@@ -266,7 +266,7 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ assessmentId })
         <Grid item xs={12} md={8}>
           <Card>
             <CardContent>
-              <Typography variant="h6" mb={2}>Executive Summary - {executiveSummary.period}</Typography>
+              <Typography variant="h6" color="text.primary" mb={2}>Executive Summary - {executiveSummary.period}</Typography>
               
               <Grid container spacing={2} mb={3}>
                 <Grid item xs={6} md={3}>
@@ -345,7 +345,7 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ assessmentId })
       <Grid item xs={12} md={4}>
         <Card>
           <CardContent>
-            <Typography variant="h6" mb={2}>Risk Overview</Typography>
+            <Typography variant="h6" color="text.primary" mb={2}>Risk Overview</Typography>
             
             {riskFactors.length > 0 && (
               <ResponsiveContainer width="100%" height={200}>
@@ -406,7 +406,7 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ assessmentId })
   const renderStrategicInitiativesTab = () => (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h6">Strategic Initiatives</Typography>
+        <Typography variant="h6" color="text.primary">Strategic Initiatives</Typography>
         <Button variant="contained" onClick={() => setInitiativeDialog(true)}>
           View Details
         </Button>
@@ -418,7 +418,7 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ assessmentId })
             <Card>
               <CardContent>
                 <Box display="flex" justifyContent="space-between" alignItems="flex-start" mb={2}>
-                  <Typography variant="h6" noWrap>{initiative.title}</Typography>
+                  <Typography variant="h6" color="text.primary" noWrap>{initiative.title}</Typography>
                   <Chip 
                     label={initiative.status} 
                     color={
@@ -495,7 +495,7 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ assessmentId })
 
   const renderBusinessUnitsTab = () => (
     <Box>
-      <Typography variant="h6" mb={3}>Business Unit Performance</Typography>
+      <Typography variant="h6" color="text.primary" mb={3}>Business Unit Performance</Typography>
       
       <TableContainer component={Paper}>
         <Table>
@@ -586,7 +586,7 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ assessmentId })
       <Grid item xs={12} md={6}>
         <Card>
           <CardContent>
-            <Typography variant="h6" mb={2}>Cost Trends</Typography>
+            <Typography variant="h6" color="text.primary" mb={2}>Cost Trends</Typography>
             {kpiCards.length > 0 && kpiCards[0].chart_data.length > 0 && (
               <ResponsiveContainer width="100%" height={300}>
                 <AreaChart data={kpiCards[0].chart_data}>
@@ -605,7 +605,7 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ assessmentId })
       <Grid item xs={12} md={6}>
         <Card>
           <CardContent>
-            <Typography variant="h6" mb={2}>Performance Metrics</Typography>
+            <Typography variant="h6" color="text.primary" mb={2}>Performance Metrics</Typography>
             {kpiCards.length > 1 && kpiCards[1].chart_data.length > 0 && (
               <ResponsiveContainer width="100%" height={300}>
                 <RechartsBarChart data={kpiCards[1].chart_data}>
@@ -624,7 +624,7 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ assessmentId })
       <Grid item xs={12}>
         <Card>
           <CardContent>
-            <Typography variant="h6" mb={2}>Key Metrics Summary</Typography>
+            <Typography variant="h6" color="text.primary" mb={2}>Key Metrics Summary</Typography>
             <Grid container spacing={2}>
               {executiveMetrics.slice(0, 8).map((metric) => (
                 <Grid item xs={12} sm={6} md={3} key={metric.id}>
@@ -666,7 +666,7 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ assessmentId })
     <Box sx={{ p: 3 }}>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Box>
-          <Typography variant="h4" gutterBottom>
+          <Typography variant="h4" color="text.primary" gutterBottom>
             Executive Dashboard
           </Typography>
           <Typography variant="subtitle1" color="text.secondary">

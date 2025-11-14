@@ -216,7 +216,7 @@ function ResetPasswordContent() {
                             
                             <Typography 
                                 component="h1" 
-                                variant="h4" 
+                                variant="h4" color="text.primary" 
                                 gutterBottom
                                 sx={{
                                     fontWeight: 700,

@@ -182,7 +182,7 @@ export default function ExperimentsPage() {
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
         <Box>
-          <Typography variant="h4" component="h1" gutterBottom>
+          <Typography variant="h4" color="text.primary" component="h1" gutterBottom>
             <Science sx={{ mr: 2, verticalAlign: 'middle' }} />
             A/B Testing & Experiments
           </Typography>
@@ -218,7 +218,7 @@ export default function ExperimentsPage() {
                     <Typography color="textSecondary" gutterBottom>
                       Active Experiments
                     </Typography>
-                    <Typography variant="h5">
+                    <Typography variant="h5" color="text.primary">
                       {experiments.filter(e => e.status === 'running').length}
                     </Typography>
                   </Box>
@@ -235,7 +235,7 @@ export default function ExperimentsPage() {
                     <Typography color="textSecondary" gutterBottom>
                       Conversion Rate
                     </Typography>
-                    <Typography variant="h5">
+                    <Typography variant="h5" color="text.primary">
                       {dashboardData.overall_conversion_rate || '12.5'}%
                     </Typography>
                   </Box>
@@ -252,7 +252,7 @@ export default function ExperimentsPage() {
                     <Typography color="textSecondary" gutterBottom>
                       Total Users
                     </Typography>
-                    <Typography variant="h5">
+                    <Typography variant="h5" color="text.primary">
                       {dashboardData.total_users || '1,234'}
                     </Typography>
                   </Box>
@@ -269,7 +269,7 @@ export default function ExperimentsPage() {
                     <Typography color="textSecondary" gutterBottom>
                       Avg. Test Duration
                     </Typography>
-                    <Typography variant="h5">
+                    <Typography variant="h5" color="text.primary">
                       {dashboardData.avg_duration || '14'} days
                     </Typography>
                   </Box>
@@ -358,14 +358,14 @@ export default function ExperimentsPage() {
         </TabPanel>
 
         <TabPanel value={tabValue} index={1}>
-          <Typography variant="h6" gutterBottom>Running Experiments</Typography>
+          <Typography variant="h6" color="text.primary" gutterBottom>Running Experiments</Typography>
           <Typography color="textSecondary">
             {experiments.filter(e => e.status === 'running').length} active experiments
           </Typography>
         </TabPanel>
 
         <TabPanel value={tabValue} index={2}>
-          <Typography variant="h6" gutterBottom>Experiment Results</Typography>
+          <Typography variant="h6" color="text.primary" gutterBottom>Experiment Results</Typography>
           <Typography color="textSecondary">
             View detailed results and statistical significance
           </Typography>

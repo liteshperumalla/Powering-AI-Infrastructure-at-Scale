@@ -386,7 +386,7 @@ const NotificationSystem: React.FC<NotificationSystemProps> = ({
             >
                 <Box sx={{ p: 2 }}>
                     <Stack direction="row" justifyContent="space-between" alignItems="center">
-                        <Typography variant="h6">
+                        <Typography variant="h6" color="text.primary">
                             Notifications
                         </Typography>
                         <Stack direction="row" spacing={1}>

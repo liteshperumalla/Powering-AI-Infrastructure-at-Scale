@@ -250,7 +250,7 @@ const GitOpsIntegration: React.FC = () => {
     return (
         <Box sx={{ p: 3 }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-                <Typography variant="h4" fontWeight={600}>
+                <Typography variant="h4" color="text.primary" fontWeight={600}>
                     GitOps Integration
                 </Typography>
                 <Button
@@ -280,7 +280,7 @@ const GitOpsIntegration: React.FC = () => {
                     <Grid item xs={12} md={8}>
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" sx={{ mb: 2 }}>
+                                <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
                                     Connected Repositories
                                 </Typography>
                                 {repositories.length === 0 ? (
@@ -362,7 +362,7 @@ const GitOpsIntegration: React.FC = () => {
                     <Grid item xs={12} md={4}>
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" sx={{ mb: 2 }}>
+                                <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
                                     Deployment Success Rate
                                 </Typography>
                                 {generateDeploymentMetrics().length > 0 ? (
@@ -392,7 +392,7 @@ const GitOpsIntegration: React.FC = () => {
                 <Card>
                     <CardContent>
                         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                            <Typography variant="h6">
+                            <Typography variant="h6" color="text.primary">
                                 Pull Requests
                                 {selectedRepo && ` - ${selectedRepo.name}`}
                             </Typography>
@@ -483,7 +483,7 @@ const GitOpsIntegration: React.FC = () => {
             <TabPanel value={tabValue} index={2}>
                 <Stack spacing={3}>
                     <Stack direction="row" justifyContent="space-between" alignItems="center">
-                        <Typography variant="h6">
+                        <Typography variant="h6" color="text.primary">
                             Infrastructure as Code Templates
                         </Typography>
                         <Button
@@ -502,7 +502,7 @@ const GitOpsIntegration: React.FC = () => {
                                     <CardContent>
                                         <Stack spacing={2}>
                                             <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                                                <Typography variant="h6" noWrap>
+                                                <Typography variant="h6" color="text.primary" noWrap>
                                                     {template.name}
                                                 </Typography>
                                                 <Chip
@@ -558,7 +558,7 @@ const GitOpsIntegration: React.FC = () => {
                     <Grid item xs={12} lg={8}>
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" sx={{ mb: 2 }}>
+                                <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
                                     Deployment History
                                 </Typography>
                                 {deploymentPlans.length === 0 ? (
@@ -624,7 +624,7 @@ const GitOpsIntegration: React.FC = () => {
                     <Grid item xs={12} lg={4}>
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" sx={{ mb: 2 }}>
+                                <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
                                     Activity Timeline
                                 </Typography>
                                 {generateActivityMetrics().length > 0 ? (
@@ -654,7 +654,7 @@ const GitOpsIntegration: React.FC = () => {
                 <Stack spacing={3}>
                     <Card>
                         <CardContent>
-                            <Typography variant="h6" sx={{ mb: 2 }}>
+                            <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
                                 Notification Settings
                             </Typography>
                             <Stack spacing={2}>
@@ -680,7 +680,7 @@ const GitOpsIntegration: React.FC = () => {
 
                     <Card>
                         <CardContent>
-                            <Typography variant="h6" sx={{ mb: 2 }}>
+                            <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
                                 Security Settings
                             </Typography>
                             <Stack spacing={2}>

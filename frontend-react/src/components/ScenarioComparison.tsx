@@ -217,7 +217,7 @@ export default function ScenarioComparison({ open, onClose }: ScenarioComparison
                 {/* Available Scenarios Section */}
                 {comparisonScenarios.length === 0 && availableScenarios.length > 0 && (
                     <Box sx={{ mb: 3 }}>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             Available Scenarios
                         </Typography>
                         <Grid container spacing={2}>
@@ -227,7 +227,7 @@ export default function ScenarioComparison({ open, onClose }: ScenarioComparison
                                         <CardContent>
                                             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                                 <Box sx={{ flex: 1 }}>
-                                                    <Typography variant="h6" gutterBottom>
+                                                    <Typography variant="h6" color="text.primary" gutterBottom>
                                                         {scenario.name}
                                                     </Typography>
                                                     <Typography variant="body2" color="text.secondary" gutterBottom>
@@ -310,7 +310,7 @@ export default function ScenarioComparison({ open, onClose }: ScenarioComparison
                                                 <CardContent>
                                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
                                                         <Box>
-                                                            <Typography variant="h6" gutterBottom>
+                                                            <Typography variant="h6" color="text.primary" gutterBottom>
                                                                 {scenario.name}
                                                             </Typography>
                                                             <Typography variant="body2" color="text.secondary">
@@ -425,7 +425,7 @@ export default function ScenarioComparison({ open, onClose }: ScenarioComparison
 
                                 {comparisonScenarios.length >= 2 && (
                                     <Box sx={{ mt: 4 }}>
-                                        <Typography variant="h6" gutterBottom>
+                                        <Typography variant="h6" color="text.primary" gutterBottom>
                                             Performance Comparison
                                         </Typography>
                                         <Card>
@@ -458,7 +458,7 @@ export default function ScenarioComparison({ open, onClose }: ScenarioComparison
                         {/* Cost Analysis Tab */}
                         {activeTab === 1 && comparisonScenarios.length >= 2 && (
                             <Box>
-                                <Typography variant="h6" gutterBottom>
+                                <Typography variant="h6" color="text.primary" gutterBottom>
                                     Cost Projection Comparison
                                 </Typography>
                                 <Card>
@@ -486,7 +486,7 @@ export default function ScenarioComparison({ open, onClose }: ScenarioComparison
                                 </Card>
 
                                 <Box sx={{ mt: 3 }}>
-                                    <Typography variant="h6" gutterBottom>
+                                    <Typography variant="h6" color="text.primary" gutterBottom>
                                         Cost Summary
                                     </Typography>
                                     <TableContainer component={Paper}>
@@ -539,7 +539,7 @@ export default function ScenarioComparison({ open, onClose }: ScenarioComparison
                         {/* Performance Metrics Tab */}
                         {activeTab === 2 && comparisonScenarios.length >= 2 && (
                             <Box>
-                                <Typography variant="h6" gutterBottom>
+                                <Typography variant="h6" color="text.primary" gutterBottom>
                                     Performance Trends
                                 </Typography>
                                 <Card>
@@ -567,7 +567,7 @@ export default function ScenarioComparison({ open, onClose }: ScenarioComparison
                                 </Card>
 
                                 <Box sx={{ mt: 3 }}>
-                                    <Typography variant="h6" gutterBottom>
+                                    <Typography variant="h6" color="text.primary" gutterBottom>
                                         Utilization Comparison
                                     </Typography>
                                     <Card>
@@ -598,13 +598,13 @@ export default function ScenarioComparison({ open, onClose }: ScenarioComparison
                         {/* Service Details Tab */}
                         {activeTab === 3 && (
                             <Box>
-                                <Typography variant="h6" gutterBottom>
+                                <Typography variant="h6" color="text.primary" gutterBottom>
                                     Service Breakdown
                                 </Typography>
                                 {comparisonScenarios.map((scenario, scenarioIndex) => (
                                     <Card key={scenario.id} sx={{ mb: 2 }}>
                                         <CardContent>
-                                            <Typography variant="h6" gutterBottom>
+                                            <Typography variant="h6" color="text.primary" gutterBottom>
                                                 {scenario.name}
                                             </Typography>
                                             {scenario.result?.services && (

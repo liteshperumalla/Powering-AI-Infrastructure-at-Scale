@@ -85,7 +85,7 @@ const FeatureCard: React.FC<FeatureCardProps> = ({ icon, title, description, col
                     >
                         {icon}
                     </Avatar>
-                    <Typography variant="h6" gutterBottom fontWeight={600}>
+                    <Typography variant="h6" color="text.primary" gutterBottom fontWeight={600}>
                         {title}
                     </Typography>
                     <Typography variant="body2" color="text.secondary">
@@ -138,7 +138,7 @@ const StatCard: React.FC<StatCardProps> = ({ value, label, icon, color, delay })
                     {icon}
                 </Box>
                 <Typography 
-                    variant="h4" 
+                    variant="h4" color="text.primary" 
                     fontWeight={700} 
                     color={color}
                     sx={{
@@ -357,7 +357,7 @@ export default function ModernHomePage() {
                                         }}
                                     >
                                         <Typography
-                                            variant="h4"
+                                            variant="h4" color="text.primary"
                                             sx={{
                                                 background: `linear-gradient(135deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
                                                 backgroundClip: 'text',
@@ -380,7 +380,7 @@ export default function ModernHomePage() {
             {/* Stats Section */}
             <Container maxWidth="lg" sx={{ py: 8 }}>
                 <Typography 
-                    variant="h3" 
+                    variant="h3" color="text.primary" 
                     align="center" 
                     fontWeight={600} 
                     gutterBottom
@@ -407,7 +407,7 @@ export default function ModernHomePage() {
             <Box sx={{ bgcolor: 'background.default', py: 8 }}>
                 <Container maxWidth="lg">
                     <Typography 
-                        variant="h3" 
+                        variant="h3" color="text.primary" 
                         align="center" 
                         fontWeight={600} 
                         gutterBottom
@@ -416,9 +416,8 @@ export default function ModernHomePage() {
                         Powerful Features
                     </Typography>
                     <Typography 
-                        variant="h6" 
-                        align="center" 
-                        color="text.secondary"
+                        variant="h6" color="text.secondary" 
+                        align="center"
                         sx={{ mb: 6, maxWidth: 600, mx: 'auto' }}
                     >
                         Everything you need to manage and optimize your cloud infrastructure with AI intelligence
@@ -449,10 +448,10 @@ export default function ModernHomePage() {
                 }}
             >
                 <Container maxWidth="md" sx={{ textAlign: 'center' }}>
-                    <Typography variant="h3" fontWeight={600} gutterBottom>
+                    <Typography variant="h3" color="text.primary" fontWeight={600} gutterBottom>
                         Ready to Transform Your Infrastructure?
                     </Typography>
-                    <Typography variant="h6" sx={{ mb: 4, opacity: 0.9 }}>
+                    <Typography variant="h6" color="text.primary" sx={{ mb: 4, opacity: 0.9 }}>
                         Join thousands of companies already using AI to optimize their cloud infrastructure
                     </Typography>
                     <Stack 
@@ -521,7 +520,7 @@ export default function ModernHomePage() {
                         }}
                     >
                         <Box>
-                            <Typography variant="h6" gutterBottom>
+                            <Typography variant="h6" color="text.primary" gutterBottom>
                                 Infra Mind
                             </Typography>
                             <Typography variant="body2" color="grey.400">

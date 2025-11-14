@@ -265,7 +265,7 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
         <Box sx={{ p: 3 }}>
             {/* Header */}
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-                <Typography variant="h4" component="h1">
+                <Typography variant="h4" color="text.primary" component="h1">
                     Real-Time Metrics Dashboard
                 </Typography>
 
@@ -330,7 +330,7 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
                             <Stack direction="row" alignItems="center" spacing={2}>
                                 <SpeedIcon color={getHealthColor(systemHealth.cpu_usage_percent, { warning: 70, critical: 85 })} />
                                 <Box sx={{ flexGrow: 1 }}>
-                                    <Typography variant="h6">
+                                    <Typography variant="h6" color="text.primary">
                                         {safeToFixed(systemHealth.cpu_usage_percent, 1)}%
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary">
@@ -354,7 +354,7 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
                             <Stack direction="row" alignItems="center" spacing={2}>
                                 <MemoryIcon color={getHealthColor(systemHealth.memory_usage_percent, { warning: 80, critical: 90 })} />
                                 <Box sx={{ flexGrow: 1 }}>
-                                    <Typography variant="h6">
+                                    <Typography variant="h6" color="text.primary">
                                         {safeToFixed(systemHealth.memory_usage_percent, 1)}%
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary">
@@ -378,7 +378,7 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
                             <Stack direction="row" alignItems="center" spacing={2}>
                                 <TimerIcon color={getHealthColor(systemHealth.response_time_ms, { warning: 1000, critical: 3000 })} />
                                 <Box sx={{ flexGrow: 1 }}>
-                                    <Typography variant="h6">
+                                    <Typography variant="h6" color="text.primary">
                                         {formatDuration(systemHealth.response_time_ms)}
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary">
@@ -396,7 +396,7 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
                             <Stack direction="row" alignItems="center" spacing={2}>
                                 <PeopleIcon color="primary" />
                                 <Box sx={{ flexGrow: 1 }}>
-                                    <Typography variant="h6">
+                                    <Typography variant="h6" color="text.primary">
                                         {systemHealth.active_connections}
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary">
@@ -414,7 +414,7 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
                 <Grid item xs={12} md={6}>
                     <Card>
                         <CardContent>
-                            <Typography variant="h6" gutterBottom>
+                            <Typography variant="h6" color="text.primary" gutterBottom>
                                 System Performance
                             </Typography>
                             <ResponsiveContainer width="100%" height={300}>
@@ -451,7 +451,7 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
                 <Grid item xs={12} md={6}>
                     <Card>
                         <CardContent>
-                            <Typography variant="h6" gutterBottom>
+                            <Typography variant="h6" color="text.primary" gutterBottom>
                                 Response Time & Error Rate
                             </Typography>
                             <ResponsiveContainer width="100%" height={300}>
@@ -494,7 +494,7 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
                 <Grid item xs={12} md={8}>
                     <Card>
                         <CardContent>
-                            <Typography variant="h6" gutterBottom>
+                            <Typography variant="h6" color="text.primary" gutterBottom>
                                 Workflow Status
                             </Typography>
 
@@ -562,7 +562,7 @@ const RealTimeMetricsDashboard: React.FC<RealTimeMetricsDashboardProps> = ({
                     <Card>
                         <CardContent>
                             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                                <Typography variant="h6">
+                                <Typography variant="h6" color="text.primary">
                                     Active Alerts
                                 </Typography>
                                 <Badge badgeContent={activeAlerts.length} color="error">

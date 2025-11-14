@@ -228,7 +228,7 @@ export default function ApiTester() {
         <Card>
             <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                    <Typography variant="h6">
+                    <Typography variant="h6" color="text.primary">
                         API Integration Test Suite
                     </Typography>
                     <Box sx={{ display: 'flex', gap: 2 }}>

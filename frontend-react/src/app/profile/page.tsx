@@ -153,7 +153,7 @@ export default function ProfilePage() {
                                     {profile.name.split(' ').map(n => n[0]).join('')}
                                 </Avatar>
                                 
-                                <Typography variant="h5" gutterBottom fontWeight={600}>
+                                <Typography variant="h5" color="text.primary" gutterBottom fontWeight={600}>
                                     {profile.name}
                                 </Typography>
                                 
@@ -205,7 +205,7 @@ export default function ProfilePage() {
                         {/* Profile Details */}
                         <Grid item xs={12} md={8}>
                             <Paper elevation={2} sx={{ p: 3, mb: 3 }}>
-                                <Typography variant="h6" gutterBottom fontWeight={600}>
+                                <Typography variant="h6" color="text.primary" gutterBottom fontWeight={600}>
                                     Profile Information
                                 </Typography>
                                 <Divider sx={{ mb: 3 }} />
@@ -293,7 +293,7 @@ export default function ProfilePage() {
 
                             {/* Preferences Card */}
                             <Paper elevation={2} sx={{ p: 3 }}>
-                                <Typography variant="h6" gutterBottom fontWeight={600}>
+                                <Typography variant="h6" color="text.primary" gutterBottom fontWeight={600}>
                                     Preferences & Settings
                                 </Typography>
                                 <Divider sx={{ mb: 3 }} />

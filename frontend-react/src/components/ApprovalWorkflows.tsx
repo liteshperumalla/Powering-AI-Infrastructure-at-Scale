@@ -234,7 +234,7 @@ const ApprovalWorkflows: React.FC = () => {
     return (
         <Box sx={{ p: 3 }}>
             <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 3 }}>
-                <Typography variant="h4" fontWeight={600}>
+                <Typography variant="h4" color="text.primary" fontWeight={600}>
                     Approval Workflows
                 </Typography>
                 <Stack direction="row" spacing={2}>
@@ -348,7 +348,7 @@ const ApprovalWorkflows: React.FC = () => {
                                                     primary={
                                                         <Stack direction="row" alignItems="center" spacing={1}>
                                                             {getStatusIcon(request.workflow?.status || 'pending')}
-                                                            <Typography variant="h6">
+                                                            <Typography variant="h6" color="text.primary">
                                                                 {request.title}
                                                             </Typography>
                                                             <Chip
@@ -484,7 +484,7 @@ const ApprovalWorkflows: React.FC = () => {
                                 <CardContent>
                                     <Stack spacing={2}>
                                         <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-                                            <Typography variant="h6" noWrap>
+                                            <Typography variant="h6" color="text.primary" noWrap>
                                                 {rule.name}
                                             </Typography>
                                             <Chip
@@ -532,7 +532,7 @@ const ApprovalWorkflows: React.FC = () => {
             <TabPanel value={tabValue} index={2}>
                 <Card>
                     <CardContent>
-                        <Typography variant="h6" sx={{ mb: 3 }}>
+                        <Typography variant="h6" color="text.primary" sx={{ mb: 3 }}>
                             Approval Activity Timeline
                         </Typography>
                         <InteractiveCharts
@@ -556,7 +556,7 @@ const ApprovalWorkflows: React.FC = () => {
                     <Grid item xs={12} md={6}>
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" sx={{ mb: 2 }}>
+                                <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
                                     Request Status Distribution
                                 </Typography>
                                 <InteractiveCharts
@@ -576,7 +576,7 @@ const ApprovalWorkflows: React.FC = () => {
                     <Grid item xs={12} md={6}>
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" sx={{ mb: 2 }}>
+                                <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
                                     Key Metrics
                                 </Typography>
                                 <Stack spacing={2}>

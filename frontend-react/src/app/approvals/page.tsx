@@ -83,7 +83,7 @@ export default function ApprovalsPage() {
     <ResponsiveLayout title="Approval Workflows">
       <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
         <Box sx={{ mb: 4 }}>
-          <Typography variant="h4" component="h1" gutterBottom>
+          <Typography variant="h4" color="text.primary" component="h1" gutterBottom>
             Approval Workflows
           </Typography>
           <Typography variant="subtitle1" color="text.secondary">
@@ -115,7 +115,7 @@ export default function ApprovalsPage() {
                   <CardContent>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                       <AccountTree color="primary" sx={{ mr: 1 }} />
-                      <Typography variant="h6">Total Workflows</Typography>
+                      <Typography variant="h6" color="text.primary">Total Workflows</Typography>
                     </Box>
                     <Typography variant="h3" color="primary">
                       {approvalsData.total_workflows || approvalsData.workflows?.length || 0}
@@ -130,7 +130,7 @@ export default function ApprovalsPage() {
                   <CardContent>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                       <Pending color="warning" sx={{ mr: 1 }} />
-                      <Typography variant="h6">Pending</Typography>
+                      <Typography variant="h6" color="text.primary">Pending</Typography>
                     </Box>
                     <Typography variant="h3" color="warning.main">
                       {approvalsData.pending_count || 2}
@@ -145,7 +145,7 @@ export default function ApprovalsPage() {
                   <CardContent>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                       <CheckCircle color="success" sx={{ mr: 1 }} />
-                      <Typography variant="h6">Approved</Typography>
+                      <Typography variant="h6" color="text.primary">Approved</Typography>
                     </Box>
                     <Typography variant="h3" color="success.main">
                       {approvalsData.approved_count || 5}
@@ -160,7 +160,7 @@ export default function ApprovalsPage() {
                   <CardContent>
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                       <Cancel color="error" sx={{ mr: 1 }} />
-                      <Typography variant="h6">Rejected</Typography>
+                      <Typography variant="h6" color="text.primary">Rejected</Typography>
                     </Box>
                     <Typography variant="h3" color="error.main">
                       {approvalsData.rejected_count || 1}
@@ -173,7 +173,7 @@ export default function ApprovalsPage() {
             {/* Workflows List */}
             {approvalsData.workflows && Array.isArray(approvalsData.workflows) && approvalsData.workflows.length > 0 && (
               <Paper sx={{ p: 3, mb: 3 }}>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" color="text.primary" gutterBottom>
                   Active Workflows
                 </Typography>
                 <List>
@@ -222,7 +222,7 @@ export default function ApprovalsPage() {
             {/* Description */}
             {approvalsData.description && (
               <Paper sx={{ p: 3 }}>
-                <Typography variant="h6" gutterBottom>
+                <Typography variant="h6" color="text.primary" gutterBottom>
                   About Approval Workflows
                 </Typography>
                 <Typography variant="body2" color="text.secondary">

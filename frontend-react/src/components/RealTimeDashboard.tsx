@@ -255,7 +255,7 @@ export default function RealTimeDashboard() {
         <Box>
             {/* Header */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="h5" gutterBottom>
+                <Typography variant="h5" color="text.primary" gutterBottom>
                     Real-Time System Dashboard
                 </Typography>
 
@@ -291,9 +291,9 @@ export default function RealTimeDashboard() {
                             <CardContent>
                                 <Stack direction="row" alignItems="center" spacing={1}>
                                     <Speed color="primary" />
-                                    <Typography variant="h6">CPU</Typography>
+                                    <Typography variant="h6" color="text.primary">CPU</Typography>
                                 </Stack>
-                                <Typography variant="h4" color={getMetricColor(metrics.cpu_usage_percent, { warning: 70, critical: 90 })}>
+                                <Typography variant="h4" color="text.primary" color={getMetricColor(metrics.cpu_usage_percent, { warning: 70, critical: 90 })}>
                                     {safeToFixed(metrics.cpu_usage_percent, 1)}%
                                 </Typography>
                                 <LinearProgress
@@ -312,9 +312,9 @@ export default function RealTimeDashboard() {
                             <CardContent>
                                 <Stack direction="row" alignItems="center" spacing={1}>
                                     <Memory color="primary" />
-                                    <Typography variant="h6">Memory</Typography>
+                                    <Typography variant="h6" color="text.primary">Memory</Typography>
                                 </Stack>
-                                <Typography variant="h4" color={getMetricColor(metrics.memory_usage_percent, { warning: 80, critical: 95 })}>
+                                <Typography variant="h4" color="text.primary" color={getMetricColor(metrics.memory_usage_percent, { warning: 80, critical: 95 })}>
                                     {safeToFixed(metrics.memory_usage_percent, 1)}%
                                 </Typography>
                                 <LinearProgress
@@ -333,9 +333,9 @@ export default function RealTimeDashboard() {
                             <CardContent>
                                 <Stack direction="row" alignItems="center" spacing={1}>
                                     <Storage color="primary" />
-                                    <Typography variant="h6">Disk</Typography>
+                                    <Typography variant="h6" color="text.primary">Disk</Typography>
                                 </Stack>
-                                <Typography variant="h4" color={getMetricColor(metrics.disk_usage_percent, { warning: 85, critical: 95 })}>
+                                <Typography variant="h4" color="text.primary" color={getMetricColor(metrics.disk_usage_percent, { warning: 85, critical: 95 })}>
                                     {safeToFixed(metrics.disk_usage_percent, 1)}%
                                 </Typography>
                                 <LinearProgress
@@ -354,9 +354,9 @@ export default function RealTimeDashboard() {
                             <CardContent>
                                 <Stack direction="row" alignItems="center" spacing={1}>
                                     <NetworkCheck color="primary" />
-                                    <Typography variant="h6">Network</Typography>
+                                    <Typography variant="h6" color="text.primary">Network</Typography>
                                 </Stack>
-                                <Typography variant="h4">
+                                <Typography variant="h4" color="text.primary">
                                     {safeToFixed(metrics.network_io_mbps, 1)} Mbps
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">
@@ -374,7 +374,7 @@ export default function RealTimeDashboard() {
                     <Grid item xs={12} md={6}>
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" gutterBottom>
+                                <Typography variant="h6" color="text.primary" gutterBottom>
                                     Performance Metrics
                                 </Typography>
 
@@ -429,7 +429,7 @@ export default function RealTimeDashboard() {
                     <Grid item xs={12} md={6}>
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" gutterBottom>
+                                <Typography variant="h6" color="text.primary" gutterBottom>
                                     System Activity
                                 </Typography>
 
@@ -468,7 +468,7 @@ export default function RealTimeDashboard() {
             {workflows.length > 0 && (
                 <Card sx={{ mb: 3 }}>
                     <CardContent>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             Active Workflows
                         </Typography>
 
@@ -517,7 +517,7 @@ export default function RealTimeDashboard() {
                 <Card>
                     <CardContent>
                         <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 2 }}>
-                            <Typography variant="h6">
+                            <Typography variant="h6" color="text.primary">
                                 Recent Alerts
                             </Typography>
                             <Badge badgeContent={alerts.length} color="error">
@@ -585,7 +585,7 @@ export default function RealTimeDashboard() {
             >
                 <DialogTitle>
                     <Stack direction="row" justifyContent="space-between" alignItems="center">
-                        <Typography variant="h6">Alert Details</Typography>
+                        <Typography variant="h6" color="text.primary">Alert Details</Typography>
                         <IconButton onClick={() => setAlertDialogOpen(false)}>
                             <Close />
                         </IconButton>

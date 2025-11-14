@@ -264,7 +264,7 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
                     thickness={8}
                     color={getComplianceColor(dashboard.overall_compliance_score) as any}
                   />
-                  <Typography variant="h4" sx={{ mt: 2 }}>
+                  <Typography variant="h4" color="text.primary" sx={{ mt: 2 }}>
                     {dashboard.overall_compliance_score}%
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
@@ -322,7 +322,7 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
               <CardContent>
                 <Typography variant="h6" color="text.secondary">Remediation Progress</Typography>
                 <Box mt={2}>
-                  <Typography variant="h5">
+                  <Typography variant="h5" color="text.primary">
                     {dashboard.remediation_progress?.completed_actions || 0}/{dashboard.remediation_progress?.total_actions || 0}
                   </Typography>
                   <LinearProgress
@@ -376,7 +376,7 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
       <Grid item xs={12} md={8}>
         <Card>
           <CardContent>
-            <Typography variant="h6" mb={2}>Framework Compliance Scores</Typography>
+            <Typography variant="h6" color="text.primary" mb={2}>Framework Compliance Scores</Typography>
             {dashboard && dashboard.framework_scores && (
               <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={dashboard.framework_scores}>
@@ -396,7 +396,7 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
       <Grid item xs={12} md={4}>
         <Card>
           <CardContent>
-            <Typography variant="h6" mb={2}>Upcoming Deadlines</Typography>
+            <Typography variant="h6" color="text.primary" mb={2}>Upcoming Deadlines</Typography>
             <List>
               {dashboard?.upcoming_deadlines?.slice(0, 5).map((deadline, index) => (
                 <ListItem key={index}>
@@ -431,7 +431,7 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
         <Grid item xs={12}>
           <Card>
             <CardContent>
-              <Typography variant="h6" mb={2}>Active Alerts</Typography>
+              <Typography variant="h6" color="text.primary" mb={2}>Active Alerts</Typography>
               {alerts.map((alert) => (
                 <Alert 
                   key={alert.id}
@@ -459,7 +459,7 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
   const renderFrameworksTab = () => (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h6">Compliance Frameworks</Typography>
+        <Typography variant="h6" color="text.primary">Compliance Frameworks</Typography>
         <Button
           variant="contained"
           startIcon={<Gavel />}
@@ -477,7 +477,7 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
                   <Box display="flex" alignItems="center">
                     {getFrameworkIcon(framework.type)}
-                    <Typography variant="h6" sx={{ ml: 1 }}>
+                    <Typography variant="h6" color="text.primary" sx={{ ml: 1 }}>
                       {framework.name}
                     </Typography>
                   </Box>
@@ -563,7 +563,7 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
   const renderAutomatedChecksTab = () => (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h6">Automated Compliance Checks</Typography>
+        <Typography variant="h6" color="text.primary">Automated Compliance Checks</Typography>
         <Button
           variant="contained"
           startIcon={<AutoMode />}
@@ -647,7 +647,7 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
   const renderAuditsTab = () => (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h6">Compliance Audits</Typography>
+        <Typography variant="h6" color="text.primary">Compliance Audits</Typography>
         <Button
           variant="contained"
           startIcon={<Assignment />}
@@ -663,7 +663,7 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
             <Card>
               <CardContent>
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                  <Typography variant="h6">{audit.audit_name}</Typography>
+                  <Typography variant="h6" color="text.primary">{audit.audit_name}</Typography>
                   <Chip
                     label={audit.audit_type}
                     variant="outlined"
@@ -747,13 +747,13 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
 
   const renderReportsTab = () => (
     <Box>
-      <Typography variant="h6" mb={3}>Compliance Reporting</Typography>
+      <Typography variant="h6" color="text.primary" mb={3}>Compliance Reporting</Typography>
       
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
-              <Typography variant="h6" mb={2}>Generate Report</Typography>
+              <Typography variant="h6" color="text.primary" mb={2}>Generate Report</Typography>
               <FormControl fullWidth sx={{ mb: 2 }}>
                 <InputLabel>Report Type</InputLabel>
                 <Select defaultValue="executive_summary">
@@ -802,7 +802,7 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
         <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
-              <Typography variant="h6" mb={2}>Scheduled Reports</Typography>
+              <Typography variant="h6" color="text.primary" mb={2}>Scheduled Reports</Typography>
               <List>
                 <ListItem>
                   <ListItemIcon><Schedule /></ListItemIcon>
@@ -854,7 +854,7 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
 
   return (
     <Box>
-      <Typography variant="h4" gutterBottom>
+      <Typography variant="h4" color="text.primary" gutterBottom>
         Compliance Automation
       </Typography>
       <Typography variant="subtitle1" color="text.secondary" mb={3}>

@@ -292,7 +292,7 @@ export default function SettingsPage() {
                 <Container maxWidth="lg" sx={{ mt: 3 }}>
                     <Box sx={{ mb: 4 }}>
                         <Typography
-                            variant="h4"
+                            variant="h4" color="text.primary"
                             gutterBottom
                             sx={{
                                 display: 'flex',
@@ -334,7 +334,7 @@ export default function SettingsPage() {
                                 <CardContent>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                                         <Person color="primary" />
-                                        <Typography variant="h6">Profile Information</Typography>
+                                        <Typography variant="h6" color="text.primary">Profile Information</Typography>
                                     </Box>
 
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
@@ -345,7 +345,7 @@ export default function SettingsPage() {
                                             {profileData.fullName.charAt(0).toUpperCase()}
                                         </Avatar>
                                         <Box>
-                                            <Typography variant="h6">{profileData.fullName}</Typography>
+                                            <Typography variant="h6" color="text.primary">{profileData.fullName}</Typography>
                                             <Typography variant="body2" color="text.secondary">
                                                 {profileData.email}
                                             </Typography>
@@ -408,7 +408,7 @@ export default function SettingsPage() {
                                 <CardContent>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                                         <Palette color="primary" />
-                                        <Typography variant="h6">Preferences</Typography>
+                                        <Typography variant="h6" color="text.primary">Preferences</Typography>
                                     </Box>
 
                                     <Grid container spacing={2}>
@@ -466,7 +466,7 @@ export default function SettingsPage() {
                                 <CardContent>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                                         <Notifications color="primary" />
-                                        <Typography variant="h6">Notifications</Typography>
+                                        <Typography variant="h6" color="text.primary">Notifications</Typography>
                                     </Box>
 
                                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -517,7 +517,7 @@ export default function SettingsPage() {
                                 <CardContent>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                                         <Analytics color="primary" />
-                                        <Typography variant="h6">Dashboard Preferences</Typography>
+                                        <Typography variant="h6" color="text.primary">Dashboard Preferences</Typography>
                                     </Box>
 
                                     <Grid container spacing={2}>
@@ -583,7 +583,7 @@ export default function SettingsPage() {
                                 <CardContent>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                                         <Security color="primary" />
-                                        <Typography variant="h6">Security</Typography>
+                                        <Typography variant="h6" color="text.primary">Security</Typography>
                                     </Box>
 
                                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -865,7 +865,7 @@ export default function SettingsPage() {
                                 <CardContent>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
                                         <Storage color="primary" />
-                                        <Typography variant="h6">Data & Privacy</Typography>
+                                        <Typography variant="h6" color="text.primary">Data & Privacy</Typography>
                                     </Box>
 
                                     <Grid container spacing={3}>

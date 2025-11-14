@@ -235,7 +235,7 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
       <Grid item xs={12} md={4}>
         <Card>
           <CardContent>
-            <Typography variant="h6" mb={2}>Overall Risk Assessment</Typography>
+            <Typography variant="h6" color="text.primary" mb={2}>Overall Risk Assessment</Typography>
             {assessments.length > 0 && (
               <Box textAlign="center">
                 <CircularProgress
@@ -245,7 +245,7 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
                   thickness={8}
                   color={getRiskColor(assessments[0].risk_level) as any}
                 />
-                <Typography variant="h4" sx={{ mt: 2 }}>
+                <Typography variant="h4" color="text.primary" sx={{ mt: 2 }}>
                   {assessments[0].overall_risk_score}/100
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
@@ -266,7 +266,7 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
       <Grid item xs={12} md={4}>
         <Card>
           <CardContent>
-            <Typography variant="h6" mb={2}>Provider Distribution</Typography>
+            <Typography variant="h6" color="text.primary" mb={2}>Provider Distribution</Typography>
             {assessments.length > 0 && (
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
@@ -299,7 +299,7 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
       <Grid item xs={12} md={4}>
         <Card>
           <CardContent>
-            <Typography variant="h6" mb={2}>Migration Complexity</Typography>
+            <Typography variant="h6" color="text.primary" mb={2}>Migration Complexity</Typography>
             {serviceAnalyses.length > 0 && (
               <Box>
                 {['low', 'medium', 'high', 'critical'].map((complexity) => {
@@ -332,7 +332,7 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
         <Card>
           <CardContent>
             <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-              <Typography variant="h6">Recent Assessments</Typography>
+              <Typography variant="h6" color="text.primary">Recent Assessments</Typography>
               <Button
                 variant="contained"
                 startIcon={<Assessment />}
@@ -412,7 +412,7 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
 
   const renderServiceAnalysisTab = () => (
     <Box>
-      <Typography variant="h6" mb={3}>Service Lock-in Analysis</Typography>
+      <Typography variant="h6" color="text.primary" mb={3}>Service Lock-in Analysis</Typography>
       
       <Grid container spacing={3}>
         {Array.isArray(serviceAnalyses) && serviceAnalyses.length > 0 ? serviceAnalyses.map((service) => (
@@ -420,7 +420,7 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
             <Card>
               <CardContent>
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                  <Typography variant="h6">{service.service_name}</Typography>
+                  <Typography variant="h6" color="text.primary">{service.service_name}</Typography>
                   <Chip
                     label={service.service_category}
                     size="small"
@@ -517,7 +517,7 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
   const renderMigrationScenariosTab = () => (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h6">Migration Scenarios</Typography>
+        <Typography variant="h6" color="text.primary">Migration Scenarios</Typography>
         <Button
           variant="contained"
           startIcon={<Timeline />}
@@ -533,7 +533,7 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
             <Card>
               <CardContent>
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                  <Typography variant="h6">{scenario.scenario_name}</Typography>
+                  <Typography variant="h6" color="text.primary">{scenario.scenario_name}</Typography>
                   <Chip
                     label={scenario.scenario_type}
                     variant="outlined"
@@ -651,7 +651,7 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
   const renderMultiCloudTab = () => (
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
-        <Typography variant="h6">Multi-Cloud Strategies</Typography>
+        <Typography variant="h6" color="text.primary">Multi-Cloud Strategies</Typography>
         <Button
           variant="contained"
           startIcon={<AccountTree />}
@@ -666,7 +666,7 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
           <Grid item xs={12} lg={6} key={strategy.id}>
             <Card>
               <CardContent>
-                <Typography variant="h6" mb={2}>{strategy.strategy_name}</Typography>
+                <Typography variant="h6" color="text.primary" mb={2}>{strategy.strategy_name}</Typography>
                 <Typography variant="body2" color="text.secondary" mb={2}>
                   {strategy.description}
                 </Typography>
@@ -772,7 +772,7 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
 
   const renderContractAnalysisTab = () => (
     <Box>
-      <Typography variant="h6" mb={3}>Contract Analysis</Typography>
+      <Typography variant="h6" color="text.primary" mb={3}>Contract Analysis</Typography>
       
       <TableContainer component={Paper}>
         <Table>
@@ -870,7 +870,7 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
         <Box>
-          <Typography variant="h4" gutterBottom>
+          <Typography variant="h4" color="text.primary" gutterBottom>
             Vendor Lock-in Risk Analysis
           </Typography>
           <Typography variant="subtitle1" color="text.secondary">
@@ -997,7 +997,7 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
         <DialogContent>
           {selectedScenario ? (
             <Box>
-              <Typography variant="h6" mb={2}>Scenario Simulation Results</Typography>
+              <Typography variant="h6" color="text.primary" mb={2}>Scenario Simulation Results</Typography>
               <Alert severity="info" sx={{ mb: 2 }}>
                 This simulation shows the projected outcomes of executing this migration scenario.
               </Alert>

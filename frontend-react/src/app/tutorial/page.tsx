@@ -88,7 +88,7 @@ export default function TutorialPage() {
             <Container maxWidth="lg" sx={{ py: 4 }}>
                 {/* Header */}
                 <Box sx={{ textAlign: 'center', mb: 6 }}>
-                    <Typography variant="h3" fontWeight={700} gutterBottom>
+                    <Typography variant="h3" color="text.primary" fontWeight={700} gutterBottom>
                         Learn Infra Mind
                     </Typography>
                     <Typography variant="h6" color="text.secondary" sx={{ maxWidth: 600, mx: 'auto' }}>
@@ -124,7 +124,7 @@ export default function TutorialPage() {
                                     >
                                         {option.icon}
                                     </Avatar>
-                                    <Typography variant="h6" fontWeight={600} gutterBottom>
+                                    <Typography variant="h6" color="text.primary" fontWeight={600} gutterBottom>
                                         {option.title}
                                     </Typography>
                                     <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
@@ -170,7 +170,7 @@ export default function TutorialPage() {
                         border: `1px solid ${theme.palette.primary.main}30`,
                     }}
                 >
-                    <Typography variant="h5" fontWeight={600} gutterBottom>
+                    <Typography variant="h5" color="text.primary" fontWeight={600} gutterBottom>
                         Ready to Start?
                     </Typography>
                     <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>

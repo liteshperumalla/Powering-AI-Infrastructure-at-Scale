@@ -262,7 +262,7 @@ export default function LoginPage() {
                             
                             <Typography 
                                 component="h1" 
-                                variant="h4" 
+                                variant="h4" color="text.primary" 
                                 gutterBottom
                                 sx={{
                                     fontWeight: 700,
@@ -277,8 +277,7 @@ export default function LoginPage() {
                                 Infra Mind
                             </Typography>
                             <Typography 
-                                variant="h6" 
-                                color="text.secondary" 
+                                variant="h6" color="text.secondary" 
                                 gutterBottom
                                 sx={{
                                     textAlign: 'center',

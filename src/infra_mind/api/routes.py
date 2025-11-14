@@ -6,7 +6,7 @@ Supports API versioning for backward compatibility and evolution.
 """
 
 from fastapi import APIRouter, HTTPException, status
-from .endpoints import auth, assessments, recommendations, reports, monitoring, webhooks, admin, testing, resilience, compliance, integrations, compliance_dashboard, business_tools, performance_monitoring, forms, cloud_services, chat, advanced_analytics, scenarios, validation, dashboard, experiments, feedback, quality, vendor_lockin, rollback, budget_forecasting, change_impact, gitops, approval_workflows, executive, assessment_features, di_example
+from .endpoints import auth, assessments, recommendations, reports, monitoring, webhooks, admin, testing, resilience, compliance, integrations, compliance_dashboard, business_tools, performance_monitoring, forms, cloud_services, chat, advanced_analytics, scenarios, validation, dashboard, experiments, feedback, quality, vendor_lockin, rollback, budget_forecasting, change_impact, gitops, approval_workflows, executive, assessment_features, di_example, cache_demo  # task_status temporarily disabled (celery dep)
 from .documentation import get_api_integration_guide
 
 # Create versioned API routers
@@ -323,6 +323,19 @@ api_v1_router.include_router(
     tags=["Dependency Injection"]
 )
 
+# Background Task Status - For monitoring async tasks (temporarily disabled - celery dep)
+# api_v1_router.include_router(
+#     task_status.router,
+#     prefix="/tasks",
+#     tags=["Background Tasks"]
+# )
+
+# Cache Performance Demo (Phase 2)
+api_v1_router.include_router(
+    cache_demo.router,
+    tags=["Performance & Caching"]
+)
+
 api_v2_router.include_router(
     assessment_features.router,
     prefix="/features",
@@ -333,6 +346,19 @@ api_v2_router.include_router(
 api_v2_router.include_router(
     di_example.router,
     tags=["Dependency Injection"]
+)
+
+# Background Task Status in V2 (temporarily disabled - celery dep)
+# api_v2_router.include_router(
+#     task_status.router,
+#     prefix="/tasks",
+#     tags=["Background Tasks"]
+# )
+
+# Cache Performance Demo (Phase 2)
+api_v2_router.include_router(
+    cache_demo.router,
+    tags=["Performance & Caching"]
 )
 
 # Documentation endpoints are now included directly in main api_router

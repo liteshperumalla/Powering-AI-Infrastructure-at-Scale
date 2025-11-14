@@ -202,7 +202,7 @@ const InteractiveReportViewer: React.FC<InteractiveReportViewerProps> = ({
                 {/* Interactive Charts */}
                 {section.chartsConfig && section.chartsConfig.length > 0 && (
                     <Box sx={{ mt: 3 }}>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             Interactive Analysis
                         </Typography>
                         {section.chartsConfig.map((chart, index) => (
@@ -247,7 +247,7 @@ const InteractiveReportViewer: React.FC<InteractiveReportViewerProps> = ({
                 {/* Drill-down Data */}
                 {section.drillDownData && Object.keys(section.drillDownData).length > 0 && (
                     <Box sx={{ mt: 3 }}>
-                        <Typography variant="h6" gutterBottom>
+                        <Typography variant="h6" color="text.primary" gutterBottom>
                             Detailed Analysis
                         </Typography>
                         {Object.entries(section.drillDownData).map(([key, value]) => (
@@ -297,7 +297,7 @@ const InteractiveReportViewer: React.FC<InteractiveReportViewerProps> = ({
                 }}
             >
                 <Toolbar>
-                    <Typography variant="h6" noWrap component="div">
+                    <Typography variant="h6" color="text.primary" noWrap component="div">
                         Navigation
                     </Typography>
                 </Toolbar>
@@ -427,7 +427,7 @@ const InteractiveReportViewer: React.FC<InteractiveReportViewerProps> = ({
                         <Fade in={true} timeout={300}>
                             <Paper sx={{ p: 3, minHeight: '100%' }}>
                                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                                    <Typography variant="h4" component="h1" sx={{ flexGrow: 1 }}>
+                                    <Typography variant="h4" color="text.primary" component="h1" sx={{ flexGrow: 1 }}>
                                         {currentSection.title}
                                     </Typography>
                                     {currentSection.isInteractive && (

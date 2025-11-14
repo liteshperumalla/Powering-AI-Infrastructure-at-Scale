@@ -56,7 +56,7 @@ export default class ErrorBoundary extends Component<Props, State> {
                     <Card sx={{ maxWidth: 600, width: '100%' }}>
                         <CardContent sx={{ textAlign: 'center', p: 4 }}>
                             <Warning sx={{ fontSize: 64, color: '#f44336', mb: 2 }} />
-                            <Typography variant="h5" gutterBottom>
+                            <Typography variant="h5" color="text.primary" gutterBottom>
                                 Oops! Something went wrong
                             </Typography>
                             <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>

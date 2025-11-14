@@ -231,7 +231,7 @@ export default function AdvancedReportExport({ open, onClose, reportId }: Advanc
                         {/* Export Formats */}
                         <Accordion defaultExpanded>
                             <AccordionSummary expandIcon={<ExpandMore />}>
-                                <Typography variant="h6">Export Formats</Typography>
+                                <Typography variant="h6" color="text.primary">Export Formats</Typography>
                             </AccordionSummary>
                             <AccordionDetails>
                                 <FormGroup>
@@ -264,7 +264,7 @@ export default function AdvancedReportExport({ open, onClose, reportId }: Advanc
                         {/* Report Sections */}
                         <Accordion>
                             <AccordionSummary expandIcon={<ExpandMore />}>
-                                <Typography variant="h6">Report Sections</Typography>
+                                <Typography variant="h6" color="text.primary">Report Sections</Typography>
                             </AccordionSummary>
                             <AccordionDetails>
                                 <FormGroup>
@@ -294,7 +294,7 @@ export default function AdvancedReportExport({ open, onClose, reportId }: Advanc
                         {/* Additional Options */}
                         <Accordion>
                             <AccordionSummary expandIcon={<ExpandMore />}>
-                                <Typography variant="h6">Additional Options</Typography>
+                                <Typography variant="h6" color="text.primary">Additional Options</Typography>
                             </AccordionSummary>
                             <AccordionDetails>
                                 <FormGroup>
@@ -378,7 +378,7 @@ export default function AdvancedReportExport({ open, onClose, reportId }: Advanc
                         {/* Share Settings */}
                         <Accordion defaultExpanded>
                             <AccordionSummary expandIcon={<ExpandMore />}>
-                                <Typography variant="h6">Share Settings</Typography>
+                                <Typography variant="h6" color="text.primary">Share Settings</Typography>
                             </AccordionSummary>
                             <AccordionDetails>
                                 <FormGroup>
@@ -447,7 +447,7 @@ export default function AdvancedReportExport({ open, onClose, reportId }: Advanc
                         {/* Expiration */}
                         <Accordion>
                             <AccordionSummary expandIcon={<ExpandMore />}>
-                                <Typography variant="h6">
+                                <Typography variant="h6" color="text.primary">
                                     <Schedule sx={{ mr: 1 }} />
                                     Expiration
                                 </Typography>
@@ -474,7 +474,7 @@ export default function AdvancedReportExport({ open, onClose, reportId }: Advanc
                         {/* Notify Recipients */}
                         <Accordion>
                             <AccordionSummary expandIcon={<ExpandMore />}>
-                                <Typography variant="h6">
+                                <Typography variant="h6" color="text.primary">
                                     <Email sx={{ mr: 1 }} />
                                     Notify Recipients
                                 </Typography>

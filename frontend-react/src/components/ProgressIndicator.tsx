@@ -117,7 +117,7 @@ export default function ProgressIndicator({
         <Card>
             <CardContent>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="h6">{title}</Typography>
+                    <Typography variant="h6" color="text.primary">{title}</Typography>
                     {showPercentage && (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <Typography variant="h6" color="primary">

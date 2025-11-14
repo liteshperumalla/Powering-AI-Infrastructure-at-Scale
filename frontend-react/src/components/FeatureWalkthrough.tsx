@@ -134,7 +134,7 @@ export default function FeatureWalkthrough({ compact = false, showOnlyBasics = f
             {/* Header */}
             {!compact && (
                 <Box sx={{ mb: 4, textAlign: 'center' }}>
-                    <Typography variant="h4" fontWeight={700} gutterBottom>
+                    <Typography variant="h4" color="text.primary" fontWeight={700} gutterBottom>
                         Quick Start Guide
                     </Typography>
                     <Typography variant="h6" color="text.secondary">
@@ -146,7 +146,7 @@ export default function FeatureWalkthrough({ compact = false, showOnlyBasics = f
             {/* Quick Start Guides */}
             <Box sx={{ mb: showOnlyBasics ? 0 : 4 }}>
                 {compact && (
-                    <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+                    <Typography variant="h6" color="text.primary" fontWeight={600} sx={{ mb: 2 }}>
                         Essential Features
                     </Typography>
                 )}
@@ -175,7 +175,7 @@ export default function FeatureWalkthrough({ compact = false, showOnlyBasics = f
                                             {guide.icon}
                                         </Avatar>
                                         <Box>
-                                            <Typography variant="h6" fontWeight={600}>
+                                            <Typography variant="h6" color="text.primary" fontWeight={600}>
                                                 {guide.title}
                                             </Typography>
                                             <Typography variant="body2" color="text.secondary">
@@ -280,7 +280,7 @@ export default function FeatureWalkthrough({ compact = false, showOnlyBasics = f
             {/* Advanced Features */}
             {!showOnlyBasics && (
                 <Box>
-                    <Typography variant="h6" fontWeight={600} sx={{ mb: 2 }}>
+                    <Typography variant="h6" color="text.primary" fontWeight={600} sx={{ mb: 2 }}>
                         Advanced Features
                     </Typography>
                     <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
@@ -318,7 +318,7 @@ export default function FeatureWalkthrough({ compact = false, showOnlyBasics = f
                                         {feature.icon}
                                     </Avatar>
                                     <Box sx={{ flex: 1 }}>
-                                        <Typography variant="h6" fontWeight={600}>
+                                        <Typography variant="h6" color="text.primary" fontWeight={600}>
                                             {feature.title}
                                         </Typography>
                                         <Typography variant="body2" color="text.secondary">
@@ -349,7 +349,7 @@ export default function FeatureWalkthrough({ compact = false, showOnlyBasics = f
             {!compact && (
                 <Card sx={{ mt: 4, bgcolor: 'primary.main', color: 'white' }}>
                     <CardContent>
-                        <Typography variant="h6" fontWeight={600} gutterBottom>
+                        <Typography variant="h6" color="text.primary" fontWeight={600} gutterBottom>
                             Need Help?
                         </Typography>
                         <Typography variant="body2" sx={{ mb: 2, opacity: 0.9 }}>

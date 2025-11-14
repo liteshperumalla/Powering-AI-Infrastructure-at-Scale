@@ -289,7 +289,7 @@ const ComplianceDashboard: React.FC = () => {
 
     return (
         <Box sx={{ p: 3 }}>
-            <Typography variant="h4" gutterBottom>
+            <Typography variant="h4" color="text.primary" gutterBottom>
                 <SecurityIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
                 Compliance Dashboard
             </Typography>
@@ -305,7 +305,7 @@ const ComplianceDashboard: React.FC = () => {
                 <Grid item xs={12} md={6}>
                     <Card>
                         <CardContent>
-                            <Typography variant="h6" gutterBottom>
+                            <Typography variant="h6" color="text.primary" gutterBottom>
                                 <PolicyIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
                                 Consent Management
                             </Typography>
@@ -366,7 +366,7 @@ const ComplianceDashboard: React.FC = () => {
                 <Grid item xs={12} md={6}>
                     <Card>
                         <CardContent>
-                            <Typography variant="h6" gutterBottom>
+                            <Typography variant="h6" color="text.primary" gutterBottom>
                                 <AssessmentIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
                                 Your Data Rights
                             </Typography>
@@ -429,7 +429,7 @@ const ComplianceDashboard: React.FC = () => {
                     <Grid item xs={12}>
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" gutterBottom>
+                                <Typography variant="h6" color="text.primary" gutterBottom>
                                     Data Retention Policies
                                 </Typography>
 
@@ -475,7 +475,7 @@ const ComplianceDashboard: React.FC = () => {
                     <Grid item xs={12}>
                         <Card>
                             <CardContent>
-                                <Typography variant="h6" gutterBottom>
+                                <Typography variant="h6" color="text.primary" gutterBottom>
                                     Recent Audit Events
                                 </Typography>
 

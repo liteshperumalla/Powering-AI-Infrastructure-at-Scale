@@ -311,7 +311,14 @@ def setup_middleware(app: FastAPI) -> None:
             "X-Requested-With",
             "X-Request-ID",
             "Accept",
-            "Origin"
+            "Origin",
+            "If-None-Match",
+            "If-Modified-Since",
+            "Cache-Control",
+            "Expires",
+            "Pragma",
+            "X-Fresh-Data",
+            "X-No-Cache"
         ],
         expose_headers=["X-Process-Time", "X-Request-ID"],
     )
@@ -328,6 +335,12 @@ def setup_middleware(app: FastAPI) -> None:
     @app.middleware("http")
     async def add_process_time_and_security_headers(request: Request, call_next):
         """Add request processing time and security headers to response."""
+        # Log CORS preflight requests for debugging
+        if request.method == "OPTIONS":
+            logger.info(f"CORS Preflight: {request.url.path}")
+            logger.info(f"Origin: {request.headers.get('origin', 'None')}")
+            logger.info(f"Access-Control-Request-Headers: {request.headers.get('access-control-request-headers', 'None')}")
+
         start_time = time.time()
         response = await call_next(request)
         process_time = time.time() - start_time

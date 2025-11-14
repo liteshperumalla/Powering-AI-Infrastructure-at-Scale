@@ -178,7 +178,7 @@ export default function SecurityPage() {
       {/* Header */}
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={4}>
         <Box>
-          <Typography variant="h4" component="h1" gutterBottom>
+          <Typography variant="h4" color="text.primary" component="h1" gutterBottom>
             <Security sx={{ mr: 2, verticalAlign: 'middle' }} />
             Security Center
           </Typography>
@@ -223,7 +223,7 @@ export default function SecurityPage() {
                   </Typography>
                 </Box>
               </Box>
-              <Typography variant="h6" gutterBottom>
+              <Typography variant="h6" color="text.primary" gutterBottom>
                 Security Score
               </Typography>
               <Typography variant="body2" color="textSecondary">
@@ -238,7 +238,7 @@ export default function SecurityPage() {
               <Box display="flex" alignItems="center" mb={2}>
                 <Shield color="success" sx={{ mr: 2 }} />
                 <Box>
-                  <Typography variant="h6">
+                  <Typography variant="h6" color="text.primary">
                     {scanResults.filter(r => r.status === 'completed').length}
                   </Typography>
                   <Typography variant="body2" color="textSecondary">
@@ -258,7 +258,7 @@ export default function SecurityPage() {
               <Box display="flex" alignItems="center" mb={2}>
                 <Warning color="warning" sx={{ mr: 2 }} />
                 <Box>
-                  <Typography variant="h6">
+                  <Typography variant="h6" color="text.primary">
                     {vulnerabilities.filter(v => v.status === 'open').length}
                   </Typography>
                   <Typography variant="body2" color="textSecondary">
@@ -284,7 +284,7 @@ export default function SecurityPage() {
         </Tabs>
 
         <TabPanel value={tabValue} index={0}>
-          <Typography variant="h6" gutterBottom>
+          <Typography variant="h6" color="text.primary" gutterBottom>
             Security Scan Results
           </Typography>
           <TableContainer>
@@ -332,7 +332,7 @@ export default function SecurityPage() {
         </TabPanel>
 
         <TabPanel value={tabValue} index={1}>
-          <Typography variant="h6" gutterBottom>
+          <Typography variant="h6" color="text.primary" gutterBottom>
             Vulnerability Management
           </Typography>
           <List>
@@ -383,7 +383,7 @@ export default function SecurityPage() {
         </TabPanel>
 
         <TabPanel value={tabValue} index={2}>
-          <Typography variant="h6" gutterBottom>
+          <Typography variant="h6" color="text.primary" gutterBottom>
             Compliance Status
           </Typography>
           <Alert severity="info" sx={{ mb: 3 }}>
@@ -393,7 +393,7 @@ export default function SecurityPage() {
             <Grid item xs={12} md={6}>
               <Card>
                 <CardContent>
-                  <Typography variant="h6" gutterBottom>GDPR Compliance</Typography>
+                  <Typography variant="h6" color="text.primary" gutterBottom>GDPR Compliance</Typography>
                   <LinearProgress variant="determinate" value={92} sx={{ mb: 1 }} />
                   <Typography variant="body2">92% compliant</Typography>
                 </CardContent>
@@ -402,7 +402,7 @@ export default function SecurityPage() {
             <Grid item xs={12} md={6}>
               <Card>
                 <CardContent>
-                  <Typography variant="h6" gutterBottom>SOC 2 Type II</Typography>
+                  <Typography variant="h6" color="text.primary" gutterBottom>SOC 2 Type II</Typography>
                   <LinearProgress variant="determinate" value={88} sx={{ mb: 1 }} />
                   <Typography variant="body2">88% compliant</Typography>
                 </CardContent>
@@ -411,7 +411,7 @@ export default function SecurityPage() {
             <Grid item xs={12} md={6}>
               <Card>
                 <CardContent>
-                  <Typography variant="h6" gutterBottom>HIPAA</Typography>
+                  <Typography variant="h6" color="text.primary" gutterBottom>HIPAA</Typography>
                   <LinearProgress variant="determinate" value={95} sx={{ mb: 1 }} />
                   <Typography variant="body2">95% compliant</Typography>
                 </CardContent>
@@ -420,7 +420,7 @@ export default function SecurityPage() {
             <Grid item xs={12} md={6}>
               <Card>
                 <CardContent>
-                  <Typography variant="h6" gutterBottom>ISO 27001</Typography>
+                  <Typography variant="h6" color="text.primary" gutterBottom>ISO 27001</Typography>
                   <LinearProgress variant="determinate" value={85} sx={{ mb: 1 }} />
                   <Typography variant="body2">85% compliant</Typography>
                 </CardContent>
@@ -430,7 +430,7 @@ export default function SecurityPage() {
         </TabPanel>
 
         <TabPanel value={tabValue} index={3}>
-          <Typography variant="h6" gutterBottom>
+          <Typography variant="h6" color="text.primary" gutterBottom>
             Security Settings
           </Typography>
           <Alert severity="warning" sx={{ mb: 3 }}>
@@ -440,7 +440,7 @@ export default function SecurityPage() {
             <Grid item xs={12} md={6}>
               <Card>
                 <CardContent>
-                  <Typography variant="h6" gutterBottom>
+                  <Typography variant="h6" color="text.primary" gutterBottom>
                     <VpnKey sx={{ mr: 1, verticalAlign: 'middle' }} />
                     Authentication
                   </Typography>
@@ -456,7 +456,7 @@ export default function SecurityPage() {
             <Grid item xs={12} md={6}>
               <Card>
                 <CardContent>
-                  <Typography variant="h6" gutterBottom>
+                  <Typography variant="h6" color="text.primary" gutterBottom>
                     <Lock sx={{ mr: 1, verticalAlign: 'middle' }} />
                     Access Control
                   </Typography>
