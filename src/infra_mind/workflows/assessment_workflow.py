@@ -282,6 +282,20 @@ class AssessmentWorkflow(BaseWorkflow):
             ),
             
             WorkflowNode(
+                id="report_generation",
+                name="Comprehensive Report Compilation",
+                node_type="professional_service",
+                config={
+                    "service": "professional_report_generator",
+                    "operation": "generate_professional_report",
+                    "report_type": "comprehensive",
+                    "audience_level": "mixed",
+                    "timeout": 300
+                },
+                dependencies=["executive_report", "technical_report"]
+            ),
+            
+            WorkflowNode(
                 id="stakeholder_summaries",
                 name="Stakeholder Summary Generation",
                 node_type="professional_service",
@@ -291,7 +305,7 @@ class AssessmentWorkflow(BaseWorkflow):
                     "stakeholders": ["cto", "cfo", "ciso", "engineering_lead", "operations_team"],
                     "timeout": 240
                 },
-                dependencies=["executive_report", "technical_report"]
+                dependencies=["executive_report", "technical_report", "report_generation"]
             ),
             
             # Phase 6: Quality Assurance & Finalization

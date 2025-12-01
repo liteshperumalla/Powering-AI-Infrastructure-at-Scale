@@ -769,11 +769,8 @@ class TestAssessmentForm:
         assessment = form.create_assessment()
         assert assessment is None
     
-    @patch('src.infra_mind.models.assessment.Assessment')
-    @patch('src.infra_mind.models.assessment.BusinessRequirements')
-    @patch('src.infra_mind.models.assessment.TechnicalRequirements')
-    @patch('src.infra_mind.models.assessment.ComplianceRequirements')
-    def test_create_assessment_complete(self, mock_compliance, mock_technical, mock_business, mock_assessment):
+    @patch('src.infra_mind.forms.assessment_form.Assessment')
+    def test_create_assessment_complete(self, mock_assessment):
         """Test creating assessment from complete form."""
         form = AssessmentForm()
         
@@ -786,10 +783,7 @@ class TestAssessmentForm:
             "compliance_requirements": ["gdpr"]
         }
         
-        # Mock the model constructors
-        mock_business.return_value = Mock()
-        mock_technical.return_value = Mock()
-        mock_compliance.return_value = Mock()
+        # Mock the model constructor
         mock_assessment_instance = Mock()
         mock_assessment_instance.id = "test_assessment_id"
         mock_assessment.return_value = mock_assessment_instance

@@ -181,7 +181,7 @@ async def get_database() -> AsyncIOMotorDatabase:
     client = await get_database_client()
     db_name = getattr(settings, 'database_name', 'infra_mind')
 
-    return client.get_database(db_name)
+    return client[db_name]  # Use bracket notation for Motor async client
 
 
 # Type alias for convenience
@@ -373,7 +373,8 @@ async def get_cache_manager():
 
         logger.info("🔌 Initializing cache manager")
 
-        redis_url = getattr(settings, 'redis_url', None) or os.getenv("REDIS_URL") or "redis://localhost:6379/0"
+        # Use get_redis_url() to properly extract string from SecretStr
+        redis_url = settings.get_redis_url() if hasattr(settings, 'get_redis_url') else (os.getenv("REDIS_URL") or "redis://localhost:6379/0")
 
         _cache_manager = CacheManager(
             redis_url=redis_url,

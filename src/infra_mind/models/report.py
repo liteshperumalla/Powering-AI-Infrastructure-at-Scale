@@ -202,7 +202,17 @@ class Report(Document):
     report_type: ReportType = Field(description="Type of report")
     format: ReportFormat = Field(default=ReportFormat.PDF, description="Report format")
     template_version: str = Field(default="1.0", description="Template version used")
-    
+
+    # Report content - CRITICAL: Actual report text/body
+    content_text: str = Field(
+        default="",
+        description="The actual LLM-generated report content as text/markdown/HTML"
+    )
+    content: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Structured content data (metadata, charts config, etc.)"
+    )
+
     # Generation metadata
     status: ReportStatus = Field(default=ReportStatus.PENDING, description="Generation status")
     progress_percentage: float = Field(default=0.0, ge=0.0, le=100.0, description="Generation progress")

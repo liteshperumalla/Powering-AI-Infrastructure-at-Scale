@@ -232,19 +232,20 @@ class AssessmentSummary(BaseSchema):
     """Summary view of an assessment for list endpoints."""
     id: str
     title: str
+    description: Optional[str] = Field(default=None, description="Assessment description")
     status: AssessmentStatus
     priority: Priority
     progress_percentage: float
     created_at: datetime
     updated_at: datetime
-    
+
     # Key metrics
     company_name: str = Field(default="Unknown Company", description="Company name")
     company_size: str
     industry: str
     budget_range: str
     workload_types: List[str]
-    
+
     # Status indicators
     recommendations_generated: bool
     reports_generated: bool

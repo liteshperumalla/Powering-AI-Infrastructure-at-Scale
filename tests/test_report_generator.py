@@ -17,6 +17,32 @@ from src.infra_mind.agents.report_generator_agent import (
 from src.infra_mind.agents.base import AgentConfig, AgentRole, AgentStatus
 
 
+@pytest.fixture(autouse=True)
+def stub_report_agent_dependencies(monkeypatch):
+    """Prevent external API/DB calls in report generator tests."""
+    async def fake_collect(self, assessment, recommendations):
+        return {
+            "market_intelligence": {},
+            "technology_trends": {},
+            "industry_insights": {},
+            "competitive_analysis": {},
+        }
+
+    async def fake_store(self, report, assessment):
+        return "mock_report_id"
+
+    monkeypatch.setattr(
+        ReportGeneratorAgent,
+        "_collect_research_data",
+        fake_collect,
+    )
+    monkeypatch.setattr(
+        ReportGeneratorAgent,
+        "_store_report_in_database",
+        fake_store,
+    )
+
+
 class TestReportSection:
     """Test suite for ReportSection."""
     

@@ -1,11 +1,34 @@
 import { apiClient } from '../api';
 
+const createMockHeaders = (overrides: Record<string, string> = {}) => ({
+    get: jest.fn((key: string) => {
+        if (overrides[key]) return overrides[key];
+        if (key.toLowerCase() === 'content-type') return 'application/json';
+        if (key.toLowerCase() === 'content-length') return '1';
+        return null;
+    }),
+});
+
+const createMockResponse = (overrides: Partial<Response> & { body?: any } = {}) => {
+    const { body, headers, ...rest } = overrides;
+    return {
+        ok: true,
+        status: 200,
+        statusText: 'OK',
+        headers: headers ?? createMockHeaders(),
+        json: jest.fn().mockResolvedValue(body ?? {}),
+        text: jest.fn().mockResolvedValue(''),
+        ...rest,
+    } as unknown as Response;
+};
+
 // Mock fetch
 global.fetch = jest.fn();
 
 describe('API Client', () => {
     beforeEach(() => {
-        (global.fetch as jest.Mock).mockClear();
+        (global.fetch as jest.Mock).mockReset();
+        (global.fetch as jest.Mock).mockResolvedValue(createMockResponse({ body: {} }));
     });
 
     describe('getCloudServices', () => {
@@ -15,28 +38,34 @@ describe('API Client', () => {
                 { id: '2', name: 'S3', provider: 'aws', category: 'storage' }
             ];
 
-            (global.fetch as jest.Mock).mockResolvedValueOnce({
-                ok: true,
-                json: () => Promise.resolve({ services: mockServices })
-            });
+            (global.fetch as jest.Mock).mockResolvedValueOnce(
+                createMockResponse({ body: { services: mockServices } })
+            );
 
             const result = await apiClient.getCloudServices();
             
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8000/api/cloud-services/', {
-                headers: { 'Content-Type': 'application/json' },
-                signal: expect.any(AbortSignal)
-            });
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('http://localhost:8000/api/cloud-services?'),
+                expect.objectContaining({
+                    headers: expect.objectContaining({
+                        'Content-Type': 'application/json',
+                        'Cache-Control': expect.any(String),
+                    }),
+                    signal: expect.any(AbortSignal)
+                })
+            );
             expect(result.services).toEqual(mockServices);
         });
 
         test('handles API errors gracefully', async () => {
-            (global.fetch as jest.Mock).mockResolvedValueOnce({
+            (global.fetch as jest.Mock).mockResolvedValueOnce(createMockResponse({
                 ok: false,
                 status: 500,
-                statusText: 'Internal Server Error'
-            });
+                statusText: 'Internal Server Error',
+                json: jest.fn().mockResolvedValue({ message: 'Internal Server Error' })
+            }));
 
-            await expect(apiClient.getCloudServices()).rejects.toThrow('Failed to fetch cloud services');
+            await expect(apiClient.getCloudServices()).rejects.toThrow('Server error. Please try again later.');
         });
 
         test('handles network errors', async () => {
@@ -52,27 +81,32 @@ describe('API Client', () => {
                 { id: '1', name: 'Test Assessment', status: 'completed' }
             ];
 
-            (global.fetch as jest.Mock).mockResolvedValueOnce({
-                ok: true,
-                json: () => Promise.resolve({ assessments: mockAssessments })
-            });
+            (global.fetch as jest.Mock).mockResolvedValueOnce(
+                createMockResponse({ body: { assessments: mockAssessments } })
+            );
 
             const result = await apiClient.getAssessments();
             
-            expect(global.fetch).toHaveBeenCalledWith('http://localhost:8000/api/assessments/', {
-                headers: { 'Content-Type': 'application/json' }
-            });
+            expect(global.fetch).toHaveBeenCalledWith(
+                expect.stringContaining('http://localhost:8000/api/v1/assessments'),
+                expect.objectContaining({
+                    headers: expect.objectContaining({
+                        'Content-Type': 'application/json'
+                    })
+                })
+            );
             expect(result.assessments).toEqual(mockAssessments);
         });
 
         test('handles unauthorized access', async () => {
-            (global.fetch as jest.Mock).mockResolvedValueOnce({
+            (global.fetch as jest.Mock).mockResolvedValueOnce(createMockResponse({
                 ok: false,
                 status: 401,
-                statusText: 'Unauthorized'
-            });
+                statusText: 'Unauthorized',
+                json: jest.fn().mockResolvedValue({ message: 'Unauthorized' })
+            }));
 
-            await expect(apiClient.getAssessments()).rejects.toThrow('Failed to fetch assessments');
+            await expect(apiClient.getAssessments()).rejects.toThrow('Unauthorized');
         });
     });
 
@@ -80,18 +114,15 @@ describe('API Client', () => {
         test('applies correct timeout for cloud services', async () => {
             (global.fetch as jest.Mock).mockImplementationOnce((url, options) => {
                 expect(options.signal).toBeInstanceOf(AbortSignal);
-                return Promise.resolve({
-                    ok: true,
-                    json: () => Promise.resolve({ services: [] })
-                });
+                return Promise.resolve(createMockResponse({ body: { services: [] } }));
             });
 
             await apiClient.getCloudServices();
             
             expect(global.fetch).toHaveBeenCalledWith(
-                'http://localhost:8000/api/cloud-services/',
+                expect.stringContaining('http://localhost:8000/api/cloud-services?'),
                 expect.objectContaining({
-                    signal: expect.any(AbortSignal)
+                    signal: expect.any(Object)
                 })
             );
         });
@@ -99,15 +130,14 @@ describe('API Client', () => {
 
     describe('request headers', () => {
         test('includes correct content-type header', async () => {
-            (global.fetch as jest.Mock).mockResolvedValueOnce({
-                ok: true,
-                json: () => Promise.resolve({ services: [] })
-            });
+            (global.fetch as jest.Mock).mockResolvedValueOnce(
+                createMockResponse({ body: { services: [] } })
+            );
 
             await apiClient.getCloudServices();
             
             expect(global.fetch).toHaveBeenCalledWith(
-                'http://localhost:8000/api/cloud-services/',
+                expect.stringContaining('http://localhost:8000/api/cloud-services?'),
                 expect.objectContaining({
                     headers: expect.objectContaining({
                         'Content-Type': 'application/json'

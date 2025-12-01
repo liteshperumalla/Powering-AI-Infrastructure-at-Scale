@@ -179,7 +179,7 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
                 </Box>
 
                 {/* Quick Stats */}
-                <Box sx={{ display: 'flex', gap: 2, mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                <Box sx={{ display: 'flex', gap: 2, mb: 2, p: 2, bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50', borderRadius: 1 }}>
                     <Box sx={{ flex: 1 }}>
                         <Typography variant="body2" color="text.secondary">
                             Average Cost
@@ -320,7 +320,7 @@ const RecommendationTable: React.FC<RecommendationTableProps> = ({
                                     <TableRow>
                                         <TableCell style={{ paddingBottom: 0, paddingTop: 0 }} colSpan={10}>
                                             <Collapse in={expandedRows.has(rec.id)} timeout="auto" unmountOnExit>
-                                                <Box sx={{ margin: 1, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                                                <Box sx={{ margin: 1, p: 2, bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50', borderRadius: 1 }}>
                                                     <Typography variant="subtitle2" gutterBottom>
                                                         Detailed Analysis
                                                     </Typography>

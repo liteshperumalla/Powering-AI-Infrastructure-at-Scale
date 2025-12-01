@@ -430,11 +430,11 @@ const GitOpsIntegration: React.FC = () => {
                                             <ListItemText
                                                 primary={pr.title}
                                                 secondary={
-                                                    <Box>
-                                                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                                                    <React.Fragment>
+                                                        <span style={{ display: 'block', marginBottom: '8px' }}>
                                                             {pr.description}
-                                                        </Typography>
-                                                        <Stack direction="row" spacing={1}>
+                                                        </span>
+                                                        <Stack direction="row" spacing={1} component="span" sx={{ display: 'inline-flex' }}>
                                                             <Chip
                                                                 size="small"
                                                                 label={pr.state}
@@ -458,7 +458,7 @@ const GitOpsIntegration: React.FC = () => {
                                                                 variant="outlined"
                                                             />
                                                         </Stack>
-                                                    </Box>
+                                                    </React.Fragment>
                                                 }
                                             />
                                             <ListItemSecondaryAction>

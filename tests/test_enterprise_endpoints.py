@@ -3,43 +3,11 @@ Tests for enterprise features: experiments, feedback, and quality endpoints.
 """
 
 import pytest
-from httpx import AsyncClient
-from fastapi.testclient import TestClient
-import asyncio
-from datetime import datetime
-import uuid
-import os
 from unittest.mock import patch, AsyncMock
-
-# Import the main app
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from src.infra_mind.main import create_app
-from src.infra_mind.models.experiment import Experiment, ExperimentVariant, ExperimentStatus, VariantType
-from src.infra_mind.models.feedback import UserFeedback, FeedbackType, FeedbackChannel, SentimentScore
-from src.infra_mind.models.feedback import QualityMetric
-from src.infra_mind.models.user import User
 
 
 class TestExperimentsEndpoints:
     """Test suite for A/B testing and experiments endpoints."""
-    
-    @pytest.fixture
-    def client(self):
-        app = create_app()
-        return TestClient(app)
-    
-    @pytest.fixture
-    def admin_token(self):
-        """Mock admin JWT token for testing."""
-        # In a real test, you'd create a proper token
-        return "mock-admin-token"
-    
-    @pytest.fixture
-    def user_token(self):
-        """Mock user JWT token for testing."""
-        return "mock-user-token"
 
     @patch('src.infra_mind.models.experiment.Experiment.find_one', return_value=AsyncMock(return_value=None))
     def test_get_user_variant_no_experiment(self, mock_find_one, client):
@@ -108,11 +76,6 @@ class TestExperimentsEndpoints:
 
 class TestFeedbackEndpoints:
     """Test suite for feedback collection and analysis endpoints."""
-    
-    @pytest.fixture
-    def client(self):
-        app = create_app()
-        return TestClient(app)
 
     def test_feedback_health_check(self, client):
         """Test feedback system health check."""
@@ -153,11 +116,6 @@ class TestFeedbackEndpoints:
 
 class TestQualityEndpoints:
     """Test suite for quality assurance endpoints."""
-    
-    @pytest.fixture
-    def client(self):
-        app = create_app()
-        return TestClient(app)
 
     def test_quality_health_check(self, client):
         """Test quality system health check."""
@@ -200,11 +158,6 @@ class TestQualityEndpoints:
 
 class TestRoleBasedAccess:
     """Test role-based access control for enterprise features."""
-    
-    @pytest.fixture
-    def client(self):
-        app = create_app()
-        return TestClient(app)
 
     def test_admin_endpoints_reject_regular_users(self, client):
         """Test that admin endpoints properly reject regular users."""
@@ -247,11 +200,6 @@ class TestRoleBasedAccess:
 
 class TestAssessmentLevelFeatures:
     """Test assessment-level enterprise features for general users."""
-    
-    @pytest.fixture
-    def client(self):
-        app = create_app()
-        return TestClient(app)
 
     def test_assessment_feedback_requires_auth(self, client):
         """Test that assessment feedback requires authentication."""
@@ -300,11 +248,6 @@ class TestAssessmentLevelFeatures:
 
 class TestEnterpriseIntegration:
     """Integration tests for enterprise features."""
-    
-    @pytest.fixture
-    def client(self):
-        app = create_app()
-        return TestClient(app)
 
     def test_enterprise_features_in_api_versions(self, client):
         """Test that enterprise features are listed in API versions."""

@@ -705,7 +705,11 @@ class HorizontalScalingManager:
         self.load_metrics: Dict[str, deque] = defaultdict(lambda: deque(maxlen=100))
         self.scaling_policies: Dict[str, Dict[str, Any]] = {}
         self.executor_pool = ThreadPoolExecutor(max_workers=10)
-        self.process_pool = ProcessPoolExecutor(max_workers=4)
+        try:
+            self.process_pool = ProcessPoolExecutor(max_workers=4)
+        except (OSError, PermissionError) as exc:  # pragma: no cover - platform specific
+            logger.warning(f"ProcessPoolExecutor unavailable, falling back to thread pool only: {exc}")
+            self.process_pool = None
         self.metrics_collector = get_metrics_collector()
         
         # Default scaling policies

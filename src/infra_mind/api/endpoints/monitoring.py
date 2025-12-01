@@ -198,8 +198,8 @@ async def trigger_all_health_checks(
 
 @router.get("/alerts")
 async def get_alerts(
-    status: Optional[str] = Query(None, regex="^(active|resolved)$"),
-    severity: Optional[str] = Query(None, regex="^(low|medium|high|critical)$"),
+    status: Optional[str] = Query(None, pattern="^(active|resolved)$"),
+    severity: Optional[str] = Query(None, pattern="^(low|medium|high|critical)$"),
     limit: int = Query(50, ge=1, le=500),
     current_user: User = Depends(get_current_user)
 ) -> Dict[str, Any]:

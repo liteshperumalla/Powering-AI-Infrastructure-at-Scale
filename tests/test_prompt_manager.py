@@ -472,6 +472,12 @@ class TestIntegrationScenarios:
                 "cto_analysis", variant.version, quality, 1.5, 0.02, 150, True
             )
 
+        # Ensure we have enough samples for statistical analysis
+        experiment = manager.active_experiments["cto_analysis"]
+        while len(experiment.variant_a_results) < 30 or len(experiment.variant_b_results) < 30:
+            experiment.record_result(v1.version, 0.8, 1.5, 0.02, True)
+            experiment.record_result(v2.version, 0.92, 1.5, 0.02, True)
+
         # 6. Check results and decide
         results = manager.get_ab_test_results("cto_analysis")
         assert results is not None

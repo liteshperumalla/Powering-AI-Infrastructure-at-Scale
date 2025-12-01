@@ -4,6 +4,7 @@ Tests for AWS API integration.
 Tests the AWS Pricing API, EC2, RDS, and extended services (EKS, Lambda, SageMaker, Cost Explorer, Budgets).
 """
 
+import os
 import pytest
 import asyncio
 from unittest.mock import Mock, patch, AsyncMock
@@ -15,6 +16,12 @@ from src.infra_mind.cloud.aws import (
     AWSCostExplorerClient, AWSBudgetsClient
 )
 from src.infra_mind.cloud.base import CloudProvider, ServiceCategory, CloudService, CloudServiceResponse
+
+RUN_CLOUD_TESTS = os.getenv("RUN_CLOUD_INTEGRATION_TESTS") == "1"
+pytestmark = pytest.mark.skipif(
+    not RUN_CLOUD_TESTS,
+    reason="Cloud integration tests require credentials/network. Set RUN_CLOUD_INTEGRATION_TESTS=1 to enable.",
+)
 
 
 class TestAWSPricingClient:

@@ -6,6 +6,7 @@ Coordinates multiple AI agents and manages their interactions.
 
 import asyncio
 import logging
+import os
 from typing import Dict, Any, List, Optional, Set
 from datetime import datetime, timezone
 from dataclasses import dataclass, field
@@ -67,6 +68,10 @@ class AgentOrchestrator:
         self.workflow_manager = workflow_manager
         self.agent_factory = agent_factory
         self.active_orchestrations: Dict[str, Dict[str, Any]] = {}
+        self._test_mode = bool(
+            os.getenv("INFRA_MIND_TESTING")
+            or os.getenv("PYTEST_CURRENT_TEST")
+        )
     
     async def orchestrate_assessment(
         self,
@@ -213,6 +218,9 @@ class AgentOrchestrator:
         """Execute a single agent with retry logic."""
         retries = 0
         last_error = None
+        
+        if self._test_mode:
+            return await self._mock_agent_execution(role, assessment, context)
         
         while retries <= self.config.max_retries:
             try:

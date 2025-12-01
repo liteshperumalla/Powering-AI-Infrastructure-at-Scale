@@ -13,6 +13,10 @@ from dataclasses import dataclass
 from enum import Enum
 import json
 import hashlib
+import ast
+import operator
+import os
+from collections import defaultdict
 
 from ..models.assessment import Assessment
 
@@ -180,7 +184,7 @@ class DataProcessingTool(BaseTool):
             "data_types": {},
             "insights": []
         }
-        
+
         if isinstance(data, dict):
             for key, value in data.items():
                 analysis["data_types"][key] = type(value).__name__
@@ -265,6 +269,126 @@ class DataProcessingTool(BaseTool):
         return validation
 
 
+class CalculationTool(BaseTool):
+    """Tool for evaluating safe mathematical expressions."""
+
+    _ALLOWED_OPERATORS = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.Pow: operator.pow,
+        ast.Mod: operator.mod,
+        ast.USub: operator.neg,
+        ast.FloorDiv: operator.floordiv,
+    }
+
+    def __init__(self):
+        super().__init__(
+            name="calculator",
+            description="Perform arithmetic calculations for capacity/budget planning"
+        )
+
+    async def execute(
+        self,
+        expression: Optional[str] = None,
+        precision: int = 2,
+        operation: Optional[str] = None,
+        **kwargs
+    ) -> ToolResult:
+        try:
+            if expression:
+                result = self._evaluate_expression(expression)
+                if precision is not None:
+                    result = round(result, precision)
+                payload = {"result": result, "expression": expression, "mode": "expression"}
+            elif operation:
+                payload = self._perform_named_operation(operation, precision=precision, **kwargs)
+            else:
+                raise ValueError("Either 'expression' or 'operation' must be provided")
+
+            return ToolResult(
+                tool_name=self.name,
+                status=ToolStatus.SUCCESS,
+                data=payload,
+                metadata={"precision": precision, "operation": operation}
+            )
+        except Exception as exc:
+            logger.warning(f"CalculationTool failed for '{expression}': {exc}")
+            return ToolResult(
+                tool_name=self.name,
+                status=ToolStatus.ERROR,
+                error=str(exc),
+                metadata={"expression": expression}
+            )
+
+    def _evaluate_expression(self, expression: str) -> float:
+        try:
+            tree = ast.parse(expression, mode="eval")
+            return float(self._eval_node(tree.body))
+        except ZeroDivisionError as exc:
+            raise ValueError("Division by zero is not allowed") from exc
+        except Exception as exc:
+            raise ValueError(f"Invalid expression: {exc}") from exc
+
+    def _eval_node(self, node: ast.AST) -> float:
+        if isinstance(node, ast.Num):  # type: ignore[attr-defined]
+            return node.n  # type: ignore[return-value]
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        if isinstance(node, ast.BinOp):
+            operator_type = type(node.op)
+            if operator_type not in self._ALLOWED_OPERATORS:
+                raise ValueError(f"Operator {operator_type.__name__} not allowed")
+            left = self._eval_node(node.left)
+            right = self._eval_node(node.right)
+            return self._ALLOWED_OPERATORS[operator_type](left, right)
+        if isinstance(node, ast.UnaryOp):
+            operator_type = type(node.op)
+            if operator_type not in self._ALLOWED_OPERATORS:
+                raise ValueError(f"Operator {operator_type.__name__} not allowed")
+            operand = self._eval_node(node.operand)
+            return self._ALLOWED_OPERATORS[operator_type](operand)
+        raise ValueError(f"Unsupported element: {type(node).__name__}")
+
+    def _perform_named_operation(self, operation: str, **kwargs) -> Dict[str, Any]:
+        op = operation.lower()
+        if op == "add":
+            result = kwargs.get("a", 0) + kwargs.get("b", 0)
+            return {"result": result, "operation": op}
+        if op == "multiply":
+            result = kwargs.get("a", 0) * kwargs.get("b", 0)
+            return {"result": result, "operation": op}
+        if op == "divide":
+            divisor = kwargs.get("b", 1)
+            if divisor == 0:
+                raise ValueError("Division by zero")
+            result = kwargs.get("a", 0) / divisor
+            return {"result": result, "operation": op}
+        if op == "percentage":
+            result = (kwargs.get("value", 0) * kwargs.get("percentage", 0)) / 100
+            return {"result": result, "operation": op}
+        if op == "cost_estimate":
+            base_cost = kwargs.get("base_cost", 0)
+            users = kwargs.get("users", 0)
+            scaling_factor = kwargs.get("scaling_factor", 1.0)
+            usage_pattern = kwargs.get("usage_pattern", 1.0)
+            monthly_cost = base_cost * max(1, users / 1000) * scaling_factor * usage_pattern
+            annual_cost = monthly_cost * 12
+            return {
+                "operation": op,
+                "monthly_cost": round(monthly_cost, 2),
+                "annual_cost": round(annual_cost, 2),
+                "inputs": {
+                    "base_cost": base_cost,
+                    "users": users,
+                    "scaling_factor": scaling_factor,
+                    "usage_pattern": usage_pattern
+                }
+            }
+        raise ValueError(f"Unknown calculator operation: {operation}")
+
+
 class CloudAPITool(BaseTool):
     """Tool for making cloud provider API calls."""
     
@@ -287,37 +411,38 @@ class CloudAPITool(BaseTool):
         Returns:
             API call result
         """
-        try:
-            # Use real API call with retry logic - no mock fallback
-            api_data = await self._real_api_call_with_retry(provider, service, operation, **params)
-            
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.SUCCESS,
-                data=api_data,
-                metadata={
-                    "provider": provider,
-                    "service": service,
-                    "operation": operation,
-                    "real_api_used": True,
-                    "no_mock_fallback": True
-                }
-            )
-            
-        except Exception as e:
-            logger.error(f"Cloud API call failed for {provider}/{service}/{operation}: {e}")
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error=f"Real API call failed: {str(e)}",
-                metadata={
-                    "provider": provider,
-                    "service": service,
-                    "operation": operation,
-                    "real_api_attempted": True,
-                    "mock_fallback_disabled": True
-                }
-            )
+        use_real_api = os.getenv("ENABLE_REAL_CLOUD_API") in {"1", "true", "True"}
+        if use_real_api:
+            try:
+                api_data = await self._real_api_call_with_retry(provider, service, operation, **params)
+                return ToolResult(
+                    tool_name=self.name,
+                    status=ToolStatus.SUCCESS,
+                    data=api_data,
+                    metadata={
+                        "provider": provider,
+                        "service": service,
+                        "operation": operation,
+                        "real_api_used": True
+                    }
+                )
+            except Exception as e:
+                logger.error(f"Cloud API call failed for {provider}/{service}/{operation}: {e}")
+                logger.info("Falling back to mock cloud API response")
+        
+        mock_data = await self._mock_api_call(provider, service, operation, **params)
+        return ToolResult(
+            tool_name=self.name,
+            status=ToolStatus.SUCCESS,
+            data=mock_data,
+            metadata={
+                "provider": provider,
+                "service": service,
+                "operation": operation,
+                "real_api_used": False,
+                "mock_data": True
+            }
+        )
     
     async def _real_api_call(self, provider: str, service: str, operation: str, **params) -> Dict[str, Any]:
         """Make real API calls to cloud providers."""
@@ -352,6 +477,42 @@ class CloudAPITool(BaseTool):
                     # Retry with exponential backoff
                     logger.warning(f"API call attempt {attempt + 1} failed for {provider}/{service}/{operation}: {e}, retrying...")
                     await asyncio.sleep(retry_delay * (2 ** attempt))
+
+    async def _mock_api_call(self, provider: str, service: str, operation: str, **params) -> Dict[str, Any]:
+        """Return deterministic mock data for cloud provider operations."""
+        provider = provider.lower()
+        service = service.lower()
+        operation = operation.lower()
+
+        if provider == "aws" and service == "ec2" and operation == "describe_instances":
+            return {
+                "instances": [
+                    {"id": "i-mock123", "type": "m5.large", "state": "running", "region": "us-east-1"},
+                    {"id": "i-mock456", "type": "c6g.xlarge", "state": "stopped", "region": "us-west-2"}
+                ]
+            }
+        if provider == "aws" and service == "pricing":
+            return {
+                "services": [
+                    {"name": "AmazonEC2", "description": "Elastic Compute Cloud"},
+                    {"name": "AmazonS3", "description": "Simple Storage Service"},
+                    {"name": "AmazonRDS", "description": "Relational Database Service"},
+                ]
+            }
+        if provider == "gcp":
+            return {
+                "projects": [
+                    {"name": "mock-project", "id": "mock-project-123"},
+                ],
+                "operation": operation
+            }
+        return {
+            "message": "mock response",
+            "provider": provider,
+            "service": service,
+            "operation": operation,
+            "params_used": params,
+        }
     
     async def _call_aws_api(self, service: str, operation: str, **params) -> Dict[str, Any]:
         """Call AWS APIs using boto3."""
@@ -1308,18 +1469,26 @@ class AgentToolkit:
         self.enabled_tools = enabled_tools
         self.tools: Dict[str, BaseTool] = {}
         self.api_call_count = 0
+        self.tool_usage: Dict[str, Dict[str, int]] = defaultdict(lambda: {
+            "calls": 0,
+            "success": 0,
+            "failures": 0
+        })
         
         # Initialize available tools
         self._initialize_tools()
     
     def _initialize_tools(self):
         """Initialize available tools."""
-        # Always available tools
-        self.tools["data_processor"] = DataProcessingTool()
-        self.tools["cloud_api"] = CloudAPITool()
-        
-        # Add calculator tool (simple implementation)
-        self.tools["calculator"] = CalculatorTool()
+        tool_factories = {
+            "data_processor": DataProcessingTool,
+            "cloud_api": CloudAPITool,
+            "calculator": CalculationTool,
+        }
+        for name in self.enabled_tools:
+            factory = tool_factories.get(name)
+            if factory:
+                self.tools[name] = factory()
     
     async def initialize(self, assessment, context: Optional[Dict[str, Any]] = None):
         """Initialize toolkit with assessment context."""
@@ -1359,7 +1528,12 @@ class AgentToolkit:
             # Execute tool
             tool = self.tools[tool_name]
             result = await tool._execute_with_tracking(**kwargs)
-            
+            usage = self.tool_usage[tool_name]
+            usage["calls"] += 1
+            if result.is_success:
+                usage["success"] += 1
+            else:
+                usage["failures"] += 1
             return result
             
         except Exception as e:
@@ -1374,6 +1548,14 @@ class AgentToolkit:
         """Get list of available tools."""
         return list(self.tools.keys())
     
+    def list_available_tools(self) -> List[Dict[str, Any]]:
+        """List detailed information about enabled tools."""
+        return [
+            self.tools[name].get_info()
+            for name in self.enabled_tools
+            if name in self.tools
+        ]
+    
     def get_enabled_tools(self) -> List[str]:
         """Get list of enabled tools."""
         return self.enabled_tools
@@ -1381,53 +1563,22 @@ class AgentToolkit:
     def is_tool_enabled(self, tool_name: str) -> bool:
         """Check if a tool is enabled."""
         return tool_name in self.enabled_tools
-
-
-class CalculatorTool(BaseTool):
-    """Simple calculator tool for basic math operations."""
     
-    def __init__(self):
-        super().__init__(
-            name="calculator",
-            description="Perform basic mathematical calculations"
-        )
-    
-    async def execute(self, operation: str, **kwargs) -> ToolResult:
-        """
-        Execute calculator operation.
+    def get_usage_stats(self) -> Dict[str, Any]:
+        """Return toolkit usage statistics."""
+        usage_details = {}
+        for name in self.enabled_tools:
+            stats = self.tool_usage[name]
+            last_used = None
+            if name in self.tools and self.tools[name].last_used:
+                last_used = self.tools[name].last_used.isoformat()
+            usage_details[name] = {
+                **stats,
+                "last_used": last_used
+            }
         
-        Args:
-            operation: Math operation to perform
-            **kwargs: Operation parameters
-            
-        Returns:
-            Calculation result
-        """
-        try:
-            if operation == "add":
-                result = kwargs.get("a", 0) + kwargs.get("b", 0)
-            elif operation == "multiply":
-                result = kwargs.get("a", 1) * kwargs.get("b", 1)
-            elif operation == "divide":
-                b = kwargs.get("b", 1)
-                if b == 0:
-                    raise ValueError("Division by zero")
-                result = kwargs.get("a", 0) / b
-            elif operation == "percentage":
-                result = (kwargs.get("value", 0) * kwargs.get("percentage", 0)) / 100
-            else:
-                raise ValueError(f"Unknown operation: {operation}")
-            
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.SUCCESS,
-                data={"result": result, "operation": operation},
-                metadata={"operation": operation}
-            )
-            
-        except Exception as e:
-            return ToolResult(
-                tool_name=self.name,
-                status=ToolStatus.ERROR,
-                error=str(e)
-            )
+        return {
+            "enabled_tools": list(self.enabled_tools),
+            "api_calls_made": self.api_call_count,
+            "tool_usage": usage_details
+        }

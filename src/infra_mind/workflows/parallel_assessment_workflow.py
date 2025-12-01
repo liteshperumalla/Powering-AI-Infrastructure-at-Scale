@@ -17,7 +17,7 @@ from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime, timezone
 import time
 
-from .base import BaseWorkflow, WorkflowState, WorkflowNode, NodeStatus, WorkflowResult
+from .base import BaseWorkflow, WorkflowState, WorkflowStatus, WorkflowNode, NodeStatus, WorkflowResult
 from ..models.assessment import Assessment
 from ..agents.base import BaseAgent, AgentRole, AgentFactory, AgentStatus
 from ..agents import agent_factory
@@ -68,10 +68,38 @@ class ParallelAssessmentWorkflow(BaseWorkflow):
             "completed_agents": 0,
             "failed_agents": 0,
             "total_time": 0.0,
-            "phase_times": {}
+            "phase_times": {
+                "validation": 0.0,
+                "agents": 0.0,
+                "synthesis": 0.0,
+                "professional_services": 0.0,
+                "reporting": 0.0
+            }
         }
 
         logger.info("Initialized Parallel Assessment Workflow with 10x performance improvement")
+
+    async def define_workflow(self, assessment: Assessment) -> WorkflowState:
+        """
+        Define workflow structure (required by BaseWorkflow).
+
+        Note: This parallel workflow doesn't use the node-based structure,
+        so this is a stub implementation that returns an initialized state.
+        """
+        return WorkflowState(
+            workflow_id=self.workflow_id,
+            assessment_id=str(assessment.id),
+            status=WorkflowStatus.RUNNING
+        )
+
+    async def execute_node(self, node: WorkflowNode, state: WorkflowState) -> Dict[str, Any]:
+        """
+        Execute a workflow node (required by BaseWorkflow).
+
+        Note: This parallel workflow executes agents directly rather than through nodes,
+        so this is a stub implementation.
+        """
+        return {"status": "not_implemented", "message": "Node execution handled by execute() method"}
 
     async def execute(self, assessment: Assessment, context: Optional[Dict[str, Any]] = None) -> WorkflowResult:
         """
@@ -97,9 +125,11 @@ class ParallelAssessmentWorkflow(BaseWorkflow):
 
             if not validation_result["success"]:
                 return WorkflowResult(
-                    success=False,
+                    workflow_id=self.workflow_id,
+                    status=WorkflowStatus.FAILED,
+                    assessment_id=str(assessment.id),
                     error="Data validation failed",
-                    data=validation_result
+                    final_data=validation_result
                 )
 
             # Phase 2: Execute all agents in PARALLEL (10x faster!)
@@ -126,6 +156,12 @@ class ParallelAssessmentWorkflow(BaseWorkflow):
             )
             self.execution_metrics["phase_times"]["reports"] = time.time() - phase5_start
 
+            # Set feature flags to indicate workflow completion
+            assessment.recommendations_generated = True
+            assessment.reports_generated = True
+            await assessment.save()
+            logger.info(f"Set feature flags for assessment {assessment.id}")
+
             # Calculate total execution time
             total_time = time.time() - start_time
             self.execution_metrics["total_time"] = total_time
@@ -139,29 +175,45 @@ class ParallelAssessmentWorkflow(BaseWorkflow):
             )
 
             return WorkflowResult(
-                success=True,
-                data={
-                    "assessment_id": str(assessment.id),
+                workflow_id=self.workflow_id,
+                status=WorkflowStatus.COMPLETED,
+                assessment_id=str(assessment.id),
+                agent_results={},  # Would need to convert to AgentResult format
+                final_data={
                     "agent_results": agent_results,
                     "synthesis": synthesis_result,
                     "professional_services": professional_results,
                     "reports": report_results,
                     "execution_metrics": self.execution_metrics
                 },
-                metadata={
-                    "workflow_version": "parallel_v1",
-                    "execution_time": total_time,
-                    "agents_executed": len(agent_results),
-                    "parallel_execution": True
-                }
+                execution_time=total_time,
+                node_count=len(agent_results),
+                completed_nodes=self.execution_metrics["completed_agents"],
+                failed_nodes=self.execution_metrics["failed_agents"]
             )
 
         except Exception as e:
             logger.error(f"Parallel workflow failed: {e}", exc_info=True)
+
+            # Set feature flags to False on failure
+            try:
+                assessment.recommendations_generated = False
+                assessment.reports_generated = False
+                await assessment.save()
+                logger.info(f"Set feature flags to False for failed assessment {assessment.id}")
+            except Exception as flag_error:
+                logger.error(f"Failed to update feature flags: {flag_error}")
+
             return WorkflowResult(
-                success=False,
+                workflow_id=self.workflow_id,
+                status=WorkflowStatus.FAILED,
+                assessment_id=str(assessment.id),
+                agent_results={},
+                final_data={"execution_metrics": self.execution_metrics},
                 error=str(e),
-                data={"execution_metrics": self.execution_metrics}
+                node_count=self.execution_metrics.get("total_agents", 0),
+                completed_nodes=self.execution_metrics.get("completed_agents", 0),
+                failed_nodes=self.execution_metrics.get("failed_agents", 0)
             )
 
     async def _execute_data_validation(
@@ -177,8 +229,8 @@ class ParallelAssessmentWorkflow(BaseWorkflow):
         logger.info("Phase 1: Data validation")
 
         try:
-            # Create validation agent
-            validation_agent = self.agent_factory.create_agent(
+            # Create validation agent (await the coroutine)
+            validation_agent = await self.agent_factory.create_agent(
                 AgentRole.RESEARCH,
                 AgentConfig(
                     name="data_validation_agent",
@@ -346,7 +398,7 @@ class ParallelAssessmentWorkflow(BaseWorkflow):
             )
 
             # Create agent instance
-            agent = self.agent_factory.create_agent(
+            agent = await self.agent_factory.create_agent(
                 agent_role,
                 AgentConfig(
                     name=f"{agent_role.value}_agent",

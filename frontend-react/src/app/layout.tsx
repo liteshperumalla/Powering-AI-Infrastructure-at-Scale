@@ -32,8 +32,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" data-scroll-behavior="smooth">
-      <body className={roboto.className}>
+    <html lang="en" data-scroll-behavior="smooth" suppressHydrationWarning>
+      <body className={roboto.className} suppressHydrationWarning>
         <ReduxProvider>
           <GoogleOAuthProvider>
             <ThemeProvider>

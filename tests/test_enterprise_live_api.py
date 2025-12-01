@@ -3,13 +3,19 @@ Live API tests for enterprise features using the running Docker containers.
 These tests call the actual API endpoints to verify functionality.
 """
 
+import os
 import pytest
 import requests
 import json
 from typing import Dict, Any
 
 # Base URL for the running API
-BASE_URL = "http://localhost:8000/api/v2"
+BASE_URL = os.getenv("LIVE_API_BASE_URL", "http://localhost:8000/api/v2")
+RUN_LIVE_API_TESTS = os.getenv("RUN_LIVE_API_TESTS") == "1"
+pytestmark = pytest.mark.skipif(
+    not RUN_LIVE_API_TESTS,
+    reason="Requires running enterprise API instance. Set RUN_LIVE_API_TESTS=1 to enable.",
+)
 
 class TestLiveExperimentsAPI:
     """Test suite for A/B testing and experiments endpoints using live API."""

@@ -358,123 +358,146 @@ function AssessmentDetailPage() {
                   </Alert>
                 ) : (
                   <Box>
+                    <Grid container spacing={3}>
+                      {/* Current Infrastructure */}
+                      {assessment.technical_requirements.current_infrastructure && (
+                        <Grid item xs={12}>
+                          <Typography variant="subtitle2" color="primary" gutterBottom>
+                            Current Infrastructure
+                          </Typography>
+                          {typeof assessment.technical_requirements.current_infrastructure === 'object' ? (
+                            <Grid container spacing={2}>
+                              {Object.entries(assessment.technical_requirements.current_infrastructure).map(([key, value]: [string, any]) => (
+                                <Grid item xs={12} sm={6} key={key}>
+                                  <Typography variant="caption" color="text.secondary">
+                                    {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
+                                  </Typography>
+                                  <Typography variant="body2">
+                                    {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                                  </Typography>
+                                </Grid>
+                              ))}
+                            </Grid>
+                          ) : (
+                            <Typography variant="body2">{String(assessment.technical_requirements.current_infrastructure)}</Typography>
+                          )}
+                        </Grid>
+                      )}
 
-                <Grid container spacing={2}>
-                  {/* Current Architecture */}
-                  {assessment.technical_requirements.current_architecture && (
-                    <Grid item xs={12}>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Current Architecture:
-                      </Typography>
-                      <Typography variant="body1">
-                        {assessment.technical_requirements.current_architecture}
-                      </Typography>
+                      {/* Performance Requirements */}
+                      {assessment.technical_requirements.performance_requirements && (
+                        <Grid item xs={12}>
+                          <Typography variant="subtitle2" color="primary" gutterBottom>
+                            Performance Requirements
+                          </Typography>
+                          <Grid container spacing={2}>
+                            {Object.entries(assessment.technical_requirements.performance_requirements).map(([key, value]: [string, any]) => (
+                              <Grid item xs={12} sm={4} key={key}>
+                                <Typography variant="caption" color="text.secondary">
+                                  {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
+                                </Typography>
+                                <Typography variant="body2" fontWeight="medium">
+                                  {String(value)}
+                                </Typography>
+                              </Grid>
+                            ))}
+                          </Grid>
+                        </Grid>
+                      )}
+
+                      {/* ML Requirements */}
+                      {assessment.technical_requirements.ml_requirements && (
+                        <Grid item xs={12}>
+                          <Typography variant="subtitle2" color="primary" gutterBottom>
+                            ML/AI Requirements
+                          </Typography>
+                          <Grid container spacing={2}>
+                            {Object.entries(assessment.technical_requirements.ml_requirements).map(([key, value]: [string, any]) => (
+                              <Grid item xs={12} sm={6} key={key}>
+                                <Typography variant="caption" color="text.secondary">
+                                  {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
+                                </Typography>
+                                <Typography variant="body2">
+                                  {Array.isArray(value) ? value.join(', ') : String(value)}
+                                </Typography>
+                              </Grid>
+                            ))}
+                          </Grid>
+                        </Grid>
+                      )}
+
+                      {/* Data Requirements */}
+                      {assessment.technical_requirements.data_requirements && (
+                        <Grid item xs={12}>
+                          <Typography variant="subtitle2" color="primary" gutterBottom>
+                            Data Requirements
+                          </Typography>
+                          <Grid container spacing={2}>
+                            {Object.entries(assessment.technical_requirements.data_requirements).map(([key, value]: [string, any]) => (
+                              <Grid item xs={12} sm={4} key={key}>
+                                <Typography variant="caption" color="text.secondary">
+                                  {key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}:
+                                </Typography>
+                                <Typography variant="body2">
+                                  {String(value)}
+                                </Typography>
+                              </Grid>
+                            ))}
+                          </Grid>
+                        </Grid>
+                      )}
+
+                      {/* Security Requirements */}
+                      {assessment.technical_requirements.security_requirements && (
+                        <Grid item xs={12}>
+                          <Typography variant="subtitle2" color="primary" gutterBottom>
+                            Security Requirements
+                          </Typography>
+                          <Grid container spacing={1}>
+                            {Object.entries(assessment.technical_requirements.security_requirements).map(([key, value]: [string, any]) => (
+                              value === true && (
+                                <Grid item xs={12} sm={6} md={4} key={key}>
+                                  <Chip
+                                    label={key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                    size="small"
+                                    color="success"
+                                    variant="outlined"
+                                  />
+                                </Grid>
+                              )
+                            ))}
+                          </Grid>
+                        </Grid>
+                      )}
+
+                      {/* Workload Types */}
+                      {assessment.technical_requirements.workload_types && assessment.technical_requirements.workload_types.length > 0 && (
+                        <Grid item xs={12}>
+                          <Typography variant="subtitle2" color="primary" gutterBottom>
+                            Workload Types
+                          </Typography>
+                          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                            {assessment.technical_requirements.workload_types.map((type: string, idx: number) => (
+                              <Chip key={idx} label={type.replace(/_/g, ' ')} size="small" color="primary" />
+                            ))}
+                          </Stack>
+                        </Grid>
+                      )}
+
+                      {/* Programming Languages */}
+                      {assessment.technical_requirements.preferred_programming_languages && assessment.technical_requirements.preferred_programming_languages.length > 0 && (
+                        <Grid item xs={12}>
+                          <Typography variant="subtitle2" color="primary" gutterBottom>
+                            Programming Languages
+                          </Typography>
+                          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                            {assessment.technical_requirements.preferred_programming_languages.map((lang: string, idx: number) => (
+                              <Chip key={idx} label={lang} size="small" variant="outlined" />
+                            ))}
+                          </Stack>
+                        </Grid>
+                      )}
                     </Grid>
-                  )}
-
-                  {/* Containerization */}
-                  {assessment.technical_requirements.containerization && (
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Containerization:
-                      </Typography>
-                      <Typography variant="body1">
-                        {assessment.technical_requirements.containerization}
-                      </Typography>
-                    </Grid>
-                  )}
-
-                  {/* Orchestration */}
-                  {assessment.technical_requirements.orchestration_platform && (
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Orchestration Platform:
-                      </Typography>
-                      <Typography variant="body1">
-                        {assessment.technical_requirements.orchestration_platform}
-                      </Typography>
-                    </Grid>
-                  )}
-
-                  {/* Performance */}
-                  {assessment.technical_requirements.response_time_requirements && (
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Response Time Requirements:
-                      </Typography>
-                      <Typography variant="body1">
-                        {assessment.technical_requirements.response_time_requirements}
-                      </Typography>
-                    </Grid>
-                  )}
-
-                  {assessment.technical_requirements.availability_requirements && (
-                    <Grid item xs={12} sm={6}>
-                      <Typography variant="subtitle2" color="text.secondary">
-                        Availability Requirements:
-                      </Typography>
-                      <Typography variant="body1">
-                        {assessment.technical_requirements.availability_requirements}
-                      </Typography>
-                    </Grid>
-                  )}
-                </Grid>
-
-                {/* Arrays: Cloud Providers */}
-                {assessment.technical_requirements.current_cloud_providers && assessment.technical_requirements.current_cloud_providers.length > 0 && (
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Current Cloud Providers:
-                    </Typography>
-                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                      {assessment.technical_requirements.current_cloud_providers.map((provider: string, idx: number) => (
-                        <Chip key={idx} label={provider} size="small" variant="outlined" color="primary" />
-                      ))}
-                    </Stack>
-                  </Box>
-                )}
-
-                {/* Programming Languages */}
-                {assessment.technical_requirements.programming_languages && assessment.technical_requirements.programming_languages.length > 0 && (
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Programming Languages:
-                    </Typography>
-                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                      {assessment.technical_requirements.programming_languages.map((lang: string, idx: number) => (
-                        <Chip key={idx} label={lang} size="small" variant="outlined" />
-                      ))}
-                    </Stack>
-                  </Box>
-                )}
-
-                {/* Database Types */}
-                {assessment.technical_requirements.database_types && assessment.technical_requirements.database_types.length > 0 && (
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Database Types:
-                    </Typography>
-                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                      {assessment.technical_requirements.database_types.map((db: string, idx: number) => (
-                        <Chip key={idx} label={db} size="small" variant="outlined" />
-                      ))}
-                    </Stack>
-                  </Box>
-                )}
-
-                {/* CI/CD Tools */}
-                {assessment.technical_requirements.cicd_tools && assessment.technical_requirements.cicd_tools.length > 0 && (
-                  <Box sx={{ mt: 2 }}>
-                    <Typography variant="subtitle2" gutterBottom>
-                      CI/CD Tools:
-                    </Typography>
-                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-                      {assessment.technical_requirements.cicd_tools.map((tool: string, idx: number) => (
-                        <Chip key={idx} label={tool} size="small" variant="outlined" />
-                      ))}
-                    </Stack>
-                  </Box>
-                )}
                   </Box>
                 )}
               </CardContent>

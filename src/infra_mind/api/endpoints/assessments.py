@@ -31,6 +31,7 @@ from .auth import get_current_user
 from ...core.smart_defaults import smart_get, SmartDefaults
 from ...models.user import User
 from ...core.dependencies import DatabaseDep, CacheManagerDep  # Dependency injection
+from ...core.config import settings
 from ...workflows.orchestrator import agent_orchestrator, OrchestrationConfig
 from ...workflows.parallel_assessment_workflow import ParallelAssessmentWorkflow as AssessmentWorkflow  # 10x faster parallel execution
 from ...agents.cloud_engineer_agent import CloudEngineerAgent
@@ -531,11 +532,15 @@ async def generate_orchestrated_recommendations(assessment: Assessment, app_stat
         # Define the agents to use for this assessment
         agent_roles = [
             AgentRole.CTO,              # Strategic planning
-            AgentRole.CLOUD_ENGINEER,   # Technical implementation  
+            AgentRole.CLOUD_ENGINEER,   # Technical implementation
             AgentRole.INFRASTRUCTURE,   # Infrastructure design
             AgentRole.RESEARCH,         # Market analysis
             AgentRole.COMPLIANCE,       # Security and compliance
-            AgentRole.MLOPS,           # AI/ML operations
+            AgentRole.MLOPS,            # AI/ML operations
+            AgentRole.AI_CONSULTANT,    # AI/ML integration strategy
+            AgentRole.WEB_RESEARCH,     # Web intelligence gathering
+            AgentRole.SIMULATION,       # Performance simulation
+            AgentRole.CHATBOT,          # Support and automation
         ]
         
         # Configure orchestrator for assessment
@@ -571,6 +576,66 @@ async def generate_orchestrated_recommendations(assessment: Assessment, app_stat
         
         # Convert orchestrated results to Recommendation objects
         recommendations = []
+
+        # FIRST: Extract individual agent recommendations
+        # This provides granular insights from each specialized agent
+        if hasattr(orchestration_result, 'recommendations') and orchestration_result.recommendations:
+            logger.info(f"Extracting {len(orchestration_result.recommendations)} individual agent recommendations")
+            for agent_rec in orchestration_result.recommendations:
+                try:
+                    # Create service recommendations from agent result
+                    service_recommendations = []
+                    if hasattr(agent_rec, 'services') and agent_rec.services:
+                        for service in agent_rec.services[:2]:  # Max 2 services per agent recommendation
+                            service_rec = ServiceRecommendation(
+                                service_name=service.get("name", "Cloud Service"),
+                                provider=CloudProvider.AWS,
+                                service_category=service.get("category", "compute"),
+                                estimated_monthly_cost=Decimal(str(service.get("cost", "500.00"))),
+                                cost_model="subscription",
+                                configuration=service.get("config", {}),
+                                reasons=service.get("reasons", ["Agent recommendation"]),
+                                alternatives=service.get("alternatives", []),
+                                setup_complexity="medium",
+                                implementation_time_hours=service.get("implementation_hours", 40)
+                            )
+                            service_recommendations.append(service_rec)
+
+                    # Create individual agent recommendation
+                    recommendation = Recommendation(
+                        assessment_id=str(assessment.id),
+                        user_id=assessment.user_id,
+                        agent_name=agent_rec.agent_role.value if hasattr(agent_rec, 'agent_role') else "unknown_agent",
+                        title=agent_rec.title if hasattr(agent_rec, 'title') else f"Recommendation from {agent_rec.agent_role.value}",
+                        summary=agent_rec.description if hasattr(agent_rec, 'description') else "Agent-specific recommendation",
+                        confidence_level=RecommendationConfidence.HIGH if agent_rec.confidence_score >= 0.8 else RecommendationConfidence.MEDIUM,
+                        confidence_score=agent_rec.confidence_score if hasattr(agent_rec, 'confidence_score') else 0.75,
+                        business_alignment=agent_rec.business_value if hasattr(agent_rec, 'business_value') else 0.8,
+                        recommendation_data=agent_rec.dict() if hasattr(agent_rec, 'dict') else {},
+                        recommended_services=service_recommendations,
+                        cost_estimates={},
+                        total_estimated_monthly_cost=Decimal("500.00"),
+                        implementation_steps=agent_rec.implementation_steps if hasattr(agent_rec, 'implementation_steps') else [
+                            f"Review {agent_rec.agent_role.value} recommendations",
+                            "Implement suggested changes",
+                            "Monitor results"
+                        ],
+                        prerequisites=agent_rec.prerequisites if hasattr(agent_rec, 'prerequisites') else [],
+                        risks_and_considerations=agent_rec.risks if hasattr(agent_rec, 'risks') else [],
+                        business_impact="medium",
+                        alignment_score=agent_rec.business_value if hasattr(agent_rec, 'business_value') else 0.8,
+                        tags=["individual-agent", agent_rec.agent_role.value if hasattr(agent_rec, 'agent_role') else "agent"],
+                        priority=Priority.MEDIUM,
+                        category=agent_rec.category if hasattr(agent_rec, 'category') else "specialized"
+                    )
+
+                    recommendations.append(recommendation)
+
+                except Exception as e:
+                    logger.warning(f"Failed to create recommendation from individual agent result: {e}")
+                    continue
+
+        # SECOND: Add synthesized recommendations
         for synthesized_rec in orchestration_result.synthesized_recommendations:
             try:
                 # Create service recommendations from orchestrated results  
@@ -815,6 +880,36 @@ async def generate_actual_reports(assessment: Assessment, app_state=None, broadc
         })
         
         if executive_result.status.value == "completed":
+            # DEBUG: Log what agent returned
+            logger.info(f"🔍 Executive agent result data keys: {list(executive_result.data.keys())}")
+            logger.info(f"🔍 report_markdown length: {len(executive_result.data.get('report_markdown', ''))}")
+            logger.info(f"🔍 report_text length: {len(executive_result.data.get('report_text', ''))}")
+            logger.info(f"🔍 content dict present: {'content' in executive_result.data}")
+
+            # Extract report content - agent returns it as "report_markdown"
+            content_text = (executive_result.data.get("report_markdown", "") or
+                          executive_result.data.get("report_text", "") or
+                          executive_result.data.get("content_text", "") or
+                          "")
+
+            # If still no content, generate from structured data
+            if not content_text and executive_result.data.get("content"):
+                content_dict = executive_result.data.get("content", {})
+                # Build report text from structured content
+                parts = []
+                if content_dict.get("executive_summary"):
+                    parts.append(f"# Executive Summary\n\n{content_dict['executive_summary']}\n")
+                if content_dict.get("key_findings"):
+                    parts.append(f"## Key Findings\n\n{content_dict['key_findings']}\n")
+                if content_dict.get("recommendations"):
+                    parts.append(f"## Recommendations\n\n{content_dict['recommendations']}\n")
+                if content_dict.get("strategic_insights"):
+                    parts.append(f"## Strategic Insights\n\n{content_dict['strategic_insights']}\n")
+
+                content_text = "\n".join(parts)
+
+            logger.info(f"📝 Final content_text length for Executive Report: {len(content_text)}")
+
             executive_report = Report(
                 assessment_id=str(assessment.id),
                 user_id=assessment.user_id,
@@ -824,6 +919,8 @@ async def generate_actual_reports(assessment: Assessment, app_state=None, broadc
                 format=ReportFormat.PDF,
                 status=ReportStatus.COMPLETED,
                 progress_percentage=100.0,
+                content_text=content_text,  # ADDED: Actual report content
+                content=executive_result.data.get("content", {}),
                 sections=executive_result.data.get("sections", ["executive_summary", "recommendations", "investment_analysis"]),
                 total_pages=executive_result.data.get("page_count", 12),
                 word_count=executive_result.data.get("word_count", 3500),
@@ -837,10 +934,17 @@ async def generate_actual_reports(assessment: Assessment, app_state=None, broadc
                 tags=["executive", "strategic", "ai_generated"],
                 created_at=dt.utcnow(),
                 updated_at=dt.utcnow(),
-                completed_at=dt.utcnow(),
-                content=executive_result.data.get("content", {})
+                completed_at=dt.utcnow()
             )
             await executive_report.insert()
+
+            # DEBUG: Verify what was actually saved
+            saved_report = await Report.find_one(Report.id == executive_report.id)
+            if saved_report:
+                logger.info(f"✅ Verified saved Executive Report - content_text length in DB: {len(saved_report.content_text)}")
+            else:
+                logger.error(f"❌ Could not find saved Executive Report!")
+
             logger.info(f"Saved AI-generated Executive Report for assessment {assessment.id}")
         
         # Generate Technical Report using AI
@@ -854,6 +958,29 @@ async def generate_actual_reports(assessment: Assessment, app_state=None, broadc
         })
         
         if technical_result.status.value == "completed":
+            # Extract report content - agent returns it as "report_markdown"
+            content_text = (technical_result.data.get("report_markdown", "") or
+                          technical_result.data.get("report_text", "") or
+                          technical_result.data.get("content_text", "") or
+                          "")
+
+            # If still no content, generate from structured data
+            if not content_text and technical_result.data.get("content"):
+                content_dict = technical_result.data.get("content", {})
+                parts = []
+                if content_dict.get("architecture"):
+                    parts.append(f"# Architecture Overview\n\n{content_dict['architecture']}\n")
+                if content_dict.get("implementation"):
+                    parts.append(f"## Implementation Guide\n\n{content_dict['implementation']}\n")
+                if content_dict.get("operations"):
+                    parts.append(f"## Operations & Maintenance\n\n{content_dict['operations']}\n")
+                if content_dict.get("security"):
+                    parts.append(f"## Security Considerations\n\n{content_dict['security']}\n")
+                if content_dict.get("monitoring"):
+                    parts.append(f"## Monitoring & Observability\n\n{content_dict['monitoring']}\n")
+
+                content_text = "\n".join(parts)
+
             technical_report = Report(
                 assessment_id=str(assessment.id),
                 user_id=assessment.user_id,
@@ -863,6 +990,8 @@ async def generate_actual_reports(assessment: Assessment, app_state=None, broadc
                 format=ReportFormat.PDF,
                 status=ReportStatus.COMPLETED,
                 progress_percentage=100.0,
+                content_text=content_text,  # ADDED: Actual report content
+                content=technical_result.data.get("content", {}),
                 sections=technical_result.data.get("sections", ["architecture", "implementation", "operations"]),
                 total_pages=technical_result.data.get("page_count", 28),
                 word_count=technical_result.data.get("word_count", 8200),
@@ -876,8 +1005,7 @@ async def generate_actual_reports(assessment: Assessment, app_state=None, broadc
                 tags=["technical", "implementation", "ai_generated"],
                 created_at=dt.utcnow(),
                 updated_at=dt.utcnow(),
-                completed_at=dt.utcnow(),
-                content=technical_result.data.get("content", {})
+                completed_at=dt.utcnow()
             )
             await technical_report.insert()
             logger.info(f"Saved AI-generated Technical Report for assessment {assessment.id}")
@@ -893,6 +1021,27 @@ async def generate_actual_reports(assessment: Assessment, app_state=None, broadc
         })
         
         if cost_result.status.value == "completed":
+            # Extract report content - agent returns it as "report_markdown"
+            content_text = (cost_result.data.get("report_markdown", "") or
+                          cost_result.data.get("report_text", "") or
+                          cost_result.data.get("content_text", "") or
+                          "")
+
+            # If still no content, generate from structured data
+            if not content_text and cost_result.data.get("content"):
+                content_dict = cost_result.data.get("content", {})
+                parts = []
+                if content_dict.get("cost_breakdown"):
+                    parts.append(f"# Cost Breakdown\n\n{content_dict['cost_breakdown']}\n")
+                if content_dict.get("optimization_opportunities"):
+                    parts.append(f"## Optimization Opportunities\n\n{content_dict['optimization_opportunities']}\n")
+                if content_dict.get("budget_projections"):
+                    parts.append(f"## Budget Projections\n\n{content_dict['budget_projections']}\n")
+                if content_dict.get("roi_analysis"):
+                    parts.append(f"## ROI Analysis\n\n{content_dict['roi_analysis']}\n")
+
+                content_text = "\n".join(parts)
+
             cost_report = Report(
                 assessment_id=str(assessment.id),
                 user_id=assessment.user_id,
@@ -902,6 +1051,8 @@ async def generate_actual_reports(assessment: Assessment, app_state=None, broadc
                 format=ReportFormat.PDF,
                 status=ReportStatus.COMPLETED,
                 progress_percentage=100.0,
+                content_text=content_text,  # ADDED: Actual report content
+                content=cost_result.data.get("content", {}),
                 sections=cost_result.data.get("sections", ["cost_analysis", "optimization", "projections"]),
                 total_pages=cost_result.data.get("page_count", 16),
                 word_count=cost_result.data.get("word_count", 4800),
@@ -915,8 +1066,7 @@ async def generate_actual_reports(assessment: Assessment, app_state=None, broadc
                 tags=["financial", "cost_analysis", "ai_generated"],
                 created_at=dt.utcnow(),
                 updated_at=dt.utcnow(),
-                completed_at=dt.utcnow(),
-                content=cost_result.data.get("content", {})
+                completed_at=dt.utcnow()
             )
             await cost_report.insert()
             logger.info(f"Saved AI-generated Cost Analysis Report for assessment {assessment.id}")
@@ -1023,8 +1173,8 @@ async def create_simple_assessment(data: dict, current_user: User = Depends(get_
 async def create_assessment(
     assessment_data: Dict[str, Any],
     request: Request,
-    current_user: User = Depends(get_current_user),
-    db: DatabaseDep = None  # Dependency injection for database access
+    db: DatabaseDep,
+    current_user: User = Depends(get_current_user)
 ):
     """
     Create a new infrastructure assessment.
@@ -1309,27 +1459,37 @@ async def create_assessment(
         if should_start_workflow:
             logger.info(f"Starting workflow for assessment: {assessment.id} (sufficient data provided)")
             try:
-                # Start workflow asynchronously (fire and forget)
-                import asyncio
-                asyncio.create_task(start_assessment_workflow(
-                    assessment,
-                    getattr(request.app, 'state', None),
-                    db  # Pass injected database for progress tracking
-                ))
-
-                # Update assessment status to indicate workflow started
+                # Update assessment status to indicate workflow starting
                 assessment.status = AssessmentStatus.IN_PROGRESS
                 assessment.started_at = current_time
                 assessment.workflow_id = f"workflow_{assessment.id}"  # Set workflow ID
                 assessment.progress = {
-                    "current_step": "initializing_workflow",
+                    "current_step": "queued_for_processing",
                     "completed_steps": ["created"],
                     "total_steps": 6,
-                    "progress_percentage": 10.0,
+                    "progress_percentage": 0.0,
                     "automated_pipeline": True,
                     "pipeline_steps": ["analysis", "recommendations", "reports", "analytics", "completion"]
                 }
                 await assessment.save()
+
+                # Dispatch Celery task for workflow execution
+                try:
+                    from ...tasks.assessment_tasks import process_assessment
+                    # Explicitly send to 'assessments' queue to match worker configuration
+                    celery_task = process_assessment.apply_async(
+                        args=[str(assessment.id)],
+                        queue='assessments',
+                        routing_key='assessment'
+                    )
+                    celery_task_id = celery_task.id
+                    logger.info(f"✅ Assessment {assessment.id} queued via Celery to 'assessments' queue. Task ID: {celery_task_id}")
+                except Exception as celery_error:
+                    logger.error(f"Failed to queue Celery task for assessment {assessment.id}: {celery_error}")
+                    # Fall back to draft state if Celery fails
+                    assessment.status = AssessmentStatus.DRAFT
+                    await assessment.save()
+                    raise
 
                 # Broadcast dashboard update for workflow start
                 try:
@@ -1350,7 +1510,7 @@ async def create_assessment(
                 except Exception as e:
                     logger.warning(f"Failed to broadcast dashboard update for workflow start: {e}")
 
-                logger.info(f"Successfully started workflow for assessment: {assessment.id}")
+                logger.info(f"Successfully queued workflow for assessment: {assessment.id} via Celery")
             except Exception as workflow_error:
                 logger.error(f"Failed to start workflow for assessment {assessment.id}: {workflow_error}")
                 import traceback
@@ -1666,6 +1826,7 @@ async def list_assessments(
                 assessment_summaries.append(AssessmentSummary(
                     id=str(assessment.id),
                     title=display_title,
+                    description=assessment.description,
                     status=status_value,
                     priority=assessment.priority,
                     progress_percentage=progress_pct,
@@ -1866,7 +2027,12 @@ async def delete_assessment(
 
 
 @router.post("/{assessment_id}/start", response_model=AssessmentStatusUpdate)
-async def start_assessment_analysis(assessment_id: str, request: StartAssessmentRequest):
+async def start_assessment_analysis(
+    assessment_id: str,
+    request: StartAssessmentRequest,
+    fastapi_request: Request,
+    db: DatabaseDep
+):
     """
     Start AI agent analysis for an assessment using background tasks.
 
@@ -1888,6 +2054,13 @@ async def start_assessment_analysis(assessment_id: str, request: StartAssessment
                 detail=f"Assessment {assessment_id} not found"
             )
         
+        # Validate request payload matches path parameter
+        if request.assessment_id and request.assessment_id != assessment_id:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Assessment ID mismatch between path and payload"
+            )
+
         # Check if assessment is in a state that can be started
         if assessment.status == AssessmentStatus.IN_PROGRESS:
             # Check for workflow deadlock (stuck for more than 30 minutes)
@@ -1914,38 +2087,75 @@ async def start_assessment_analysis(assessment_id: str, request: StartAssessment
         # Start the workflow manually using Celery background task
         logger.info(f"Queuing assessment analysis as background task: {assessment_id}")
 
+        # Prepare common progress metadata
+        assessment.status = AssessmentStatus.IN_PROGRESS
+        assessment.started_at = dt.utcnow()
+        assessment.workflow_id = f"workflow_{assessment.id}_{int(dt.utcnow().timestamp())}"
+        assessment.progress = {
+            "current_step": "queued",
+            "completed_steps": ["created"],
+            "total_steps": 5,
+            "progress_percentage": 0.0,
+            "queued_at": dt.utcnow().isoformat()
+        }
+        await assessment.save()
+
+        use_celery = settings.use_celery_for_assessments
+        celery_task_id: Optional[str] = None
+        celery_error: Optional[Exception] = None
+
+        if use_celery:
+            try:
+                from ...tasks.assessment_tasks import process_assessment
+                celery_task = process_assessment.delay(assessment_id)
+                celery_task_id = celery_task.id
+                logger.info(f"✅ Assessment {assessment_id} queued via Celery. Task ID: {celery_task_id}")
+            except Exception as workflow_error:
+                celery_error = workflow_error
+                use_celery = False
+                logger.warning(
+                    f"Celery queue unavailable for assessment {assessment_id}: {workflow_error}. "
+                    "Falling back to in-process execution."
+                )
+
+        if use_celery and celery_task_id:
+            return AssessmentStatusUpdate(
+                assessment_id=assessment_id,
+                status=AssessmentStatus.IN_PROGRESS,
+                progress_percentage=0.0,
+                current_step="queued_for_processing",
+                message=(
+                    f"Assessment queued for background processing. Task ID: {celery_task_id}. "
+                    f"Check progress at /tasks/{celery_task_id}"
+                )
+            )
+
+        # Fallback to local async execution when Celery is unavailable or disabled
         try:
-            # Update status to queued
-            assessment.status = AssessmentStatus.IN_PROGRESS
-            assessment.started_at = dt.utcnow()
-            assessment.workflow_id = f"celery_workflow_{assessment.id}_{int(dt.utcnow().timestamp())}"
-            assessment.progress = {
-                "current_step": "queued",
-                "completed_steps": ["created"],
-                "total_steps": 5,
-                "progress_percentage": 0.0,
-                "queued_at": dt.utcnow().isoformat()
-            }
-            await assessment.save()
+            asyncio.create_task(start_assessment_workflow(
+                assessment,
+                getattr(fastapi_request.app, 'state', None),
+                db
+            ))
 
-            # Queue the task in Celery (NON-BLOCKING!)
-            from ...tasks.assessment_tasks import process_assessment
-            celery_task = process_assessment.delay(assessment_id)
-
-            logger.info(f"✅ Assessment {assessment_id} queued successfully. Task ID: {celery_task.id}")
+            fallback_msg = "Assessment processing started locally"
+            if celery_error:
+                fallback_msg += f" (Celery error: {celery_error})"
+            elif not settings.use_celery_for_assessments:
+                fallback_msg += " (Celery disabled via configuration)"
 
             return AssessmentStatusUpdate(
                 assessment_id=assessment_id,
                 status=AssessmentStatus.IN_PROGRESS,
                 progress_percentage=0.0,
                 current_step="queued_for_processing",
-                message=f"Assessment queued for background processing. Task ID: {celery_task.id}. Check progress at /tasks/{celery_task.id}"
+                message=fallback_msg
             )
-            
+
         except Exception as workflow_error:
             logger.error(f"Failed to start workflow for assessment {assessment_id}: {workflow_error}")
-            
-            # Reset assessment to draft state
+
+            # Reset assessment to draft state on failure
             assessment.status = AssessmentStatus.DRAFT
             assessment.progress = {
                 "current_step": "manual_start_failed",
@@ -1955,7 +2165,7 @@ async def start_assessment_analysis(assessment_id: str, request: StartAssessment
                 "error": f"Manual workflow start failed: {str(workflow_error)}"
             }
             await assessment.save()
-            
+
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to start assessment analysis: {str(workflow_error)}"

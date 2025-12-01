@@ -502,6 +502,175 @@ def add_example_responses(openapi_schema: Dict[str, Any]):
         }
     }
     
+    # Add comprehensive error response examples
+    error_examples = {
+        "/api/v2/auth/login": {
+            "post": {
+                "responses": {
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "examples": {
+                                    "invalid_credentials": {
+                                        "summary": "Invalid Credentials",
+                                        "value": {
+                                            "detail": "Invalid credentials"
+                                        }
+                                    },
+                                    "mfa_required": {
+                                        "summary": "MFA Required",
+                                        "value": {
+                                            "mfa_required": True,
+                                            "temp_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+                                            "message": "MFA verification required"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "content": {
+                            "application/json": {
+                                "examples": {
+                                    "rate_limit_exceeded": {
+                                        "summary": "Rate Limit Exceeded",
+                                        "value": {
+                                            "detail": "Rate limit exceeded. Please try again in 60 seconds.",
+                                            "retry_after": 60
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v2/auth/register": {
+            "post": {
+                "responses": {
+                    "400": {
+                        "content": {
+                            "application/json": {
+                                "examples": {
+                                    "email_exists": {
+                                        "summary": "Email Already Registered",
+                                        "value": {
+                                            "detail": "Email already registered"
+                                        }
+                                    },
+                                    "validation_error": {
+                                        "summary": "Validation Error",
+                                        "value": {
+                                            "detail": [
+                                                {
+                                                    "loc": ["body", "password"],
+                                                    "msg": "ensure this value has at least 8 characters",
+                                                    "type": "value_error.any_str.min_length"
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v2/assessments/": {
+            "post": {
+                "responses": {
+                    "401": {
+                        "content": {
+                            "application/json": {
+                                "examples": {
+                                    "unauthorized": {
+                                        "summary": "Unauthorized",
+                                        "value": {
+                                            "detail": "Authentication credentials were not provided"
+                                        }
+                                    },
+                                    "token_expired": {
+                                        "summary": "Token Expired",
+                                        "value": {
+                                            "detail": "Token expired"
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "422": {
+                        "content": {
+                            "application/json": {
+                                "examples": {
+                                    "validation_error": {
+                                        "summary": "Validation Error",
+                                        "value": {
+                                            "detail": [
+                                                {
+                                                    "loc": ["body", "cloud_provider"],
+                                                    "msg": "value is not a valid enumeration member; permitted: 'aws', 'azure', 'gcp', 'multi'",
+                                                    "type": "type_error.enum"
+                                                }
+                                            ]
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    # Apply error examples to the schema
+    for path, methods in error_examples.items():
+        if path in openapi_schema.get("paths", {}):
+            for method, config in methods.items():
+                if method in openapi_schema["paths"][path]:
+                    endpoint = openapi_schema["paths"][path][method]
+                    
+                    # Add error response examples
+                    if "responses" in config:
+                        for status_code, response_data in config["responses"].items():
+                            # Create response if it doesn't exist
+                            if status_code not in endpoint.get("responses", {}):
+                                if "responses" not in endpoint:
+                                    endpoint["responses"] = {}
+                                endpoint["responses"][status_code] = {
+                                    "description": get_status_description(status_code),
+                                    "content": {}
+                                }
+                            
+                            # Add examples
+                            if "content" in response_data:
+                                for content_type, content_data in response_data["content"].items():
+                                    if content_type not in endpoint["responses"][status_code].get("content", {}):
+                                        if "content" not in endpoint["responses"][status_code]:
+                                            endpoint["responses"][status_code]["content"] = {}
+                                        endpoint["responses"][status_code]["content"][content_type] = {}
+                                    
+                                    if "examples" in content_data:
+                                        endpoint["responses"][status_code]["content"][content_type]["examples"] = content_data["examples"]
+
+
+def get_status_description(status_code: str) -> str:
+    """Get description for HTTP status code."""
+    descriptions = {
+        "400": "Bad Request - Invalid input data",
+        "401": "Unauthorized - Authentication required or failed",
+        "403": "Forbidden - Insufficient permissions",
+        "404": "Not Found - Resource not found",
+        "422": "Unprocessable Entity - Validation error",
+        "429": "Too Many Requests - Rate limit exceeded",
+        "500": "Internal Server Error - Server error occurred"
+    }
+    return descriptions.get(status_code, "Error")
+    
     # Apply examples to the schema
     for path, methods in examples.items():
         if path in openapi_schema.get("paths", {}):

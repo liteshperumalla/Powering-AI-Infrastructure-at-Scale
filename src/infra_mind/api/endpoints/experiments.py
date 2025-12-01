@@ -6,8 +6,9 @@ from fastapi import APIRouter, HTTPException, Depends, status, Query
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 import uuid
+import inspect
 
 from .auth import get_current_user, require_enterprise_access
 from ...models.user import User
@@ -21,6 +22,64 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["experiments"])
 
 
+def _build_experiment_filters(
+    *,
+    feature_flag: Optional[str] = None,
+    status: Optional[ExperimentStatus] = None,
+) -> List[Any]:
+    """
+    Build Beanie filters that work even when Beanie hasn't been initialized.
+
+    In production we rely on field descriptors (Experiment.field == value),
+    but during unit tests we often skip init_database()/init_beanie, so those
+    descriptors are unavailable. This helper falls back to plain dict filters.
+    """
+    criteria = []
+    if feature_flag is not None:
+        criteria.append(("feature_flag", feature_flag))
+    if status is not None:
+        criteria.append(("status", status))
+
+    try:
+        filters = []
+        for field_name, value in criteria:
+            field = getattr(Experiment, field_name)
+            filters.append(field == value)
+        if filters:
+            return filters  # type: ignore[return-value]
+    except AttributeError:
+        # Happens in tests when Beanie hasn't initialized field descriptors
+        pass
+
+    fallback: Dict[str, Any] = {}
+    for field_name, value in criteria:
+        if isinstance(value, ExperimentStatus):
+            fallback[field_name] = value.value
+        else:
+            fallback[field_name] = value
+
+    # Returning a list keeps the caller logic consistent (used with *filters)
+    return [fallback] if fallback else []
+
+
+async def _resolve_query_result(query_result: Any):
+    """
+    Normalize awaitable results so patched AsyncMocks work during tests.
+
+    Beanie's find_one returns an awaitable query object. In unit tests we often
+    patch it with AsyncMock instances that need to be called before awaiting.
+    """
+    if inspect.isawaitable(query_result):
+        return await query_result
+
+    if callable(query_result):
+        potential = query_result()
+        if inspect.isawaitable(potential):
+            return await potential
+
+    return query_result
+
+
 # Pydantic models for request/response
 class CreateExperimentRequest(BaseModel):
     """Request model for creating experiment."""
@@ -28,7 +87,7 @@ class CreateExperimentRequest(BaseModel):
     description: str = Field(..., description="Experiment description") 
     feature_flag: str = Field(..., description="Feature flag identifier")
     target_metric: str = Field(..., description="Primary metric to optimize")
-    variants: List[Dict[str, Any]] = Field(..., min_items=2, description="Experiment variants")
+    variants: List[Dict[str, Any]] = Field(..., min_length=2, description="Experiment variants")
 
 
 class ExperimentResponse(BaseModel):
@@ -241,8 +300,8 @@ async def start_experiment(
         
         # Update experiment status
         experiment.status = ExperimentStatus.RUNNING
-        experiment.started_at = datetime.utcnow()
-        experiment.updated_at = datetime.utcnow()
+        experiment.started_at = datetime.now(timezone.utc)
+        experiment.updated_at = datetime.now(timezone.utc)
         await experiment.save()
         
         return {
@@ -270,10 +329,20 @@ async def get_user_variant(
     """Get variant assignment for a user (accessible to all authenticated users)."""
     try:
         # Find running experiment for this feature flag
-        experiment = await Experiment.find_one(
-            Experiment.feature_flag == feature_flag,
-            Experiment.status == ExperimentStatus.RUNNING
+        filters = _build_experiment_filters(
+            feature_flag=feature_flag,
+            status=ExperimentStatus.RUNNING,
         )
+        try:
+            experiment_query = Experiment.find_one(*filters)
+            experiment = await _resolve_query_result(experiment_query)
+        except Exception as lookup_error:
+            logger.warning(
+                "Experiment lookup failed for feature_flag=%s: %s",
+                feature_flag,
+                lookup_error,
+            )
+            experiment = None
         
         if not experiment:
             # No active experiment, return default
@@ -281,7 +350,7 @@ async def get_user_variant(
                 "feature_flag": feature_flag,
                 "user_id": user_id,
                 "variant": "control",
-                "assigned_at": datetime.utcnow().isoformat(),
+                "assigned_at": datetime.now(timezone.utc).isoformat(),
                 "experiment_id": None
             }
         
@@ -316,7 +385,7 @@ async def get_user_variant(
             "feature_flag": feature_flag,
             "user_id": user_id,
             "variant": assigned_variant,
-            "assigned_at": datetime.utcnow().isoformat(),
+            "assigned_at": datetime.now(timezone.utc).isoformat(),
             "experiment_id": str(experiment.id)
         }
         
@@ -336,10 +405,20 @@ async def track_experiment_event(
     """Track an event for experiment analysis (accessible to all users)."""
     try:
         # Find experiment for this feature flag
-        experiment = await Experiment.find_one(
-            Experiment.feature_flag == feature_flag,
-            Experiment.status == ExperimentStatus.RUNNING
+        filters = _build_experiment_filters(
+            feature_flag=feature_flag,
+            status=ExperimentStatus.RUNNING,
         )
+        try:
+            experiment_query = Experiment.find_one(*filters)
+            experiment = await _resolve_query_result(experiment_query)
+        except Exception as lookup_error:
+            logger.warning(
+                "Experiment lookup failed for tracking feature_flag=%s: %s",
+                feature_flag,
+                lookup_error,
+            )
+            experiment = None
         
         if not experiment:
             return {
@@ -417,7 +496,7 @@ async def get_dashboard_data(
             "completed_experiments": completed_experiments,
             "total_participants": total_events,
             "recent_experiments": experiment_summaries,
-            "generated_at": datetime.utcnow().isoformat()
+            "generated_at": datetime.now(timezone.utc).isoformat()
         }
         
     except Exception as e:

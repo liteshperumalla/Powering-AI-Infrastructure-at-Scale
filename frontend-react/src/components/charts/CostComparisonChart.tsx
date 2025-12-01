@@ -31,12 +31,48 @@ interface CostComparisonChartProps {
     showBreakdown?: boolean;
 }
 
+const colorPalette = ['#FF9900', '#0078D4', '#4285F4', '#34A853', '#9C27B0', '#FF7043'];
+
 const CostComparisonChart: React.FC<CostComparisonChartProps> = ({
     data,
     title = "Cost Comparison",
     showBreakdown = true
 }) => {
     const [viewType, setViewType] = React.useState<'bar' | 'pie'>('bar');
+    const normalizedData = React.useMemo(() => {
+        if (!Array.isArray(data)) return [];
+
+        return data.map((item, index) => {
+            const rawCompute = Number(item.compute ?? 0);
+            const rawStorage = Number(item.storage ?? 0);
+            const rawNetworking = Number(item.networking ?? 0);
+            const rawTotal = Number(item.total ?? 0);
+
+            let compute = rawCompute;
+            let storage = rawStorage;
+            let networking = rawNetworking;
+
+            const hasBreakdown = (rawCompute + rawStorage + rawNetworking) > 0;
+
+            if (!hasBreakdown && rawTotal > 0) {
+                // Derive a proportional breakdown when only total is available
+                compute = Math.round(rawTotal * 0.6);
+                storage = Math.round(rawTotal * 0.25);
+                networking = Math.round(rawTotal * 0.15);
+            }
+
+            const derivedTotal = rawTotal || compute + storage + networking;
+
+            return {
+                ...item,
+                compute,
+                storage,
+                networking,
+                total: derivedTotal,
+                color: item.color || colorPalette[index % colorPalette.length],
+            };
+        });
+    }, [data]);
 
     const handleViewChange = (
         _event: React.MouseEvent<HTMLElement>,
@@ -50,7 +86,7 @@ const CostComparisonChart: React.FC<CostComparisonChartProps> = ({
     const formatCurrency = (value: number) => `$${value.toLocaleString()}`;
 
     // Handle empty data state
-    if (!data || data.length === 0) {
+    if (!normalizedData || normalizedData.length === 0) {
         return (
             <Card>
                 <CardContent>
@@ -167,7 +203,7 @@ const CostComparisonChart: React.FC<CostComparisonChartProps> = ({
                 <Box sx={{ width: '100%', height: 400 }}>
                     <ResponsiveContainer>
                         {viewType === 'bar' ? (
-                            <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                            <BarChart data={normalizedData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                                 <CartesianGrid strokeDasharray="3 3" />
                                 <XAxis dataKey="provider" />
                                 <YAxis tickFormatter={formatCurrency} />
@@ -181,7 +217,7 @@ const CostComparisonChart: React.FC<CostComparisonChartProps> = ({
                                     </>
                                 ) : (
                                     <Bar dataKey="total" name="Total Cost">
-                                        {data.map((entry, index) => (
+                                        {normalizedData.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={entry.color} />
                                         ))}
                                     </Bar>
@@ -190,7 +226,7 @@ const CostComparisonChart: React.FC<CostComparisonChartProps> = ({
                         ) : (
                             <PieChart>
                                 <Pie
-                                    data={data}
+                                    data={normalizedData}
                                     cx="50%"
                                     cy="50%"
                                     labelLine={false}
@@ -199,7 +235,7 @@ const CostComparisonChart: React.FC<CostComparisonChartProps> = ({
                                     fill="#8884d8"
                                     dataKey="total"
                                 >
-                                    {data.map((entry, index) => (
+                                    {normalizedData.map((entry, index) => (
                                         <Cell key={`cell-${index}`} fill={entry.color} />
                                     ))}
                                 </Pie>
@@ -211,7 +247,7 @@ const CostComparisonChart: React.FC<CostComparisonChartProps> = ({
 
                 {/* Cost Summary */}
                 <Box sx={{ mt: 2, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
-                    {data.map((item) => (
+                    {normalizedData.map((item) => (
                         <Box
                             key={item.provider}
                             sx={{

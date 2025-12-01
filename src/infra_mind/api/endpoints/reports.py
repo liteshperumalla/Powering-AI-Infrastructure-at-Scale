@@ -58,10 +58,24 @@ def convert_decimal128_to_decimal(value):
     return value
 
 
+def convert_objectids_to_strings(value):
+    """Recursively convert ObjectId to string in nested structures for JSON serialization."""
+    if isinstance(value, ObjectId):
+        return str(value)
+    elif isinstance(value, dict):
+        return {k: convert_objectids_to_strings(v) for k, v in value.items()}
+    elif isinstance(value, list):
+        return [convert_objectids_to_strings(item) for item in value]
+    return value
+
+
 @router.get("/")
-async def list_reports(current_user: User = Depends(get_current_user)):
+async def list_reports(
+    db: DatabaseDep,
+    current_user: User = Depends(get_current_user)
+):
     """Get all reports for current user - main reports endpoint."""
-    return await get_all_user_reports(current_user)
+    return await get_all_user_reports(db=db, current_user=current_user)
 
 
 @router.get("/test")
@@ -72,8 +86,8 @@ async def test_reports_endpoint():
 
 @router.get("/user-reports")
 async def get_user_reports(
-    current_user: User = Depends(get_current_user),
-    db: DatabaseDep = None
+    db: DatabaseDep,
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get all reports for current user - simplified version.
@@ -104,8 +118,8 @@ async def get_user_reports(
 
 @router.get("/all")
 async def get_all_user_reports(
-    current_user: User = Depends(get_current_user),
-    db: DatabaseDep = None
+    db: DatabaseDep,
+    current_user: User = Depends(get_current_user)
 ):
     """
     Get all reports for current user - used by frontend.
@@ -603,6 +617,11 @@ Generate a professional executive summary (2-3 paragraphs) highlighting the stra
                 "file_path": report.get("file_path"),
                 "file_size_bytes": report.get("file_size_bytes", 0),
                 "progress_percentage": report.get("progress_percentage", 100),
+
+                # CRITICAL: Include actual report content
+                "content_text": report.get("content_text", ""),  # The actual LLM-generated report content
+                "content": report.get("content", {}),  # Structured content data
+
                 "sections": await generate_intelligent_report_content(
                     report.get("report_type", "executive_summary"),
                     str(report.get("assessment_id")),
@@ -613,7 +632,7 @@ Generate a professional executive summary (2-3 paragraphs) highlighting the stra
                     str(report.get("assessment_id"))
                 ),
                 "recommendations": await generate_intelligent_recommendations(
-                    report.get("report_type", "executive_summary"), 
+                    report.get("report_type", "executive_summary"),
                     str(report.get("assessment_id"))
                 ),
                 "compliance_score": report.get("compliance_score", 92),  # Add compliance score for display
@@ -627,9 +646,12 @@ Generate a professional executive summary (2-3 paragraphs) highlighting the stra
                 "error_message": report.get("error_message")
             }
             formatted_reports.append(formatted_report)
-        
+
         logger.info(f"Retrieved {len(formatted_reports)} reports for user {current_user.id}")
-        client.close()
+
+        # Convert any remaining ObjectIds to strings for JSON serialization
+        formatted_reports = convert_objectids_to_strings(formatted_reports)
+
         return formatted_reports
         
     except Exception as e:
@@ -663,6 +685,11 @@ class ReportResponse(BaseModel):
     sections: List[ReportSection]
     key_findings: Optional[List[str]] = []
     recommendations: Optional[List[str]] = []
+
+    # Report content - CRITICAL: Actual report body
+    content_text: str = ""  # The actual LLM-generated report content
+    content: Dict[str, Any] = {}  # Structured content data
+
     total_pages: Optional[int]
     word_count: Optional[int]
     file_path: Optional[str]
@@ -744,7 +771,7 @@ def convert_to_report_sections(sections_data):
     return result_sections
 
 
-@router.get("/assessment/{assessment_id}")
+@router.get("/assessment/{assessment_id}", response_model=ReportListResponse)
 async def get_reports(
     assessment_id: str,
     current_user: User = Depends(get_current_user)
@@ -856,43 +883,40 @@ async def get_reports(
             return report_responses
         
         # Handle normal assessment ID case
-        # Use direct MongoDB client to avoid Beanie initialization issues
-        from motor.motor_asyncio import AsyncIOMotorClient
+        # Use Beanie to query assessments
         from bson import ObjectId
-        import os
-        
-        mongo_uri = os.getenv("INFRA_MIND_MONGODB_URL", "mongodb://admin:password@localhost:27017/infra_mind?authSource=admin")
-        client = AsyncIOMotorClient(mongo_uri)
-        db = client.get_database("infra_mind")
-        
+
         # First verify the assessment exists and user has access
-        assessment = await db.assessments.find_one({"_id": ObjectId(assessment_id)})
+        assessment = await Assessment.find_one({"_id": ObjectId(assessment_id)})
+
+        if not assessment:
+            # Fallback: try with string ID
+            assessment = await Assessment.find_one({"_id": assessment_id})
         if not assessment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Assessment not found"
             )
         
-        # Check access permissions (simplified for now - assume user can access their own assessments)
-        assessment_user_id = str(assessment.get('user_id'))
+        # Check access permissions
+        assessment_user_id = str(assessment.user_id) if hasattr(assessment, 'user_id') else None
         current_user_id = str(current_user.id)
-        
+
         if assessment_user_id != current_user_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied to assessment reports"
             )
-        
-        # Query database for actual reports
-        cursor = db.reports.find({"assessment_id": assessment_id})
-        reports_docs = await cursor.to_list(length=None)
-        
+
+        # Query database for actual reports using Beanie
+        reports = await Report.find({"assessment_id": assessment_id}).to_list()
+
         # If no reports exist but assessment is completed, generate default reports
-        if not reports_docs and assessment.get("status") == "completed":
+        if not reports and assessment.status == "completed":
             # Create basic report entries if none exist
             executive_report = Report(
                 assessment_id=assessment_id,
-                user_id=assessment.user_id,
+                user_id=str(assessment.user_id),
                 title="Executive Summary Report",
                 description="High-level strategic recommendations and cost analysis",
                 report_type=ReportType.EXECUTIVE_SUMMARY,
@@ -919,7 +943,7 @@ async def get_reports(
             
             technical_report = Report(
                 assessment_id=assessment_id,
-                user_id=assessment.user_id,
+                user_id=str(assessment.user_id),
                 title="Technical Implementation Report",
                 description="Detailed technical specifications and implementation roadmap",
                 report_type=ReportType.TECHNICAL_IMPLEMENTATION,
@@ -948,45 +972,42 @@ async def get_reports(
             await executive_report.insert()
             await technical_report.insert()
             reports = [executive_report, technical_report]
-        
-        logger.info(f"Retrieved {len(reports_docs)} reports for assessment: {assessment_id}")
-        
-        # Convert to response models
+
+        logger.info(f"Retrieved {len(reports)} reports for assessment: {assessment_id}")
+
+        # Convert Beanie Report objects to ReportResponse models
         report_responses = []
-        for report_raw in reports_docs:
-            # Apply Decimal128 conversion to entire report first
-            report = convert_decimal128_to_decimal(report_raw)
-            
-            # Convert sections to proper ReportSection objects
-            sections_data = report.get('sections', [])
+        for report in reports:
+            # Convert sections
+            sections_data = report.sections if hasattr(report, 'sections') else []
             report_sections = convert_to_report_sections(sections_data)
-            
+
             report_responses.append(ReportResponse(
-                id=str(report.get('_id')),
-                assessment_id=report.get('assessment_id'),
-                user_id=report.get('user_id'),
-                title=report.get('title', 'Infrastructure Assessment Report'),
-                description=report.get('description', 'Comprehensive assessment report'),
-                report_type='full_assessment' if report.get('report_type') == 'comprehensive' else report.get('report_type', 'executive_summary'),
-                format=report.get('format', 'PDF'),
-                status=report.get('status', 'completed'),
-                progress_percentage=report.get('progress_percentage', 100.0),
+                id=str(report.id),
+                assessment_id=str(report.assessment_id),
+                user_id=str(report.user_id),
+                title=report.title or 'Infrastructure Assessment Report',
+                description=report.description or 'Comprehensive assessment report',
+                report_type=str(report.report_type.value) if hasattr(report.report_type, 'value') else str(report.report_type),
+                format=str(report.format.value) if hasattr(report.format, 'value') else str(report.format),
+                status=str(report.status.value) if hasattr(report.status, 'value') else str(report.status),
+                progress_percentage=report.progress_percentage or 100.0,
                 sections=report_sections,
-                total_pages=report.get('total_pages', 1),
-                word_count=report.get('word_count', 1000),
-                file_path=report.get('file_path'),
-                file_size_bytes=report.get('file_size_bytes', 100000),
-                generated_by=report.get('generated_by', []),
-                generation_time_seconds=report.get('generation_time_seconds', 30.0),
-                completeness_score=report.get('completeness_score', 0.9),
-                confidence_score=report.get('confidence_score', 0.85),
-                priority=report.get('priority', 'medium'),
-                tags=report.get('tags', []),
-                error_message=report.get('error_message'),
-                retry_count=report.get('retry_count', 0),
-                created_at=report.get('created_at') if isinstance(report.get('created_at'), datetime) else datetime.fromisoformat(report.get('created_at')) if report.get('created_at') else datetime.utcnow(),
-                updated_at=report.get('updated_at') if isinstance(report.get('updated_at'), datetime) else datetime.fromisoformat(report.get('updated_at')) if report.get('updated_at') else datetime.utcnow(),
-                completed_at=report.get('completed_at') if isinstance(report.get('completed_at'), datetime) else datetime.fromisoformat(report.get('completed_at')) if report.get('completed_at') else None
+                total_pages=report.total_pages or 1,
+                word_count=report.word_count or 1000,
+                file_path=report.file_path,
+                file_size_bytes=report.file_size_bytes or 100000,
+                generated_by=report.generated_by or [],
+                generation_time_seconds=report.generation_time_seconds or 30.0,
+                completeness_score=report.completeness_score or 0.9,
+                confidence_score=report.confidence_score or 0.85,
+                priority=str(report.priority.value) if hasattr(report.priority, 'value') else str(report.priority),
+                tags=report.tags or [],
+                error_message=report.error_message,
+                retry_count=report.retry_count or 0,
+                created_at=report.created_at or datetime.utcnow(),
+                updated_at=report.updated_at or datetime.utcnow(),
+                completed_at=report.completed_at
             ))
         
         return ReportListResponse(
@@ -1506,6 +1527,8 @@ async def get_report(
             status=report.status,
             progress_percentage=report.progress_percentage,
             sections=report.sections,
+            content_text=report.content_text,  # Include actual report content
+            content=report.content,  # Include structured content data
             total_pages=report.total_pages,
             word_count=report.word_count,
             file_path=report.file_path,
@@ -1537,6 +1560,7 @@ async def get_report(
 @router.get("/{report_id}", response_model=ReportResponse)
 async def get_report_by_id(
     report_id: str,
+    db: DatabaseDep,
     current_user: User = Depends(get_current_user)
 ):
     """
@@ -1551,32 +1575,28 @@ async def get_report_by_id(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Use specific endpoint for this operation"
         )
-    
+
     try:
-        # Use direct MongoDB client to avoid Beanie initialization issues
-        from motor.motor_asyncio import AsyncIOMotorClient
+        # Use injected database dependency
         from bson import ObjectId
-        import os
-        
-        mongo_uri = os.getenv("INFRA_MIND_MONGODB_URL", "mongodb://admin:password@localhost:27017/infra_mind?authSource=admin")
-        client = AsyncIOMotorClient(mongo_uri)
-        db = client.get_database("infra_mind")
-        
+
         # Find the report by ID
         try:
-            report = await db.reports.find_one({"_id": ObjectId(report_id)})
+            report = await db["reports"].find_one({"_id": ObjectId(report_id)})
         except Exception as e:
+            logger.error(f"ObjectId query failed: {e}, trying as string")
             # If ObjectId fails, try as string
-            report = await db.reports.find_one({"_id": report_id})
+            report = await db["reports"].find_one({"_id": report_id})
         
         if not report:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Report not found"
             )
-        
+
         # Verify user has access to the assessment
-        assessment = await db.assessments.find_one({"_id": ObjectId(report.get('assessment_id'))})
+        # Use bracket notation to avoid any potential attribute shadowing issues
+        assessment = await db["assessments"].find_one({"_id": ObjectId(report.get('assessment_id'))})
         if not assessment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -1872,7 +1892,7 @@ async def download_report(
         
         mongo_uri = os.getenv("INFRA_MIND_MONGODB_URL", "mongodb://admin:password@localhost:27017/infra_mind?authSource=admin")
         client = AsyncIOMotorClient(mongo_uri)
-        db = client.get_database("infra_mind")
+        db = client["infra_mind"]  # Use bracket notation for Motor async client
         
         # Get the report and verify access
         try:
@@ -2737,6 +2757,8 @@ async def generate_report_from_template(
             status=report.status,
             progress_percentage=report.progress_percentage,
             sections=report.sections,
+            content_text=report.content_text,  # Include actual report content
+            content=report.content,  # Include structured content data
             total_pages=report.total_pages,
             word_count=report.word_count,
             file_path=report.file_path,

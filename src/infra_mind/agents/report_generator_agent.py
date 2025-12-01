@@ -20,6 +20,7 @@ from .web_research_agent import WebResearchAgent
 from ..models.assessment import Assessment
 from ..models.recommendation import Recommendation
 from ..llm.advanced_prompt_engineering import AdvancedPromptEngineer, PromptTemplate, PromptContext, PROFESSIONAL_REPORT_TEMPLATES
+from ..llm.prompt_sanitizer import PromptSanitizer
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,7 @@ class Report:
     assessment_id: str
     report_type: str  # "executive", "technical", "full"
     sections: List[ReportSection] = field(default_factory=list)
+    recommendations: List[Dict[str, Any]] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     
@@ -139,10 +141,15 @@ class ReportGeneratorAgent(BaseAgent):
                 timeout_seconds=600  # Increased for complex analysis
             )
         super().__init__(config)
-        
 
         # Initialize prompt sanitizer for security
-        self.prompt_sanitizer = PromptSanitizer(security_level="balanced")
+        try:
+            from infra_mind.llm.prompt_sanitizer import PromptSanitizer as PS
+            self.prompt_sanitizer = PS(security_level="balanced")
+        except Exception as e:
+            logger.warning(f"Failed to initialize PromptSanitizer: {e}")
+            self.prompt_sanitizer = None
+
         # Initialize advanced prompt engineering system
         self.advanced_prompt_engineer = AdvancedPromptEngineer()
         
@@ -983,6 +990,7 @@ class ReportGeneratorAgent(BaseAgent):
         assessment.title = data.get("title", "Infrastructure Assessment")
         assessment.business_requirements = data.get("business_requirements", {})
         assessment.technical_requirements = data.get("technical_requirements", {})
+        assessment.user_id = data.get("user_id", "anonymous_user")
         assessment.created_at = datetime.now(timezone.utc)
         return assessment
     
@@ -1114,6 +1122,7 @@ class ReportGeneratorAgent(BaseAgent):
                 status=ReportStatus.COMPLETED,
                 progress_percentage=100.0,
                 sections=[section.title for section in report.sections],
+                recommendations=report.recommendations if hasattr(report, 'recommendations') else [],
                 total_pages=max(8, len(report.sections) * 2),  # Estimate pages
                 word_count=len(report.to_markdown().split()),
                 file_path=f"/reports/{report.report_type}_{report.assessment_id}_{report.id}.pdf",
@@ -1230,19 +1239,39 @@ class ReportGeneratorAgent(BaseAgent):
         if hasattr(assessment, 'business_requirements') and assessment.business_requirements:
             company_name = assessment.business_requirements.get("company_name", company_name)
         
+        # Convert recommendations to dict format for storage
+        recommendations_data = []
+        for rec in recommendations:
+            if hasattr(rec, '__dict__'):
+                recommendations_data.append({
+                    "id": getattr(rec, 'id', str(uuid.uuid4())),
+                    "title": getattr(rec, 'title', 'Recommendation'),
+                    "description": getattr(rec, 'description', ''),
+                    "category": getattr(rec, 'category', 'general'),
+                    "priority": getattr(rec, 'priority', 'medium'),
+                    "estimated_cost": getattr(rec, 'estimated_cost', 0),
+                    "implementation_time": getattr(rec, 'implementation_time', ''),
+                    "benefits": getattr(rec, 'benefits', []),
+                    "risks": getattr(rec, 'risks', [])
+                })
+            elif isinstance(rec, dict):
+                recommendations_data.append(rec)
+
         # Create report with enhanced metadata (let MongoDB generate the ID)
         report = Report(
+            id=str(uuid.uuid4()),
             title=template["title_template"].format(company_name=company_name),
             assessment_id=assessment.id,
-            user_id=assessment.user_id,
             report_type=report_type,
+            recommendations=recommendations_data,
             metadata={
                 "company_name": company_name,
                 "recommendation_count": len(recommendations),
                 "template_used": report_type,
                 "research_enhanced": research_data is not None,
                 "research_topics_count": len(research_data.get("industry_insights", {})) if research_data else 0,
-                "generation_method": "llm_plus_research"
+                "generation_method": "llm_plus_research",
+                "user_id": getattr(assessment, "user_id", "anonymous_user"),
             }
         )
         

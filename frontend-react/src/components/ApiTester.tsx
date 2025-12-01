@@ -349,7 +349,7 @@ export default function ApiTester() {
                                                         component="pre"
                                                         sx={{
                                                             fontSize: '0.75rem',
-                                                            bgcolor: 'grey.100',
+                                                            bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
                                                             p: 1,
                                                             borderRadius: 1,
                                                             overflow: 'auto',

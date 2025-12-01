@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, status, Query
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import uuid
 
 from .auth import get_current_user, require_enterprise_access
@@ -195,7 +195,7 @@ async def get_quality_score(
             target_type=target_type,
             overall_score=round(overall_score, 2),
             metrics=metrics_summary,
-            calculated_at=datetime.utcnow().isoformat()
+            calculated_at=datetime.now(timezone.utc).isoformat()
         )
         
     except HTTPException:
@@ -269,7 +269,7 @@ async def get_quality_overview(
                 for m in recent_metrics[:5]
             ],
             "alerts": alerts,
-            "generated_at": datetime.utcnow().isoformat()
+            "generated_at": datetime.now(timezone.utc).isoformat()
         }
         
     except Exception as e:
@@ -289,7 +289,7 @@ async def get_quality_trends(
     """Get quality trends over time (admin only)."""
     try:
         # Calculate date range
-        end_date = datetime.utcnow()
+        end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=days)
         
         # Build query
@@ -341,7 +341,7 @@ async def get_quality_trends(
             "trend_direction": trend_direction,
             "total_metrics": len(period_metrics),
             "daily_data": trend_data,
-            "generated_at": datetime.utcnow().isoformat()
+            "generated_at": datetime.now(timezone.utc).isoformat()
         }
         
     except Exception as e:
@@ -357,7 +357,7 @@ async def quality_health_check():
     """Health check endpoint for quality system."""
     return {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "components": {
             "quality_metrics": "operational",
             "database": "operational",

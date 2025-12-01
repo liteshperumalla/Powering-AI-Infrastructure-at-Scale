@@ -416,6 +416,62 @@ class SecretsManager:
 secrets_manager = SecretsManager()
 
 
+def validate_secret_strength(key: str, value: str) -> Dict[str, Any]:
+    """
+    Validate secret strength and security.
+    
+    Args:
+        key: Secret key name
+        value: Secret value to validate
+    
+    Returns:
+        Dictionary with validation results
+    """
+    validation = {
+        "valid": True,
+        "warnings": [],
+        "errors": []
+    }
+    
+    # Check minimum length
+    min_length = 32 if "key" in key.lower() or "secret" in key.lower() else 8
+    if len(value) < min_length:
+        validation["valid"] = False
+        validation["errors"].append(f"Secret too short (minimum {min_length} characters)")
+    
+    # Check for common weak secrets
+    weak_secrets = [
+        "password", "secret", "admin", "test", "demo", "development",
+        "12345", "changeme", "default", "example"
+    ]
+    if any(weak in value.lower() for weak in weak_secrets):
+        validation["valid"] = False
+        validation["errors"].append("Secret contains common weak patterns")
+    
+    # Check for placeholder values
+    placeholders = [
+        "your-", "replace-", "change-", "todo", "fixme", "xxx"
+    ]
+    if any(placeholder in value.lower() for placeholder in placeholders):
+        validation["valid"] = False
+        validation["errors"].append("Secret appears to be a placeholder")
+    
+    # Warn if secret doesn't have complexity (for keys/secrets)
+    if "key" in key.lower() or "secret" in key.lower():
+        has_upper = any(c.isupper() for c in value)
+        has_lower = any(c.islower() for c in value)
+        has_digit = any(c.isdigit() for c in value)
+        has_special = any(not c.isalnum() for c in value)
+        
+        complexity_count = sum([has_upper, has_lower, has_digit, has_special])
+        if complexity_count < 3:
+            validation["warnings"].append(
+                "Secret lacks complexity (should have uppercase, lowercase, digits, and special characters)"
+            )
+    
+    return validation
+
+
 def get_required_secrets() -> List[str]:
     """Get list of required secrets for production deployment."""
     return [
@@ -432,23 +488,79 @@ def get_required_secrets() -> List[str]:
     ]
 
 
+import os
+
 def validate_production_secrets() -> Dict[str, Any]:
-    """Validate all production secrets."""
+    """
+    Validate all production secrets with strength checks.
+    
+    Returns:
+        Comprehensive validation results including security warnings
+    """
     required_secrets = get_required_secrets()
     validation_results = secrets_manager.validate_secrets(required_secrets)
     
-    missing_secrets = [
-        key for key, is_valid in validation_results.items()
-        if not is_valid
-    ]
+    missing_secrets = []
+    weak_secrets = []
+    warnings = []
+    
+    for key, is_valid in validation_results.items():
+        if not is_valid:
+            missing_secrets.append(key)
+        else:
+            # Check secret strength
+            value = secrets_manager.get_secret(key)
+            if value:
+                strength_check = validate_secret_strength(key, value)
+                if not strength_check["valid"]:
+                    weak_secrets.append({
+                        "key": key,
+                        "errors": strength_check["errors"]
+                    })
+                if strength_check["warnings"]:
+                    warnings.append({
+                        "key": key,
+                        "warnings": strength_check["warnings"]
+                    })
+    
+    is_production = os.getenv("INFRA_MIND_ENVIRONMENT", "development").lower() == "production"
     
     return {
-        "valid": len(missing_secrets) == 0,
+        "valid": len(missing_secrets) == 0 and (len(weak_secrets) == 0 or not is_production),
         "missing_secrets": missing_secrets,
+        "weak_secrets": weak_secrets,
+        "warnings": warnings,
         "validation_results": validation_results,
         "total_secrets": len(required_secrets),
-        "valid_secrets": len(required_secrets) - len(missing_secrets)
+        "valid_secrets": len(required_secrets) - len(missing_secrets),
+        "environment": os.getenv("INFRA_MIND_ENVIRONMENT", "development"),
+        "recommendations": generate_security_recommendations(missing_secrets, weak_secrets)
     }
+
+
+def generate_security_recommendations(missing_secrets: List[str], weak_secrets: List[Dict]) -> List[str]:
+    """Generate security recommendations based on validation results."""
+    recommendations = []
+    
+    if missing_secrets:
+        recommendations.append(
+            f"Set the following missing secrets: {', '.join(missing_secrets)}"
+        )
+    
+    if weak_secrets:
+        weak_keys = [s["key"] for s in weak_secrets]
+        recommendations.append(
+            f"Strengthen the following secrets: {', '.join(weak_keys)}"
+        )
+        recommendations.append(
+            "Use strong, randomly generated secrets. Generate with: "
+            "python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+        )
+    
+    if not missing_secrets and not weak_secrets:
+        recommendations.append("All secrets are properly configured!")
+    
+    return recommendations
 
 
 def setup_development_secrets():

@@ -13,8 +13,12 @@ Key Features:
 """
 
 import os
-from celery import Celery
+import asyncio
+from celery import Celery, signals
 from kombu import Queue, Exchange
+from motor.motor_asyncio import AsyncIOMotorClient
+from beanie import init_beanie
+from loguru import logger
 
 # Get Redis URL from environment
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -96,9 +100,64 @@ celery_app.conf.update(
     }
 )
 
-# Task base class configuration
-celery_app.Task.bind = True
-celery_app.Task.track_started = True
+# Worker process initialization
+@signals.worker_process_init.connect
+def init_worker_process(**kwargs):
+    """
+    Initialize Beanie and database connection when worker process starts.
+
+    This runs once per worker process (fork) to set up the async database connection.
+    Critical for Celery workers to use Beanie models.
+    """
+    logger.info("🔧 Initializing Beanie in Celery worker process")
+
+    try:
+        # Get MongoDB connection string from environment
+        mongodb_url = os.getenv(
+            "MONGODB_URL",
+            "mongodb://admin:password@mongodb:27017/infra_mind?authSource=admin"
+        )
+
+        # Create event loop for this worker process
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+
+        # Initialize MongoDB client
+        client = AsyncIOMotorClient(mongodb_url)
+
+        # Import all document models
+        from infra_mind.models.assessment import Assessment
+        from infra_mind.models.recommendation import Recommendation
+        from infra_mind.models.report import Report, ReportSection
+        from infra_mind.models.user import User
+        from infra_mind.models.experiment import Experiment
+        from infra_mind.models.metrics import AgentMetrics, QualityMetrics
+        from infra_mind.models.audit import AuditLog
+
+        # Initialize Beanie with all models
+        loop.run_until_complete(
+            init_beanie(
+                database=client.infra_mind,
+                document_models=[
+                    Assessment,
+                    Recommendation,
+                    Report,
+                    ReportSection,
+                    User,
+                    Experiment,
+                    AgentMetrics,
+                    QualityMetrics,
+                    AuditLog
+                ]
+            )
+        )
+
+        logger.info("✅ Beanie initialized successfully in Celery worker")
+
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize Beanie in worker: {e}")
+        raise
+
 
 # Health check task
 @celery_app.task(name="health_check", bind=True)

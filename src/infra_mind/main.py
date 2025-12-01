@@ -13,17 +13,32 @@ from fastapi.responses import JSONResponse
 import time
 import json
 import asyncio
+import os
 from loguru import logger
 
 from .core.config import settings
 from .core.database import init_database, close_database
 from .core.logging import setup_logging
 from .core.dependencies import cleanup_dependencies  # NEW: Dependency injection cleanup
+from .core.tracing import setup_tracing, instrument_fastapi, instrument_httpx, instrument_redis  # NEW: Distributed tracing
 from .api.routes import api_router
 from .api.documentation import get_enhanced_openapi_schema
 from .orchestration.events import EventManager
 from .orchestration.monitoring import initialize_workflow_monitoring
 from .services.workflow_monitor import start_workflow_monitoring, stop_workflow_monitoring
+
+
+def _is_test_mode() -> bool:
+    """
+    Detect whether the application is running under pytest/test harnesses.
+
+    Uses both configuration and runtime environment variables so tests
+    can skip production-only startup work that requires external services.
+    """
+    env_value = (getattr(settings, "environment", "development") or "").lower()
+    return env_value in {"test", "testing"} or bool(
+        os.getenv("PYTEST_CURRENT_TEST") or os.getenv("INFRA_MIND_TESTING")
+    )
 
 
 @asynccontextmanager
@@ -36,32 +51,47 @@ async def lifespan(app: FastAPI):
     """
     # Startup
     logger.info("🚀 Starting Infra Mind application...")
-    
+
     # Initialize logging
     setup_logging()
     
-    # Initialize database
-    await init_database()
-    
-    # Initialize EventManager and workflow monitoring
-    logger.info("📡 Initializing EventManager and workflow monitoring...")
-    event_manager = EventManager()
-    await initialize_workflow_monitoring(event_manager)
-    logger.success("✅ EventManager and workflow monitoring initialized")
+    # Initialize distributed tracing (optional)
+    logger.info("🔍 Setting up distributed tracing...")
+    setup_tracing(app_name="infra-mind", app_version="2.0.0")
+    instrument_httpx()
+    instrument_redis()
 
-    # Start proactive workflow monitoring
-    logger.info("🔍 Starting proactive workflow monitoring service...")
-    asyncio.create_task(start_workflow_monitoring())
-    logger.success("✅ Proactive workflow monitoring started")
-    
+    test_mode = _is_test_mode()
+
+    if test_mode:
+        logger.info("🧪 Test mode detected - skipping database and workflow initialization")
+    else:
+        # Initialize database
+        await init_database()
+
+        # Initialize EventManager and workflow monitoring
+        logger.info("📡 Initializing EventManager and workflow monitoring...")
+        event_manager = EventManager()
+        await initialize_workflow_monitoring(event_manager)
+        logger.success("✅ EventManager and workflow monitoring initialized")
+
+        # Start proactive workflow monitoring
+        logger.info("🔍 Starting proactive workflow monitoring service...")
+        asyncio.create_task(start_workflow_monitoring())
+        logger.success("✅ Proactive workflow monitoring started")
+
     logger.success("✅ Application startup complete")
-    
+
     yield  # Application runs here
-    
+
     # Shutdown
     logger.info("🛑 Shutting down Infra Mind application...")
-    await stop_workflow_monitoring()
-    await close_database()
+
+    if test_mode:
+        logger.info("🧪 Test mode teardown - skipping workflow monitor and database shutdown")
+    else:
+        await stop_workflow_monitoring()
+        await close_database()
 
     # NEW: Cleanup dependency injection resources
     logger.info("🧹 Cleaning up dependency injection resources...")
@@ -102,6 +132,9 @@ def create_app() -> FastAPI:
     
     # Configure enhanced OpenAPI documentation
     app.openapi = lambda: get_enhanced_openapi_schema(app)
+    
+    # Instrument FastAPI for distributed tracing
+    instrument_fastapi(app)
     
     return app
 
@@ -463,6 +496,15 @@ async def health_check(response: Response):
         "database": db_info,
         "timestamp": time.time()
     }
+
+
+@app.options("/health")
+async def health_check_options() -> Response:
+    """
+    Dedicated CORS preflight handler so OPTIONS /health returns 200
+    with middleware-applied headers instead of 405.
+    """
+    return Response(status_code=200)
 
 
 @app.get("/health/db")

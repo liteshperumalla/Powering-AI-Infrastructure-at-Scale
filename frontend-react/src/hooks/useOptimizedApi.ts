@@ -7,6 +7,49 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
+// ✅ Get API base URL from environment (client-side)
+const getApiBaseUrl = () => {
+  if (typeof window === 'undefined') {
+    // Server-side: use environment variable or default
+    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  }
+
+  // Client-side: use environment variable or default
+  const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  console.log('🔧 API Base URL:', baseUrl);
+  return baseUrl;
+};
+
+// ✅ Build full URL with base URL
+const buildFullUrl = (urlOrPath: string): string => {
+  // If already absolute URL (starts with http/https), return as-is
+  if (urlOrPath.startsWith('http://') || urlOrPath.startsWith('https://')) {
+    return urlOrPath;
+  }
+
+  // Otherwise, prepend base URL
+  const baseUrl = getApiBaseUrl();
+  const fullUrl = `${baseUrl}${urlOrPath}`;
+  console.log('🔧 Building full URL:', { input: urlOrPath, base: baseUrl, full: fullUrl });
+  return fullUrl;
+};
+
+// ✅ Get authentication headers
+const getAuthHeaders = (): HeadersInit => {
+  if (typeof window === 'undefined') {
+    return {};
+  }
+
+  const token = localStorage.getItem('auth_token');
+  if (!token) {
+    return {};
+  }
+
+  return {
+    'Authorization': `Bearer ${token}`,
+  };
+};
+
 // ✅ Generic data fetching hook with automatic cleanup
 export function useApiData<T>(
   url: string,
@@ -32,7 +75,13 @@ export function useApiData<T>(
     setError(null);
 
     try {
-      const response = await fetch(url);
+      const fullUrl = buildFullUrl(url);
+      const response = await fetch(fullUrl, {
+        headers: {
+          'Content-Type': 'application/json',
+          ...getAuthHeaders(),
+        },
+      });
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -108,10 +157,12 @@ export function useApiMutation<TData, TVariables = any>(
       setError(null);
 
       try {
-        const response = await fetch(url, {
+        const fullUrl = buildFullUrl(url);
+        const response = await fetch(fullUrl, {
           method,
           headers: {
             'Content-Type': 'application/json',
+            ...getAuthHeaders(),
           },
           body: JSON.stringify(variables),
         });
@@ -298,9 +349,13 @@ export function useOptimisticMutation<TData, TVariables>(
       setError(null);
 
       try {
-        const response = await fetch(url, {
+        const fullUrl = buildFullUrl(url);
+        const response = await fetch(fullUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...getAuthHeaders(),
+          },
           body: JSON.stringify(variables),
         });
 
@@ -336,3 +391,4 @@ export function useOptimisticMutation<TData, TVariables>(
 
   return { data, loading, error, mutate };
 }
+// Cache bust v2

@@ -562,11 +562,11 @@ const AssessmentsPage: React.FC = () => {
                                                 <Box sx={{ width: 100 }}>
                                                     <LinearProgress
                                                         variant="determinate"
-                                                        value={assessment.completion_percentage || 0}
+                                                        value={assessment.progress_percentage || 0}
                                                         sx={{ mb: 0.5 }}
                                                     />
                                                     <Typography variant="caption">
-                                                        {assessment.completion_percentage || 0}%
+                                                        {assessment.progress_percentage || 0}%
                                                     </Typography>
                                                 </Box>
                                             </TableCell>

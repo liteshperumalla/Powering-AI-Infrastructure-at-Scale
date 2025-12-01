@@ -1,99 +1,78 @@
 #!/usr/bin/env python3
 """
-Test script to verify workflow content generation functions work correctly.
+Pytest-friendly workflow execution regression test.
+
+This requires access to the backing Mongo database plus the asynchronous
+assessment workflow helpers. The test is skipped by default unless
+RUN_WORKFLOW_EXECUTION_TESTS=1.
 """
 
-import asyncio
-import sys
 import os
-from datetime import datetime
-from bson import ObjectId
+from typing import List
 
-# Add the src directory to Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+import pytest
 
-from infra_mind.core.database import init_database
-from infra_mind.models.assessment import Assessment
-from infra_mind.models.recommendation import Recommendation
-from infra_mind.models.report import Report
+from src.infra_mind.api.endpoints.assessments import (
+    _execute_agent_analysis_step,
+    _execute_optimization_step,
+    _execute_report_generation_step,
+)
+from src.infra_mind.core.database import init_database
+from src.infra_mind.models.assessment import Assessment
+from src.infra_mind.models.recommendation import Recommendation
+from src.infra_mind.models.report import Report
 
-async def test_workflow_execution():
-    """Test the workflow execution with actual content generation."""
-    print("🧪 Starting workflow execution test...")
+RUN_WORKFLOW_EXECUTION_TESTS = os.getenv("RUN_WORKFLOW_EXECUTION_TESTS") == "1"
+pytestmark = pytest.mark.skipif(
+    not RUN_WORKFLOW_EXECUTION_TESTS,
+    reason="Requires MongoDB plus seeded assessment data. "
+    "Set RUN_WORKFLOW_EXECUTION_TESTS=1 to enable.",
+)
 
-    # Initialize database connection
+ASSESSMENT_ID = os.getenv("TEST_WORKFLOW_ASSESSMENT_ID", "68ce016c047215025c4f87fe")
+
+
+async def _get_recommendations(assessment_id: str) -> List[Recommendation]:
+    """Helper to fetch recommendations for readability."""
+    return await Recommendation.find(
+        Recommendation.assessment_id == assessment_id
+    ).to_list()
+
+
+async def _get_reports(assessment_id: str) -> List[Report]:
+    """Helper to fetch generated reports."""
+    return await Report.find(Report.assessment_id == assessment_id).to_list()
+
+
+@pytest.mark.asyncio
+async def test_workflow_execution_generates_recommendations_and_reports() -> None:
+    """Run the agent workflow and ensure it produces new artifacts."""
     await init_database()
-    print("✅ Database initialized")
 
-    # Get our test assessment
-    assessment_id = "68ce016c047215025c4f87fe"
-    assessment = await Assessment.get(assessment_id)
-
+    assessment = await Assessment.get(ASSESSMENT_ID)
     if not assessment:
-        print(f"❌ Assessment {assessment_id} not found")
-        return
+        pytest.skip(f"Assessment {ASSESSMENT_ID} not found in database")
 
-    print(f"✅ Found assessment: {assessment.title}")
-    print(f"   Current status: {assessment.status}")
-    print(f"   Progress: {assessment.workflow_progress.get('progress_percentage', 0)}%")
+    initial_recs = await _get_recommendations(ASSESSMENT_ID)
+    initial_reports = await _get_reports(ASSESSMENT_ID)
 
-    # Check initial recommendations count
-    initial_recs = await Recommendation.find(Recommendation.assessment_id == assessment_id).to_list()
-    initial_reports = await Report.find(Report.assessment_id == assessment_id).to_list()
+    await _execute_agent_analysis_step(assessment)
+    await _execute_optimization_step(assessment)
+    await _execute_report_generation_step(assessment)
 
-    print(f"📊 Initial state:")
-    print(f"   Recommendations: {len(initial_recs)}")
-    print(f"   Reports: {len(initial_reports)}")
+    new_recs = await _get_recommendations(ASSESSMENT_ID)
+    new_reports = await _get_reports(ASSESSMENT_ID)
+    updated_assessment = await Assessment.get(ASSESSMENT_ID)
 
-    # Test each workflow execution function
-    try:
-        # Import the execution functions
-        from infra_mind.api.endpoints.assessments import (
-            _execute_agent_analysis_step,
-            _execute_optimization_step,
-            _execute_report_generation_step
-        )
-
-        print("\n🔄 Testing agent analysis step...")
-        await _execute_agent_analysis_step(assessment)
-        print("✅ Agent analysis step completed")
-
-        print("\n🔄 Testing optimization step...")
-        await _execute_optimization_step(assessment)
-        print("✅ Optimization step completed")
-
-        # Check if recommendations were created
-        new_recs = await Recommendation.find(Recommendation.assessment_id == assessment_id).to_list()
-        print(f"📊 Recommendations after optimization: {len(new_recs)}")
-
-        print("\n🔄 Testing report generation step...")
-        await _execute_report_generation_step(assessment)
-        print("✅ Report generation step completed")
-
-        # Check if reports were created
-        new_reports = await Report.find(Report.assessment_id == assessment_id).to_list()
-        print(f"📊 Reports after generation: {len(new_reports)}")
-
-        # Final assessment state
-        updated_assessment = await Assessment.get(assessment_id)
-        print(f"\n🎯 Final assessment state:")
-        print(f"   Recommendations generated: {updated_assessment.recommendations_generated}")
-        print(f"   Report generated: {updated_assessment.report_generated}")
-
-        if len(new_recs) > len(initial_recs):
-            print(f"✅ SUCCESS: {len(new_recs) - len(initial_recs)} new recommendations created")
-        else:
-            print("❌ FAILURE: No new recommendations created")
-
-        if len(new_reports) > len(initial_reports):
-            print(f"✅ SUCCESS: {len(new_reports) - len(initial_reports)} new reports created")
-        else:
-            print("❌ FAILURE: No new reports created")
-
-    except Exception as e:
-        print(f"❌ Error during workflow execution: {e}")
-        import traceback
-        traceback.print_exc()
-
-if __name__ == "__main__":
-    asyncio.run(test_workflow_execution())
+    assert len(new_recs) >= len(
+        initial_recs
+    ), "Optimization step should not reduce recommendation count"
+    assert len(new_reports) >= len(
+        initial_reports
+    ), "Report generation step should not reduce report count"
+    assert (
+        updated_assessment.recommendations_generated
+    ), "Assessment flag should mark recommendations as generated"
+    assert (
+        updated_assessment.report_generated
+    ), "Assessment flag should mark report generation as complete"

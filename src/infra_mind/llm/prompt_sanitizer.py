@@ -9,8 +9,16 @@ import re
 import logging
 from typing import Dict, Any, List, Union, Optional
 from dataclasses import dataclass
+from enum import Enum
 
 logger = logging.getLogger(__name__)
+
+
+class SecurityLevel(str, Enum):
+    """Supported sanitization security levels."""
+    STRICT = "strict"
+    BALANCED = "balanced"
+    PERMISSIVE = "permissive"
 
 
 @dataclass
@@ -96,14 +104,16 @@ class PromptSanitizer:
     MAX_TOKENS_BALANCED = 1500
     MAX_TOKENS_PERMISSIVE = 3000
 
-    def __init__(self, security_level: str = "balanced"):
+    def __init__(self, security_level: Union[str, SecurityLevel] = SecurityLevel.BALANCED):
         """
         Initialize prompt sanitizer.
 
         Args:
             security_level: "strict", "balanced", or "permissive"
         """
-        self.security_level = security_level.lower()
+        self.security_level = (
+            security_level.value if isinstance(security_level, SecurityLevel) else security_level
+        ).lower()
 
         if self.security_level == "strict":
             self.max_length = self.MAX_INPUT_LENGTH_STRICT

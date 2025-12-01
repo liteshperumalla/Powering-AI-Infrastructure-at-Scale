@@ -226,19 +226,42 @@ const getThemeConfig = (mode: PaletteMode) => {
           },
         },
       },
-      MuiTextField: {
+      MuiOutlinedInput: {
         styleOverrides: {
           root: {
-            '& .MuiOutlinedInput-root': {
-              borderRadius: 8,
-              backgroundColor: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)',
-              transition: 'all 0.2s ease-in-out',
-              '&:hover': {
-                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.04)',
-              },
-              '&.Mui-focused': {
-                backgroundColor: isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
-              },
+            borderRadius: 12,
+            backgroundColor: isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.02)',
+            transition: 'all 0.2s ease-in-out',
+            boxShadow: 'none',
+            '& .MuiOutlinedInput-notchedOutline': {
+              borderColor: 'transparent',
+              borderWidth: 0,
+            },
+            '&:hover .MuiOutlinedInput-notchedOutline': {
+              borderColor: 'transparent',
+            },
+            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+              borderColor: 'transparent',
+            },
+            '&.Mui-focused': {
+              backgroundColor: isDark ? 'rgba(19, 20, 24, 0.98)' : '#ffffff',
+              boxShadow: isDark
+                ? '0 0 0 3px rgba(66, 165, 245, 0.35)'
+                : '0 0 0 3px rgba(25, 118, 210, 0.2)',
+            },
+          },
+        },
+      },
+      MuiInputLabel: {
+        styleOverrides: {
+          root: {
+            fontWeight: 600,
+            '&.MuiInputLabel-shrink': {
+              transform: 'translate(14px, -8px) scale(0.9)',
+              padding: '0 6px',
+              borderRadius: '999px',
+              backgroundColor: isDark ? 'rgba(15, 15, 15, 0.95)' : 'rgba(255, 255, 255, 0.95)',
+              color: isDark ? 'rgba(255, 255, 255, 0.85)' : 'rgba(22, 22, 22, 0.85)',
             },
           },
         },

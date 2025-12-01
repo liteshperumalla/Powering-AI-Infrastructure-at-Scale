@@ -137,9 +137,9 @@ const StatCard: React.FC<StatCardProps> = ({ value, label, icon, color, delay })
                 <Box sx={{ color, mb: 1 }}>
                     {icon}
                 </Box>
-                <Typography 
-                    variant="h4" color="text.primary" 
-                    fontWeight={700} 
+                <Typography
+                    variant="h4"
+                    fontWeight={700}
                     color={color}
                     sx={{
                         transform: animate ? 'scale(1)' : 'scale(0.8)',
@@ -475,7 +475,7 @@ export default function ModernHomePage() {
                                 textTransform: 'none',
                                 fontWeight: 600,
                                 '&:hover': {
-                                    bgcolor: 'grey.100',
+                                    bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
                                 }
                             }}
                         >

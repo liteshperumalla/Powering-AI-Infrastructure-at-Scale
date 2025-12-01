@@ -89,15 +89,12 @@ export default function ResponsiveLayout({
     // Handle online/offline status
     useEffect(() => {
         if (!mounted) return;
-        
+
         const handleOnline = () => {
             setOnline(true);
             setShowOfflineAlert(false);
-            // Only show connection restored if we were previously offline
-            if (!online) {
-                setShowConnectionRestored(true);
-                setTimeout(() => setShowConnectionRestored(false), 4000); // Hide after 4 seconds
-            }
+            setShowConnectionRestored(true);
+            setTimeout(() => setShowConnectionRestored(false), 4000); // Hide after 4 seconds
         };
 
         const handleOffline = () => {

@@ -1,5 +1,6 @@
 """Tests for GCP cloud integration."""
 
+import os
 import pytest
 import asyncio
 from unittest.mock import Mock, patch, AsyncMock
@@ -10,6 +11,12 @@ from src.infra_mind.cloud import (
     CloudProvider, ServiceCategory, CloudService, CloudServiceResponse, CloudServiceError
 )
 from src.infra_mind.cloud.gcp import GCPGKEClient, GCPAssetClient, GCPRecommenderClient, GCPAIClient
+
+RUN_CLOUD_TESTS = os.getenv("RUN_CLOUD_INTEGRATION_TESTS") == "1"
+pytestmark = pytest.mark.skipif(
+    not RUN_CLOUD_TESTS,
+    reason="GCP integration tests require credentials/network. Set RUN_CLOUD_INTEGRATION_TESTS=1 to enable.",
+)
 
 
 class TestGCPBillingClient:

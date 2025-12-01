@@ -60,3 +60,74 @@ body {
   -ms-user-select: none;
   user-select: none;
 }
+
+/* Global input styling to avoid double outlines */
+.MuiOutlinedInput-root {
+  border-radius: 12px;
+  transition: all 0.2s ease-in-out;
+  box-shadow: none;
+  background-color: rgba(0, 0, 0, 0.02);
+  border: 1px solid transparent;
+  outline: none;
+}
+
+html[data-mui-color-scheme='dark'] .MuiOutlinedInput-root {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+html[data-mui-color-scheme='light'] .MuiOutlinedInput-root {
+  background-color: rgba(0, 0, 0, 0.02);
+}
+
+.MuiOutlinedInput-root .MuiOutlinedInput-notchedOutline {
+  border-color: transparent !important;
+}
+
+.MuiOutlinedInput-root:hover {
+  box-shadow: none;
+  border: 1px solid transparent;
+}
+
+html[data-mui-color-scheme='dark'] .MuiOutlinedInput-root:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+html[data-mui-color-scheme='light'] .MuiOutlinedInput-root:hover {
+  background-color: rgba(0, 0, 0, 0.05);
+}
+
+.MuiOutlinedInput-root.Mui-focused {
+  box-shadow: 0 0 0 3px rgba(66, 165, 245, 0.25);
+}
+
+html[data-mui-color-scheme='dark'] .MuiOutlinedInput-root.Mui-focused {
+  background-color: rgba(19, 20, 24, 0.98);
+}
+
+html[data-mui-color-scheme='light'] .MuiOutlinedInput-root.Mui-focused {
+  background-color: #ffffff;
+}
+
+.MuiOutlinedInput-root:focus-within {
+  outline: none;
+}
+
+.MuiInputLabel-root {
+  font-weight: 600;
+}
+
+.MuiInputLabel-root.MuiInputLabel-shrink {
+  transform: translate(14px, -8px) scale(0.9);
+  border-radius: 999px;
+  padding: 0 6px;
+}
+
+html[data-mui-color-scheme='dark'] .MuiInputLabel-root.MuiInputLabel-shrink {
+  background-color: rgba(15, 15, 15, 0.95);
+  color: rgba(255, 255, 255, 0.85);
+}
+
+html[data-mui-color-scheme='light'] .MuiInputLabel-root.MuiInputLabel-shrink {
+  background-color: rgba(255, 255, 255, 0.95);
+  color: rgba(22, 22, 22, 0.85);
+}

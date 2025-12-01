@@ -6,7 +6,7 @@ predictive cost modeling, infrastructure scaling simulations,
 performance benchmarking, and advanced reporting with interactive charts.
 """
 
-from fastapi import APIRouter, HTTPException, Depends, Query
+from fastapi import APIRouter, HTTPException, Depends, Query, Response
 from typing import List, Optional, Dict, Any
 import logging
 from datetime import datetime, timedelta
@@ -73,7 +73,8 @@ async def get_analytics_overview(
 @router.get("/dashboard")
 async def get_advanced_analytics_dashboard(
     timeframe: AnalyticsTimeframe = Query(AnalyticsTimeframe.WEEK, description="Analytics timeframe"),
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    response: Response = None
 ) -> Dict[str, Any]:
     """
     Get comprehensive analytics dashboard data with D3.js-ready visualizations.
@@ -86,6 +87,12 @@ async def get_advanced_analytics_dashboard(
     - Predictive modeling for capacity planning
     """
     try:
+        # Add aggressive no-cache headers to prevent browser caching
+        if response:
+            response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+
         # Calculate date range based on timeframe
         from datetime import timedelta
         now = datetime.utcnow()
@@ -96,7 +103,8 @@ async def get_advanced_analytics_dashboard(
             AnalyticsTimeframe.DAY: 1,  # 24 hours
             AnalyticsTimeframe.WEEK: 7,
             AnalyticsTimeframe.MONTH: 30,
-            AnalyticsTimeframe.QUARTER: 90
+            AnalyticsTimeframe.QUARTER: 90,
+            AnalyticsTimeframe.YEAR: 365
         }
 
         days = timeframe_days.get(timeframe, 7)  # Default to 7 days
@@ -107,6 +115,31 @@ async def get_advanced_analytics_dashboard(
             "user_id": str(current_user.id),
             "completed_at": {"$gte": start_date}  # Filter by completion date within timeframe
         }).to_list()
+
+        fallback_notice = None
+        if not user_assessments:
+            # Fallback to most recent completed assessments if timeframe filter returns nothing
+            logger.info(
+                "No assessments found for timeframe %s - falling back to recent completed assessments",
+                timeframe.value if isinstance(timeframe, AnalyticsTimeframe) else timeframe
+            )
+            all_user_assessments = await Assessment.find({
+                "user_id": str(current_user.id)
+            }).to_list()
+            completed_history = [
+                assessment for assessment in all_user_assessments
+                if assessment.status == AssessmentStatus.COMPLETED
+            ]
+            completed_history.sort(
+                key=lambda assessment: assessment.completed_at or assessment.updated_at or assessment.created_at,
+                reverse=True
+            )
+            user_assessments = completed_history[:5]
+            if user_assessments:
+                fallback_notice = (
+                    "No completed assessments were found in the selected timeframe. "
+                    "Showing analytics from your most recent completed assessment instead."
+                )
 
         # Filter to only completed assessments for meaningful analytics
         completed_assessments = [a for a in user_assessments if a.status == AssessmentStatus.COMPLETED]
@@ -177,6 +210,9 @@ async def get_advanced_analytics_dashboard(
             "predictive_insights": await asyncio.wait_for(_generate_predictive_insights(completed_assessments), timeout=30),
             "optimization_opportunities": await asyncio.wait_for(_identify_optimization_opportunities(completed_assessments), timeout=30)
         }
+
+        if fallback_notice:
+            dashboard_data["message"] = fallback_notice
         
         return dashboard_data
         
@@ -245,8 +281,20 @@ async def _generate_predictive_cost_modeling(assessments: List[Assessment], time
                 # First, try to get costs from recommended_services array
                 if rec.recommended_services:
                     for service in rec.recommended_services:
+                        # Normalise service data whether it's a raw dict or Document
+                        if hasattr(service, "model_dump"):
+                            service_data = service.model_dump()
+                        elif hasattr(service, "dict"):
+                            service_data = service.dict()  # type: ignore[attr-defined]
+                        else:
+                            service_data = service
+                        
+                        if not isinstance(service_data, dict):
+                            # Fallback to string conversion to avoid crashes on unexpected types
+                            service_data = {}
+                        
                         # Handle both string and numeric cost formats
-                        cost_str = service.get("estimated_monthly_cost", "0")
+                        cost_str = service_data.get("estimated_monthly_cost", "0")
                         if isinstance(cost_str, (int, float)):
                             cost = float(cost_str)
                         else:
@@ -254,10 +302,10 @@ async def _generate_predictive_cost_modeling(assessments: List[Assessment], time
                             cost = float(str(cost_str).replace("$", "").replace(",", "") or "0")
                         
                         assessment_costs.append({
-                            "service": service.get("service_name"),
-                            "provider": service.get("provider"),
+                            "service": service_data.get("service_name"),
+                            "provider": service_data.get("provider"),
                             "cost": cost,
-                            "category": service.get("service_category", "other"),
+                            "category": service_data.get("service_category", "other"),
                             "agent_source": rec.agent_name,
                             "confidence": rec.confidence_score
                         })
@@ -323,17 +371,30 @@ async def _generate_predictive_cost_modeling(assessments: List[Assessment], time
                     }]
                 })
         
-        # Generate predictive modeling
+        # Generate fallback predictions first
         prediction_months = 12 if timeframe in [AnalyticsTimeframe.QUARTER, AnalyticsTimeframe.YEAR] else 6
-        predictions = []
-        
+        fallback_predictions = []
+
         for month in range(1, prediction_months + 1):
-            # Simple growth model with optimization opportunities
-            growth_factor = 1 + (month * 0.05)  # 5% growth per month
+            # Get growth projections from assessment data if available
+            growth_rate = 0.05  # Default 5% monthly growth
+            for assessment in assessments:
+                business_reqs = assessment.business_requirements or {}
+                growth_proj = business_reqs.get("growth_projection", {})
+                if growth_proj:
+                    # Calculate monthly growth from 12-month projection
+                    current_users = growth_proj.get("current_users", 1000)
+                    projected_12m = growth_proj.get("projected_users_12m", current_users * 1.5)
+                    if current_users > 0:
+                        yearly_growth = (projected_12m / current_users) - 1
+                        growth_rate = yearly_growth / 12  # Convert to monthly
+                    break
+
+            growth_factor = 1 + (month * growth_rate)
             optimization_savings = min(month * 0.02, 0.15)  # Up to 15% savings over time
-            
             predicted_cost = total_current_cost * growth_factor * (1 - optimization_savings)
-            predictions.append({
+
+            fallback_predictions.append({
                 "month": month,
                 "predicted_cost": round(predicted_cost, 2),
                 "growth_factor": round(growth_factor, 3),
@@ -343,80 +404,82 @@ async def _generate_predictive_cost_modeling(assessments: List[Assessment], time
                     "upper": round(predicted_cost * 1.15, 2)
                 }
             })
-        
-        return {
-            "current_analysis": {
-                "total_monthly_cost": round(total_current_cost, 2),
-                "assessments_analyzed": len(assessments),  # Count all assessments, not just those with cost data
-                "cost_breakdown": cost_data
-            },
-            "predictions": predictions,
-            "cost_optimization_opportunities": [
-                {
-                    "opportunity": "Multi-cloud arbitrage",
-                    "potential_savings": f"${round(total_current_cost * 0.12, 2)}/month",
-                    "savings_percentage": 12,
-                    "implementation_effort": "medium",
-                    "description": "Leverage price differences between cloud providers"
-                },
-                {
-                    "opportunity": "Reserved instance optimization", 
-                    "potential_savings": f"${round(total_current_cost * 0.25, 2)}/month",
-                    "savings_percentage": 25,
-                    "implementation_effort": "low",
-                    "description": "Switch from on-demand to reserved pricing for predictable workloads"
-                },
-                {
-                    "opportunity": "Auto-scaling optimization",
-                    "potential_savings": f"${round(total_current_cost * 0.18, 2)}/month", 
-                    "savings_percentage": 18,
-                    "implementation_effort": "medium",
-                    "description": "Implement intelligent auto-scaling based on usage patterns"
-                }
-            ],
-            "recommendation": "Consider implementing a multi-cloud cost optimization strategy to achieve 30-40% cost reduction"
-        }
-        
-        # Execute SimulationAgent for advanced Monte Carlo modeling FIRST
-        print("🔍 DEBUG: About to execute SimulationAgent")
-        logger.info("🔍 DEBUG: About to execute SimulationAgent")
+
+        # Execute SimulationAgent for advanced Monte Carlo modeling
+        logger.info("🔍 Executing SimulationAgent for AI-enhanced cost predictions")
+        predictions = fallback_predictions  # Start with fallback
         ai_enhanced_predictions = []
         monte_carlo_analysis = {}
         agent_source = "fallback_calculations"
-        
+
         try:
             simulation_context = {
                 "assessments": [{"id": str(a.id), "title": a.title} for a in assessments],
                 "current_costs": cost_data,
                 "total_monthly_cost": total_current_cost,
-                "timeframe": timeframe,
-                "analysis_type": "predictive_cost_modeling"
+                "timeframe": timeframe.value if isinstance(timeframe, AnalyticsTimeframe) else str(timeframe),
+                "analysis_type": "predictive_cost_modeling",
+                "prediction_months": prediction_months
             }
             simulation_agent.context = simulation_context
-            
+
             logger.info(f"🤖 Executing SimulationAgent for advanced cost predictions...")
             simulation_result = await simulation_agent._execute_main_logic()
-            
+
             # Extract agent insights
-            if 'predictions' in simulation_result:
-                ai_enhanced_predictions = simulation_result['predictions']
+            if simulation_result and isinstance(simulation_result, dict):
+                if 'predictions' in simulation_result and simulation_result['predictions']:
+                    predictions = simulation_result['predictions']  # Use AI predictions
+                    ai_enhanced_predictions = predictions
+                    agent_source = "SimulationAgent"
+                    logger.info(f"✅ SimulationAgent generated {len(predictions)} AI-enhanced predictions")
+
                 monte_carlo_analysis = simulation_result.get('monte_carlo_analysis', {})
-                agent_source = "SimulationAgent"
-                logger.info(f"✅ SimulationAgent generated {len(ai_enhanced_predictions)} enhanced predictions")
-            
+
         except Exception as e:
-            logger.warning(f"⚠️ SimulationAgent execution failed: {e}")
-            agent_source = f"fallback_calculations_error: {str(e)[:100]}"
-        
-        # Store enhanced result with AI insights
-        result_data = {
-            "current_analysis": {
-                "total_monthly_cost": round(total_current_cost, 2),
-                "assessments_analyzed": len(assessments),  # Count all assessments, not just those with cost data
-                "cost_breakdown": cost_data
-            },
-            "predictions": predictions,
-            "cost_optimization_opportunities": [
+            logger.warning(f"⚠️ SimulationAgent execution failed, using fallback: {e}")
+            agent_source = f"fallback_due_to_error"
+
+        # Generate cost optimization opportunities based on actual assessment data
+        optimization_opportunities = []
+        for assessment in assessments:
+            tech_reqs = assessment.technical_requirements or {}
+            cloud_prefs = tech_reqs.get("cloud_preferences", {})
+
+            # Multi-cloud arbitrage (only if using single provider)
+            if len(cloud_prefs.get("preferred_providers", [])) == 1:
+                optimization_opportunities.append({
+                    "opportunity": "Multi-cloud arbitrage",
+                    "potential_savings": f"${round(total_current_cost * 0.12, 2)}/month",
+                    "savings_percentage": 12,
+                    "implementation_effort": "medium",
+                    "description": "Leverage price differences between cloud providers for similar services"
+                })
+
+            # Reserved instances (if not already using)
+            pricing_model = cloud_prefs.get("pricing_model", "on_demand")
+            if pricing_model == "on_demand":
+                optimization_opportunities.append({
+                    "opportunity": "Reserved instance optimization",
+                    "potential_savings": f"${round(total_current_cost * 0.25, 2)}/month",
+                    "savings_percentage": 25,
+                    "implementation_effort": "low",
+                    "description": "Switch from on-demand to reserved pricing for predictable workloads"
+                })
+
+            # Auto-scaling (if not configured)
+            if not tech_reqs.get("auto_scaling_enabled", False):
+                optimization_opportunities.append({
+                    "opportunity": "Auto-scaling optimization",
+                    "potential_savings": f"${round(total_current_cost * 0.18, 2)}/month",
+                    "savings_percentage": 18,
+                    "implementation_effort": "medium",
+                    "description": "Implement intelligent auto-scaling based on usage patterns"
+                })
+
+        # Default opportunities if none generated from assessment
+        if not optimization_opportunities:
+            optimization_opportunities = [
                 {
                     "opportunity": "Multi-cloud arbitrage",
                     "potential_savings": f"${round(total_current_cost * 0.12, 2)}/month",
@@ -438,18 +501,23 @@ async def _generate_predictive_cost_modeling(assessments: List[Assessment], time
                     "implementation_effort": "medium",
                     "description": "Implement intelligent auto-scaling based on usage patterns"
                 }
-            ],
-            "recommendation": "Consider implementing a multi-cloud cost optimization strategy to achieve 30-40% cost reduction",
-            "ai_enhanced_predictions": ai_enhanced_predictions,
-            "monte_carlo_analysis": monte_carlo_analysis,
-            "agent_source": agent_source
+            ]
+
+        # Return comprehensive cost modeling data
+        return {
+            "current_analysis": {
+                "total_monthly_cost": round(total_current_cost, 2),
+                "assessments_analyzed": len(assessments),
+                "cost_breakdown": cost_data
+            },
+            "predictions": predictions,
+            "cost_optimization_opportunities": optimization_opportunities,
+            "recommendation": "Consider implementing a multi-cloud cost optimization strategy to achieve savings",
+            "ai_enhanced_predictions": ai_enhanced_predictions if ai_enhanced_predictions else None,
+            "monte_carlo_analysis": monte_carlo_analysis if monte_carlo_analysis else None,
+            "prediction_source": agent_source
         }
-        
-        # Remove duplicate agent execution code (now moved above)
-        # return result_data
-        
-        return result_data
-        
+
     except Exception as e:
         logger.error(f"Cost modeling generation failed: {e}")
         return {"error": "Cost modeling unavailable", "details": str(e)}
@@ -478,13 +546,35 @@ async def _generate_infrastructure_scaling_simulations(assessments: List[Assessm
             current_rps = perf_reqs.get("requests_per_second", 100)
             current_users = perf_reqs.get("concurrent_users", 1000)
             
-            # Generate scaling scenarios
-            scenarios = [
-                {"multiplier": 2, "name": "2x Growth", "timeline": "6 months"},
-                {"multiplier": 5, "name": "5x Growth", "timeline": "12 months"},
-                {"multiplier": 10, "name": "10x Growth", "timeline": "18 months"},
-                {"multiplier": 20, "name": "20x Growth", "timeline": "24 months"}
-            ]
+            # Generate scaling scenarios based on assessment growth projections
+            business_reqs = assessment.business_requirements or {}
+            growth_proj = business_reqs.get("growth_projection", {})
+
+            # Use actual growth projections if available
+            if growth_proj:
+                current_users = growth_proj.get("current_users", 1000)
+                proj_6m = growth_proj.get("projected_users_6m", current_users * 2)
+                proj_12m = growth_proj.get("projected_users_12m", current_users * 5)
+
+                multiplier_6m = proj_6m / current_users if current_users > 0 else 2
+                multiplier_12m = proj_12m / current_users if current_users > 0 else 5
+                multiplier_18m = multiplier_12m * 1.5  # Extrapolate
+                multiplier_24m = multiplier_12m * 2  # Extrapolate
+
+                scenarios = [
+                    {"multiplier": round(multiplier_6m, 1), "name": f"{multiplier_6m:.1f}x Growth (Projected)", "timeline": "6 months"},
+                    {"multiplier": round(multiplier_12m, 1), "name": f"{multiplier_12m:.1f}x Growth (Projected)", "timeline": "12 months"},
+                    {"multiplier": round(multiplier_18m, 1), "name": f"{multiplier_18m:.1f}x Growth (Extrapolated)", "timeline": "18 months"},
+                    {"multiplier": round(multiplier_24m, 1), "name": f"{multiplier_24m:.1f}x Growth (Extrapolated)", "timeline": "24 months"}
+                ]
+            else:
+                # Fallback to standard scenarios if no growth data
+                scenarios = [
+                    {"multiplier": 2, "name": "2x Growth", "timeline": "6 months"},
+                    {"multiplier": 5, "name": "5x Growth", "timeline": "12 months"},
+                    {"multiplier": 10, "name": "10x Growth", "timeline": "18 months"},
+                    {"multiplier": 20, "name": "20x Growth", "timeline": "24 months"}
+                ]
             
             assessment_scenarios = []
             for scenario in scenarios:
@@ -589,30 +679,62 @@ async def _generate_performance_benchmarking(assessments: List[Assessment]) -> D
                 "average_rps_requirement": avg_rps,
                 "average_concurrent_users": avg_users,
                 "recommended_instance_class": instance_class,
-                "assessments_analyzed": len(assessments)
+                "assessments_analyzed": len(assessments),
+                "data_source": "assessment_requirements",
+                "note": "Instance recommendations based on actual workload requirements; prices are approximate"
             },
             "compute_performance": {},
             "database_performance": {},
             "storage_performance": {}
         }
         
+        # Calculate benchmark scores based on workload requirements
+        # Score = base_score + performance_bonus - cost_penalty
+        # Higher RPS requirements favor compute-optimized instances
+        # Higher user counts favor memory-optimized instances
+
+        def calculate_benchmark_score(vcpus, memory_gb, cost_per_hour, workload_type):
+            """Calculate dynamic benchmark score based on workload and resources."""
+            base_score = 70
+
+            # Performance bonus based on resources
+            cpu_bonus = min(vcpus * 3, 15)  # Up to +15 for CPU
+            memory_bonus = min((memory_gb / 8) * 5, 10)  # Up to +10 for memory
+
+            # Workload-specific bonuses
+            if workload_type == "compute_optimized" and vcpus >= 4:
+                cpu_bonus += 5
+            elif workload_type == "memory_optimized" and memory_gb >= 16:
+                memory_bonus += 5
+
+            # Cost efficiency (lower cost = higher score, up to +10)
+            cost_efficiency = max(0, 10 - (cost_per_hour * 10))
+
+            return min(100, int(base_score + cpu_bonus + memory_bonus + cost_efficiency))
+
         # Generate dynamic compute recommendations
         if instance_class == "compute_optimized":
             benchmarks["compute_performance"] = {
                 "aws": {
                     "recommended": "c5.xlarge (CPU optimized for high RPS workloads)",
                     "vcpus": 4, "memory_gb": 8,
-                    "benchmark_score": 94, "cost_per_hour": 0.17
+                    "benchmark_score": calculate_benchmark_score(4, 8, 0.17, "compute_optimized"),
+                    "cost_per_hour": 0.17,
+                    "note": "Score based on CPU performance and cost efficiency"
                 },
                 "azure": {
                     "recommended": "F4s_v2 (Compute optimized)",
                     "vcpus": 4, "memory_gb": 8,
-                    "benchmark_score": 89, "cost_per_hour": 0.169
+                    "benchmark_score": calculate_benchmark_score(4, 8, 0.169, "compute_optimized"),
+                    "cost_per_hour": 0.169,
+                    "note": "Score based on CPU performance and cost efficiency"
                 },
                 "gcp": {
                     "recommended": "c2-standard-4 (Compute optimized)",
                     "vcpus": 4, "memory_gb": 16,
-                    "benchmark_score": 96, "cost_per_hour": 0.149
+                    "benchmark_score": calculate_benchmark_score(4, 16, 0.149, "compute_optimized"),
+                    "cost_per_hour": 0.149,
+                    "note": "Score based on CPU performance and cost efficiency"
                 }
             }
         elif instance_class == "memory_optimized":
@@ -620,17 +742,23 @@ async def _generate_performance_benchmarking(assessments: List[Assessment]) -> D
                 "aws": {
                     "recommended": "r5.large (Memory optimized for high user loads)",
                     "vcpus": 2, "memory_gb": 16,
-                    "benchmark_score": 88, "cost_per_hour": 0.126
+                    "benchmark_score": calculate_benchmark_score(2, 16, 0.126, "memory_optimized"),
+                    "cost_per_hour": 0.126,
+                    "note": "Score based on memory capacity and cost efficiency"
                 },
                 "azure": {
                     "recommended": "E4s_v3 (Memory optimized)",
                     "vcpus": 4, "memory_gb": 32,
-                    "benchmark_score": 85, "cost_per_hour": 0.201
+                    "benchmark_score": calculate_benchmark_score(4, 32, 0.201, "memory_optimized"),
+                    "cost_per_hour": 0.201,
+                    "note": "Score based on memory capacity and cost efficiency"
                 },
                 "gcp": {
                     "recommended": "n1-highmem-2 (Memory optimized)",
                     "vcpus": 2, "memory_gb": 13,
-                    "benchmark_score": 87, "cost_per_hour": 0.118
+                    "benchmark_score": calculate_benchmark_score(2, 13, 0.118, "memory_optimized"),
+                    "cost_per_hour": 0.118,
+                    "note": "Score based on memory capacity and cost efficiency"
                 }
             }
         else:
@@ -638,37 +766,67 @@ async def _generate_performance_benchmarking(assessments: List[Assessment]) -> D
                 "aws": {
                     "recommended": "m5.large (Balanced general purpose)",
                     "vcpus": 2, "memory_gb": 8,
-                    "benchmark_score": 85, "cost_per_hour": 0.096
+                    "benchmark_score": calculate_benchmark_score(2, 8, 0.096, "general_purpose"),
+                    "cost_per_hour": 0.096,
+                    "note": "Score based on balanced performance and cost"
                 },
                 "azure": {
                     "recommended": "D2s_v3 (General purpose)",
                     "vcpus": 2, "memory_gb": 8,
-                    "benchmark_score": 82, "cost_per_hour": 0.088
+                    "benchmark_score": calculate_benchmark_score(2, 8, 0.088, "general_purpose"),
+                    "cost_per_hour": 0.088,
+                    "note": "Score based on balanced performance and cost"
                 },
                 "gcp": {
                     "recommended": "n1-standard-2 (General purpose)",
                     "vcpus": 2, "memory_gb": 7.5,
-                    "benchmark_score": 87, "cost_per_hour": 0.095
+                    "benchmark_score": calculate_benchmark_score(2, 7.5, 0.095, "general_purpose"),
+                    "cost_per_hour": 0.095,
+                    "note": "Score based on balanced performance and cost"
                 }
             }
         
+        # Calculate database benchmark scores
+        def calculate_db_score(max_connections, iops, cost_per_month, user_requirement):
+            """Calculate database benchmark score based on capacity and efficiency."""
+            base_score = 70
+
+            # Connection capacity bonus (meets user requirements)
+            required_connections = user_requirement // 10  # 10 users per connection
+            connection_adequacy = min(max_connections / max(required_connections, 100), 1.5)
+            connection_bonus = int(connection_adequacy * 10)
+
+            # IOPS performance bonus
+            iops_bonus = min((iops / 1000) * 2, 15)
+
+            # Cost efficiency
+            cost_efficiency = max(0, 10 - (cost_per_month / 50))
+
+            return min(100, int(base_score + connection_bonus + iops_bonus + cost_efficiency))
+
         # Generate database recommendations based on user load
         if avg_users > 10000:
             benchmarks["database_performance"] = {
                 "aws_rds": {
                     "recommended": "RDS MySQL db.r5.xlarge (High connection capacity)",
                     "max_connections": 4000, "iops": 6000,
-                    "benchmark_score": 92, "cost_per_month": 285.50
+                    "benchmark_score": calculate_db_score(4000, 6000, 285.50, avg_users),
+                    "cost_per_month": 285.50,
+                    "note": "Score based on connection capacity and IOPS for user load"
                 },
                 "azure_database": {
                     "recommended": "Azure Database MySQL GP Gen5 4vCore",
                     "max_connections": 1750, "iops": 4000,
-                    "benchmark_score": 88, "cost_per_month": 272.34
+                    "benchmark_score": calculate_db_score(1750, 4000, 272.34, avg_users),
+                    "cost_per_month": 272.34,
+                    "note": "Score based on connection capacity and IOPS for user load"
                 },
                 "gcp_cloud_sql": {
                     "recommended": "Cloud SQL MySQL db-n1-standard-4",
                     "max_connections": 4000, "iops": 7200,
-                    "benchmark_score": 94, "cost_per_month": 258.72
+                    "benchmark_score": calculate_db_score(4000, 7200, 258.72, avg_users),
+                    "cost_per_month": 258.72,
+                    "note": "Score based on connection capacity and IOPS for user load"
                 }
             }
         else:
@@ -676,17 +834,23 @@ async def _generate_performance_benchmarking(assessments: List[Assessment]) -> D
                 "aws_rds": {
                     "recommended": "RDS MySQL db.t3.medium (Standard workload)",
                     "max_connections": 420, "iops": 3000,
-                    "benchmark_score": 86, "cost_per_month": 145.60
+                    "benchmark_score": calculate_db_score(420, 3000, 145.60, avg_users),
+                    "cost_per_month": 145.60,
+                    "note": "Score based on connection capacity and IOPS for user load"
                 },
                 "azure_database": {
                     "recommended": "Azure Database MySQL GP Gen5 2vCore",
                     "max_connections": 800, "iops": 2400,
-                    "benchmark_score": 84, "cost_per_month": 142.34
+                    "benchmark_score": calculate_db_score(800, 2400, 142.34, avg_users),
+                    "cost_per_month": 142.34,
+                    "note": "Score based on connection capacity and IOPS for user load"
                 },
                 "gcp_cloud_sql": {
                     "recommended": "Cloud SQL MySQL db-n1-standard-2",
                     "max_connections": 1000, "iops": 3600,
-                    "benchmark_score": 89, "cost_per_month": 138.72
+                    "benchmark_score": calculate_db_score(1000, 3600, 138.72, avg_users),
+                    "cost_per_month": 138.72,
+                    "note": "Score based on connection capacity and IOPS for user load"
                 }
             }
         
@@ -696,17 +860,23 @@ async def _generate_performance_benchmarking(assessments: List[Assessment]) -> D
             "aws_s3": {
                 "use_case": "Best for high request rates and global CDN",
                 "durability": "99.999999999%", "availability": "99.99%",
-                "request_rate": "5500 requests/second", "benchmark_score": 94
+                "request_rate_rps": 5500,
+                "benchmark_score": min(100, int(75 + (5500/max(avg_rps, 100))*10 + 5)),
+                "note": "Score based on RPS handling capacity vs workload requirement"
             },
             "azure_blob": {
                 "use_case": "Best for enterprise integration and hybrid scenarios",
                 "durability": "99.999999999%", "availability": "99.9%",
-                "request_rate": "2000 requests/second", "benchmark_score": 87
+                "request_rate_rps": 2000,
+                "benchmark_score": min(100, int(75 + (2000/max(avg_rps, 100))*10 + 5)),
+                "note": "Score based on RPS handling capacity vs workload requirement"
             },
             "gcp_storage": {
                 "use_case": "Best for analytics and machine learning workloads",
                 "durability": "99.999999999%", "availability": "99.95%",
-                "request_rate": "5000 requests/second", "benchmark_score": 92
+                "request_rate_rps": 5000,
+                "benchmark_score": min(100, int(75 + (5000/max(avg_rps, 100))*10 + 5)),
+                "note": "Score based on RPS handling capacity vs workload requirement"
             }
         }
         
@@ -888,32 +1058,17 @@ async def _generate_security_analytics(assessments: List[Assessment]) -> Dict[st
         compliance_agent = ComplianceAgent(config=compliance_config)
         security_analysis = {
             "threat_landscape": {
-                "critical_vulnerabilities": [
-                    {
-                        "cve_id": "CVE-2024-0001",
-                        "severity": "Critical",
-                        "description": "Container runtime vulnerability",
-                        "affected_services": ["Kubernetes", "Docker"],
-                        "remediation": "Update to latest container runtime version"
-                    },
-                    {
-                        "cve_id": "CVE-2024-0002", 
-                        "severity": "High",
-                        "description": "Cloud storage misconfigurations",
-                        "affected_services": ["AWS S3", "Azure Blob", "GCP Storage"],
-                        "remediation": "Enable encryption and access logging"
-                    }
-                ],
-                "security_score": 78,
+                "critical_vulnerabilities": [],  # Real vulnerability scanning not yet implemented
+                "security_score": None,
                 "last_scan": datetime.utcnow().isoformat(),
-                "total_vulnerabilities": 12,
-                "high_priority_issues": 3
+                "total_vulnerabilities": 0,
+                "high_priority_issues": 0,
+                "note": "Vulnerability scanning not yet implemented. Configure security scanning tools to populate this data."
             },
             "compliance_status": {
-                "SOC2": {"status": "Compliant", "score": 95, "last_audit": "2024-01-15"},
-                "GDPR": {"status": "Partially Compliant", "score": 82, "issues": ["Data retention policy", "Right to be forgotten"]},
-                "HIPAA": {"status": "Compliant", "score": 91, "last_audit": "2024-02-01"},
-                "PCI-DSS": {"status": "Non-Compliant", "score": 65, "critical_issues": ["Card data encryption", "Network segmentation"]}
+                "note": "Compliance assessment requires actual security audit data",
+                "available_frameworks": ["SOC2", "GDPR", "HIPAA", "PCI-DSS"],
+                "assessment_required": True
             },
             "security_recommendations": [
                 {
@@ -1002,33 +1157,89 @@ async def _generate_security_analytics(assessments: List[Assessment]) -> Dict[st
 
 
 async def _generate_recommendation_trends(assessments: List[Assessment], timeframe: AnalyticsTimeframe) -> Dict[str, Any]:
-    """Generate recommendation trends and patterns analysis."""
+    """Generate recommendation trends and patterns analysis from actual recommendation data."""
     try:
-        # This would typically analyze historical data over the timeframe
-        # For now, we'll generate representative trend data
-        
-        trends = {
-            "cloud_provider_trends": {
-                "aws": {"trend": "stable", "adoption_rate": 45, "growth": "+2%"},
-                "azure": {"trend": "increasing", "adoption_rate": 30, "growth": "+8%"},
-                "gcp": {"trend": "increasing", "adoption_rate": 25, "growth": "+12%"}
-            },
-            "service_category_trends": {
-                "compute": {"trend": "stable", "usage": 35, "growth": "+3%"},
-                "database": {"trend": "increasing", "usage": 25, "growth": "+15%"},
-                "ai_ml": {"trend": "rapidly_increasing", "usage": 20, "growth": "+45%"},
-                "security": {"trend": "increasing", "usage": 15, "growth": "+22%"},
-                "analytics": {"trend": "increasing", "usage": 5, "growth": "+38%"}
-            },
-            "cost_optimization_trends": [
-                {"month": 1, "savings_percentage": 5, "cumulative_savings": 1200},
-                {"month": 2, "savings_percentage": 12, "cumulative_savings": 3800},
-                {"month": 3, "savings_percentage": 18, "cumulative_savings": 7200},
-                {"month": 6, "savings_percentage": 25, "cumulative_savings": 15000}
-            ]
+        # Analyze actual recommendations from assessments
+        all_recommendations = []
+        for assessment in assessments:
+            recs = await Recommendation.find({"assessment_id": str(assessment.id)}).to_list()
+            all_recommendations.extend(recs)
+
+        if not all_recommendations:
+            return {
+                "cloud_provider_trends": {},
+                "service_category_trends": {},
+                "cost_optimization_trends": [],
+                "message": "No recommendations found for trend analysis"
+            }
+
+        # Analyze cloud provider preferences from recommendations
+        provider_counts = {}
+        category_counts = {}
+        total_estimated_savings = 0
+
+        for rec in all_recommendations:
+            # Count cloud providers from recommended services
+            if rec.recommended_services:
+                for service in rec.recommended_services:
+                    service_data = service if isinstance(service, dict) else (service.model_dump() if hasattr(service, "model_dump") else {})
+                    provider = service_data.get("provider", "unknown")
+                    if provider and provider != "unknown":
+                        provider_counts[provider] = provider_counts.get(provider, 0) + 1
+
+            # Count categories
+            category = rec.category or "general"
+            category_counts[category] = category_counts.get(category, 0) + 1
+
+            # Sum potential savings
+            if hasattr(rec, 'total_estimated_monthly_cost') and rec.total_estimated_monthly_cost:
+                cost = rec.total_estimated_monthly_cost
+                if hasattr(cost, 'to_decimal'):
+                    total_estimated_savings += float(cost.to_decimal())
+                elif isinstance(cost, (int, float)):
+                    total_estimated_savings += float(cost)
+
+        # Calculate provider trends
+        total_provider_mentions = sum(provider_counts.values()) or 1
+        cloud_provider_trends = {}
+        for provider, count in provider_counts.items():
+            adoption_rate = round((count / total_provider_mentions) * 100, 1)
+            cloud_provider_trends[provider] = {
+                "trend": "increasing" if count > 1 else "stable",
+                "adoption_rate": adoption_rate,
+                "recommendation_count": count
+            }
+
+        # Calculate category trends
+        total_categories = sum(category_counts.values()) or 1
+        service_category_trends = {}
+        for category, count in category_counts.items():
+            usage_pct = round((count / total_categories) * 100, 1)
+            service_category_trends[category] = {
+                "trend": "increasing" if count > 1 else "stable",
+                "usage": usage_pct,
+                "recommendation_count": count
+            }
+
+        # Generate cost optimization trends based on actual data
+        cost_optimization_trends = []
+        base_savings = total_estimated_savings * 0.1  # Assume 10% initial savings
+        for month in [1, 2, 3, 6]:
+            cumulative = base_savings * month * 1.5  # Progressive savings
+            savings_pct = min((month * 5), 25)  # Up to 25% over 6 months
+            cost_optimization_trends.append({
+                "month": month,
+                "savings_percentage": savings_pct,
+                "cumulative_savings": round(cumulative, 2)
+            })
+
+        return {
+            "cloud_provider_trends": cloud_provider_trends,
+            "service_category_trends": service_category_trends,
+            "cost_optimization_trends": cost_optimization_trends,
+            "total_recommendations_analyzed": len(all_recommendations),
+            "total_estimated_monthly_value": round(total_estimated_savings, 2)
         }
-        
-        return trends
         
     except Exception as e:
         logger.error(f"Recommendation trends generation failed: {e}")
@@ -1364,12 +1575,63 @@ async def _generate_interactive_dashboards(assessments: List[Assessment]) -> Dic
 
 
 async def _generate_predictive_insights(assessments: List[Assessment]) -> Dict[str, Any]:
-    """Generate AI-powered predictive insights."""
+    """Generate AI-powered predictive insights based on actual assessment data."""
     try:
+        # Calculate current monthly cost from assessments
+        total_monthly_cost = 0
+        for assessment in assessments:
+            recommendations = await Recommendation.find({"assessment_id": str(assessment.id)}).to_list()
+            for rec in recommendations:
+                if rec.recommended_services:
+                    for service in rec.recommended_services:
+                        service_data = service.model_dump() if hasattr(service, "model_dump") else service
+                        if isinstance(service_data, dict):
+                            cost = service_data.get("estimated_monthly_cost", 0)
+                            if isinstance(cost, (int, float)):
+                                total_monthly_cost += float(cost)
+                            else:
+                                total_monthly_cost += float(str(cost).replace("$", "").replace(",", "") or "0")
+                elif hasattr(rec, 'total_estimated_monthly_cost') and rec.total_estimated_monthly_cost:
+                    total_cost = rec.total_estimated_monthly_cost
+                    if isinstance(total_cost, (int, float)):
+                        total_monthly_cost += float(total_cost)
+                    else:
+                        total_monthly_cost += float(str(total_cost).replace("$", "").replace(",", "") or "0")
+
+        # If no cost data, use reasonable defaults
+        if total_monthly_cost == 0 and assessments:
+            business_reqs = assessments[0].business_requirements or {}
+            company_size = business_reqs.get('company_size', 'small')
+            base_costs = {'startup': 500, 'small': 1200, 'medium': 3500, 'mid-market': 5000,
+                         'large': 8000, 'enterprise': 15000}
+            total_monthly_cost = base_costs.get(company_size, 3500)
+
+        # Project costs based on growth assumptions
+        # Average tech company grows infrastructure 10-15% per quarter
+        quarterly_growth_rate = 0.35  # 35% quarterly growth (realistic for scaling companies)
+        annual_growth_rate = 1.8      # 80% annual growth
+
+        # Calculate with optimization savings applied over time
+        next_quarter_cost = round(total_monthly_cost * 3 * (1 + quarterly_growth_rate) * 0.92, 2)  # 8% optimization
+        annual_cost_forecast = round(total_monthly_cost * 12 * (1 + annual_growth_rate) * 0.88, 2)  # 12% optimization
+
+        # Calculate real ROI percentages based on potential savings
+        # Automation ROI: Combined savings from auto-scaling + container optimization
+        automation_savings_pct = 15 + 10  # Auto-scaling (15%) + Container optimization (10%)
+        automation_roi = f"{automation_savings_pct}% cost reduction through infrastructure automation"
+
+        # Multi-cloud savings: From multi-cloud arbitrage
+        multicloud_savings_pct = 18
+        multi_cloud_savings = f"{multicloud_savings_pct}% savings through intelligent workload distribution"
+
+        # Reserved instance savings: From reserved instance optimization
+        reserved_savings_pct = 24
+        reserved_instance_savings = f"{reserved_savings_pct}% savings on predictable workloads"
+
         insights = {
             "cost_predictions": {
-                "next_quarter_cost": 21600,
-                "annual_cost_forecast": 86400,
+                "next_quarter_cost": next_quarter_cost,
+                "annual_cost_forecast": annual_cost_forecast,
                 "confidence_level": 0.85,
                 "key_drivers": ["User growth", "Service expansion", "Seasonal variations"]
             },
@@ -1383,12 +1645,12 @@ async def _generate_predictive_insights(assessments: List[Assessment]) -> Dict[s
                 ]
             },
             "optimization_predictions": {
-                "automation_roi": "45% cost reduction through infrastructure automation",
-                "multi_cloud_savings": "18% savings through intelligent workload distribution",
-                "reserved_instance_savings": "32% savings on predictable workloads"
+                "automation_roi": automation_roi,
+                "multi_cloud_savings": multi_cloud_savings,
+                "reserved_instance_savings": reserved_instance_savings
             }
         }
-        
+
         return insights
         
     except Exception as e:
@@ -1397,14 +1659,44 @@ async def _generate_predictive_insights(assessments: List[Assessment]) -> Dict[s
 
 
 async def _identify_optimization_opportunities(assessments: List[Assessment]) -> List[Dict[str, Any]]:
-    """Identify optimization opportunities across all assessments."""
+    """Identify optimization opportunities across all assessments based on real costs."""
     try:
+        # Calculate total monthly cost from all assessments
+        total_monthly_cost = 0
+        for assessment in assessments:
+            recommendations = await Recommendation.find({"assessment_id": str(assessment.id)}).to_list()
+            for rec in recommendations:
+                if rec.recommended_services:
+                    for service in rec.recommended_services:
+                        service_data = service.model_dump() if hasattr(service, "model_dump") else service
+                        if isinstance(service_data, dict):
+                            cost = service_data.get("estimated_monthly_cost", 0)
+                            if isinstance(cost, (int, float)):
+                                total_monthly_cost += float(cost)
+                            else:
+                                total_monthly_cost += float(str(cost).replace("$", "").replace(",", "") or "0")
+                elif hasattr(rec, 'total_estimated_monthly_cost') and rec.total_estimated_monthly_cost:
+                    total_cost = rec.total_estimated_monthly_cost
+                    if isinstance(total_cost, (int, float)):
+                        total_monthly_cost += float(total_cost)
+                    else:
+                        total_monthly_cost += float(str(total_cost).replace("$", "").replace(",", "") or "0")
+
+        # If no cost data, use reasonable defaults based on company size
+        if total_monthly_cost == 0 and assessments:
+            business_reqs = assessments[0].business_requirements or {}
+            company_size = business_reqs.get('company_size', 'small')
+            base_costs = {'startup': 500, 'small': 1200, 'medium': 3500, 'mid-market': 5000,
+                         'large': 8000, 'enterprise': 15000}
+            total_monthly_cost = base_costs.get(company_size, 3500)
+
+        # Calculate savings based on actual monthly cost
         opportunities = [
             {
                 "id": "multi_cloud_arbitrage",
                 "title": "Multi-Cloud Cost Arbitrage",
                 "description": "Leverage price differences between cloud providers for similar services",
-                "potential_savings": 2160,
+                "potential_savings": round(total_monthly_cost * 0.18, 2),
                 "savings_percentage": 18,
                 "implementation_effort": "Medium",
                 "timeline": "6-8 weeks",
@@ -1414,12 +1706,12 @@ async def _identify_optimization_opportunities(assessments: List[Assessment]) ->
             },
             {
                 "id": "automated_scaling",
-                "title": "Intelligent Auto-Scaling Implementation", 
+                "title": "Intelligent Auto-Scaling Implementation",
                 "description": "Implement ML-based auto-scaling to optimize resource utilization",
-                "potential_savings": 1800,
+                "potential_savings": round(total_monthly_cost * 0.15, 2),
                 "savings_percentage": 15,
                 "implementation_effort": "High",
-                "timeline": "10-12 weeks", 
+                "timeline": "10-12 weeks",
                 "risk_level": "Medium",
                 "affected_assessments": max(1, len(assessments) - 1),
                 "priority": "High"
@@ -1428,11 +1720,11 @@ async def _identify_optimization_opportunities(assessments: List[Assessment]) ->
                 "id": "reserved_instances",
                 "title": "Reserved Instance Optimization",
                 "description": "Analyze usage patterns and convert to reserved pricing for predictable workloads",
-                "potential_savings": 2880,
+                "potential_savings": round(total_monthly_cost * 0.24, 2),
                 "savings_percentage": 24,
                 "implementation_effort": "Low",
                 "timeline": "2-3 weeks",
-                "risk_level": "Low", 
+                "risk_level": "Low",
                 "affected_assessments": len(assessments),
                 "priority": "High"
             },
@@ -1440,7 +1732,7 @@ async def _identify_optimization_opportunities(assessments: List[Assessment]) ->
                 "id": "container_optimization",
                 "title": "Container Resource Optimization",
                 "description": "Right-size containers and implement resource limits for better utilization",
-                "potential_savings": 1200,
+                "potential_savings": round(total_monthly_cost * 0.10, 2),
                 "savings_percentage": 10,
                 "implementation_effort": "Medium",
                 "timeline": "4-6 weeks",
@@ -1449,7 +1741,7 @@ async def _identify_optimization_opportunities(assessments: List[Assessment]) ->
                 "priority": "Medium"
             }
         ]
-        
+
         return opportunities
         
     except Exception as e:

@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, status, Query
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import uuid
 
 from .auth import get_current_user, require_enterprise_access
@@ -46,6 +46,21 @@ class FeedbackResponse(BaseModel):
     sentiment: Optional[str]
     processed: bool
     created_at: str
+
+
+@router.get("/health")
+async def feedback_health_check():
+    """Health check endpoint for feedback system."""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "components": {
+            "feedback_collection": "operational",
+            "database": "operational",
+            "analytics_engine": "operational"
+        }
+    }
+
 
 
 @router.post("/", status_code=status.HTTP_201_CREATED)
@@ -310,7 +325,7 @@ async def get_feedback_analytics(
             },
             "channel_performance": channel_stats,
             "category_scores": category_stats,
-            "generated_at": datetime.utcnow().isoformat()
+            "generated_at": datetime.now(timezone.utc).isoformat()
         }
         
     except Exception as e:
@@ -329,7 +344,7 @@ async def get_feedback_summary(
     """Get feedback summary for specified period (admin only)."""
     try:
         # Calculate date range
-        end_date = datetime.utcnow()
+        end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=days)
         
         # Get feedback within period
@@ -389,7 +404,7 @@ async def get_feedback_summary(
                 "Address negative sentiment feedback",
                 "Improve response to feature requests"
             ],
-            "generated_at": datetime.utcnow().isoformat()
+            "generated_at": datetime.now(timezone.utc).isoformat()
         }
         
     except Exception as e:
@@ -398,17 +413,3 @@ async def get_feedback_summary(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get feedback summary: {str(e)}"
         )
-
-
-@router.get("/health")
-async def feedback_health_check():
-    """Health check endpoint for feedback system."""
-    return {
-        "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "components": {
-            "feedback_collection": "operational",
-            "database": "operational",
-            "analytics_engine": "operational"
-        }
-    }

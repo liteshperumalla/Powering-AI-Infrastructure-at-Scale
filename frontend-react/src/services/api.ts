@@ -22,8 +22,8 @@ const getApiBaseUrl = () => {
 };
 
 const API_BASE_URL = getApiBaseUrl();
-const API_VERSION = 'v1';
-const API_PREFIX = `/api/v1`; // Use v1 prefix to match backend
+const API_VERSION = 'v2';
+const API_PREFIX = `/api/v2`; // Use v2 prefix to match backend
 
 // If env vars are missing, log a warning
 if (!process.env.NEXT_PUBLIC_API_URL) {
@@ -207,7 +207,7 @@ class ApiClient {
     constructor() {
         // Set baseURL dynamically based on environment
         this.baseURL = getApiBaseUrl() + API_PREFIX;
-        
+
         // Clear old tokens that might be missing required claims
         this.clearOldTokens();
     }
@@ -291,10 +291,10 @@ class ApiClient {
             const response = await fetch(url, config);
 
             if (!response.ok) {
-                console.error('❌ API Request failed:', { 
-                    status: response.status, 
-                    statusText: response.statusText, 
-                    url 
+                console.error('❌ API Request failed:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    url
                 });
                 let errorData: ApiError;
 
@@ -407,7 +407,7 @@ class ApiClient {
         }
 
         // Don't logout for missing resources or malformed requests
-        if (errorData.message?.includes('not found') || 
+        if (errorData.message?.includes('not found') ||
             errorData.message?.includes('invalid format') ||
             errorData.message?.includes('malformed')) {
             return false;
@@ -429,7 +429,7 @@ class ApiClient {
 
         const errorMessage = errorData.message?.toLowerCase() || errorData.error?.toLowerCase() || '';
         const shouldLogout = tokenErrors.some(err => errorMessage.includes(err));
-        
+
         // More aggressive: if we get multiple 401s in a row, logout
         // This prevents users from getting stuck with expired tokens
         if (!shouldLogout && errorData.status_code === 401) {
@@ -440,7 +440,7 @@ class ApiClient {
                 return true;
             }
         }
-        
+
         console.log('🔍 Checking 401 error:', {
             endpoint,
             errorMessage,
@@ -670,9 +670,9 @@ class ApiClient {
     async bulkUpdateAssessments(ids: string[], updates: Partial<Assessment>): Promise<void> {
         return this.request<void>('/assessments/bulk/update', {
             method: 'POST',
-            body: JSON.stringify({ 
+            body: JSON.stringify({
                 assessment_ids: ids,
-                updates 
+                updates
             }),
         });
     }
@@ -804,16 +804,24 @@ class ApiClient {
         const random = Math.random().toString(36).substr(2, 9);
         const microtime = performance.now();
         const url = `/recommendations/${assessmentId}?_t=${timestamp}&_cb=${random}&_mt=${microtime}&_nocache=true&_fresh=true`;
-        const response = await this.request<{ recommendations: Recommendation[], total: number, assessment_id: string, summary: any }>(url, {
-            headers: {
-                'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0',
-                'Pragma': 'no-cache',
-                'Expires': '0',
-                'If-None-Match': '*',
-                'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT'
-            }
-        });
-        return response.recommendations;
+
+        try {
+            const response = await this.request<{ recommendations: Recommendation[], total: number, assessment_id: string, summary: any }>(url, {
+                headers: {
+                    'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0',
+                    'Pragma': 'no-cache',
+                    'Expires': '0',
+                    'If-None-Match': '*',
+                    'If-Modified-Since': 'Thu, 01 Jan 1970 00:00:00 GMT'
+                }
+            });
+            // Safely return recommendations array, defaulting to empty array if not present
+            return Array.isArray(response?.recommendations) ? response.recommendations : [];
+        } catch (error) {
+            console.warn(`Failed to load recommendations for assessment ${assessmentId}:`, error);
+            // Return empty array on error to prevent frontend crashes
+            return [];
+        }
     }
 
     async updateRecommendationStatus(
@@ -1021,7 +1029,7 @@ class ApiClient {
                 timestamp: string;
             };
         }>('/monitoring/health');
-        
+
         return {
             status: response.data.overall_status,
             components: response.data.components,
@@ -1631,13 +1639,13 @@ class ApiClient {
         if (timeframe) {
             params.append('timeframe', timeframe);
         }
-        
+
         // Ultra aggressive cache busting for analytics data
         const timestamp = Date.now();
         const random = Math.random().toString(36).substr(2, 9);
         const microtime = performance.now();
         const sessionId = Math.random().toString(36).substr(2, 15);
-        
+
         params.append('_t', timestamp.toString());
         params.append('_cb', random);
         params.append('_mt', microtime.toString());
@@ -1645,10 +1653,10 @@ class ApiClient {
         params.append('_nocache', 'true');
         params.append('_fresh', 'true');
         params.append('_bust', Date.now().toString());
-        
+
         // Use v2 API explicitly for advanced analytics with ultra cache busting
         const url = `${getApiBaseUrl()}/api/v2/advanced-analytics/dashboard?${params.toString()}`;
-        return this.request(url, { 
+        return this.request(url, {
             useFullUrl: true,
             headers: {
                 'Cache-Control': 'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0',
@@ -1674,7 +1682,7 @@ class ApiClient {
         if (projectionMonths) {
             params.append('projection_months', projectionMonths.toString());
         }
-        
+
         // Use v2 API explicitly for advanced analytics
         const url = `${getApiBaseUrl()}/api/v2/advanced-analytics/cost-predictions${params.toString() ? `?${params.toString()}` : ''}`;
         return this.request(url, { useFullUrl: true });
@@ -1692,7 +1700,7 @@ class ApiClient {
         if (includeRemediation !== undefined) {
             params.append('include_remediation', includeRemediation.toString());
         }
-        
+
         // Use v2 API explicitly for advanced analytics
         const url = `${getApiBaseUrl()}/api/v2/advanced-analytics/security-audit${params.toString() ? `?${params.toString()}` : ''}`;
         return this.request(url, { useFullUrl: true });
@@ -1712,7 +1720,7 @@ class ApiClient {
         if (optimizationLevel) {
             params.append('optimization_level', optimizationLevel);
         }
-        
+
         // Use v2 API explicitly for advanced analytics
         const url = `${getApiBaseUrl()}/api/v2/advanced-analytics/infrastructure-cost-optimization${params.toString() ? `?${params.toString()}` : ''}`;
         return this.request(url, { useFullUrl: true });

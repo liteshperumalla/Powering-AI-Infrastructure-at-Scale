@@ -8,6 +8,7 @@ This is a reference implementation for migrating other endpoints.
 """
 
 import logging
+import inspect
 from typing import Dict, Any, List
 from fastapi import APIRouter, HTTPException, status, Depends
 from datetime import datetime, timezone
@@ -21,6 +22,13 @@ from ...llm.enhanced_llm_manager import LLMRequest, LLMResponse
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/di-example", tags=["Dependency Injection Example"])
+
+
+async def _maybe_await(result):
+    """Utility to handle sync or async call results."""
+    if inspect.isawaitable(result):
+        return await result
+    return result
 
 
 @router.get("/health")
@@ -40,7 +48,8 @@ async def di_health_check(
     try:
         # Test database connection
         db_status = "connected"
-        collection_count = len(await db.list_collection_names())
+        collection_names = await _maybe_await(db.list_collection_names())
+        collection_count = len(collection_names)
 
         # Test event manager
         event_manager_status = "connected" if hasattr(event_manager, 'is_connected') else "in-memory"
@@ -134,15 +143,17 @@ async def test_database(
     """
     try:
         # Query user's assessments
-        assessments = await db.assessments.find({
+        assessments_query = db.assessments.find({
             "user_id": str(current_user.id)
         }).limit(5).to_list(5)
+        assessments = await _maybe_await(assessments_query)
 
         # Get collection stats
-        collection_count = len(await db.list_collection_names())
-        assessment_count = await db.assessments.count_documents({
+        collection_names = await _maybe_await(db.list_collection_names())
+        collection_count = len(collection_names)
+        assessment_count = await _maybe_await(db.assessments.count_documents({
             "user_id": str(current_user.id)
-        })
+        }))
 
         return {
             "status": "success",

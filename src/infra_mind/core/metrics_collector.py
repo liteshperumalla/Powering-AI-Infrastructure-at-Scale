@@ -11,7 +11,7 @@ import psutil
 import logging
 import json
 import redis
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any, Union, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field, asdict
@@ -28,6 +28,18 @@ from ..core.config import get_settings
 logger = logging.getLogger(__name__)
 
 
+def _utcnow() -> datetime:
+    """Timezone-aware timestamp helper."""
+    return datetime.now(timezone.utc)
+
+
+def _ensure_aware(value: datetime) -> datetime:
+    """Normalize datetimes to timezone-aware UTC."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
+
+
 @dataclass
 class SystemHealthStatus:
     """System health status data structure."""
@@ -39,7 +51,7 @@ class SystemHealthStatus:
     error_rate_percent: float
     uptime_seconds: float
     status: str = "healthy"  # healthy, warning, critical
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=_utcnow)
 
 
 @dataclass
@@ -55,7 +67,7 @@ class UserEngagementMetrics:
     page_views: int
     unique_visitors: int
     conversion_rate: float
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=_utcnow)
 
 
 @dataclass
@@ -70,7 +82,7 @@ class BusinessMetrics:
     cost_savings_identified: float
     compliance_score: float
     agent_efficiency_score: float
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=_utcnow)
 
 
 @dataclass
@@ -84,7 +96,7 @@ class RealTimeMetrics:
     llm_requests_per_minute: int
     cloud_api_calls_per_minute: int
     error_rate_last_minute: float
-    timestamp: datetime = field(default_factory=datetime.utcnow)
+    timestamp: datetime = field(default_factory=_utcnow)
 
 
 class MetricsCollector:
@@ -98,7 +110,7 @@ class MetricsCollector:
     def __init__(self, redis_config: Optional[Dict[str, Any]] = None):
         """Initialize metrics collector."""
         self.settings = get_settings()
-        self.start_time = datetime.utcnow()
+        self.start_time = _utcnow()
         self.collection_interval = 30  # seconds for more frequent collection
         self.is_collecting = False
         self._collection_task: Optional[asyncio.Task] = None
@@ -235,7 +247,7 @@ class MetricsCollector:
     async def _collect_real_time_metrics(self) -> None:
         """Collect real-time metrics."""
         try:
-            current_time = datetime.utcnow()
+            current_time = _utcnow()
             
             # Calculate requests per second
             recent_requests = [
@@ -293,19 +305,19 @@ class MetricsCollector:
     
     def _count_llm_requests_last_minute(self) -> int:
         """Count LLM requests in the last minute."""
-        minute_ago = datetime.utcnow() - timedelta(minutes=1)
+        minute_ago = _utcnow() - timedelta(minutes=1)
         return len([
             action for action in self._user_actions
-            if (action.get('timestamp', datetime.utcnow()) > minute_ago and
+            if (action.get('timestamp', _utcnow()) > minute_ago and
                 action.get('type').startswith('llm_'))
         ])
     
     def _count_cloud_api_calls_last_minute(self) -> int:
         """Count cloud API calls in the last minute."""
-        minute_ago = datetime.utcnow() - timedelta(minutes=1)
+        minute_ago = _utcnow() - timedelta(minutes=1)
         return len([
             action for action in self._user_actions
-            if (action.get('timestamp', datetime.utcnow()) > minute_ago and
+            if (action.get('timestamp', _utcnow()) > minute_ago and
                 action.get('type').startswith('cloud_api_'))
         ])
     
@@ -391,7 +403,7 @@ class MetricsCollector:
         """Collect system health monitoring metrics."""
         try:
             # Calculate uptime
-            uptime_seconds = (datetime.utcnow() - self.start_time).total_seconds()
+            uptime_seconds = (_utcnow() - self.start_time).total_seconds()
             await self._safe_record_metric(
                 name="system.uptime_seconds",
                 value=uptime_seconds,
@@ -482,14 +494,14 @@ class MetricsCollector:
     async def collect_user_engagement_metrics(self) -> None:
         """Collect enhanced user engagement tracking metrics."""
         try:
-            now = datetime.utcnow()
+            now = _utcnow()
             hour_ago = now - timedelta(hours=1)
             day_ago = now - timedelta(days=1)
             
             # Active sessions count
             active_sessions = sum(
                 1 for last_activity in self._active_sessions.values()
-                if (now - last_activity).total_seconds() < 1800  # 30 minutes
+                if (now - _ensure_aware(last_activity)).total_seconds() < 1800  # 30 minutes
             )
             
             await self._safe_record_metric(
@@ -504,7 +516,7 @@ class MetricsCollector:
             # Page views in the last hour
             recent_page_views = [
                 view for view in self._page_views
-                if view.get('timestamp', now) > hour_ago
+                if _ensure_aware(view.get('timestamp', now)) > hour_ago
             ]
             
             await self._safe_record_metric(
@@ -534,7 +546,7 @@ class MetricsCollector:
             # User actions in the last hour
             recent_actions = [
                 action for action in self._user_actions
-                if action.get('timestamp', now) > hour_ago
+                if _ensure_aware(action.get('timestamp', now)) > hour_ago
             ]
             
             await self._safe_record_metric(
@@ -597,7 +609,7 @@ class MetricsCollector:
     async def collect_business_metrics(self) -> None:
         """Collect business-specific metrics."""
         try:
-            now = datetime.utcnow()
+            now = _utcnow()
             
             # Assessment metrics
             total_assessments = self._assessments_data.get('total', 0)
@@ -703,7 +715,7 @@ class MetricsCollector:
             
             # Store in Redis with expiration
             metrics_data = {
-                'timestamp': datetime.utcnow().isoformat(),
+                'timestamp': _utcnow().isoformat(),
                 'system_health': asdict(health_status),
                 'user_engagement': asdict(engagement_metrics),
                 'business_metrics': asdict(business_metrics),
@@ -741,7 +753,7 @@ class MetricsCollector:
                 'user_engagement': asdict(await self.get_user_engagement_summary()),
                 'business_metrics': asdict(await self.get_business_metrics_summary()),
                 'real_time_metrics': asdict(self._real_time_metrics),
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': _utcnow().isoformat()
             }
             
             for callback in self._metrics_callbacks:
@@ -769,7 +781,7 @@ class MetricsCollector:
             
             # Store in Redis with expiration
             metrics_data = {
-                'timestamp': datetime.utcnow().isoformat(),
+                'timestamp': _utcnow().isoformat(),
                 'system_health': asdict(health_status),
                 'user_engagement': asdict(engagement_metrics),
                 'business_metrics': asdict(business_metrics),
@@ -807,7 +819,7 @@ class MetricsCollector:
                 'user_engagement': asdict(await self.get_user_engagement_summary()),
                 'business_metrics': asdict(await self.get_business_metrics_summary()),
                 'real_time_metrics': asdict(self._real_time_metrics),
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': _utcnow().isoformat()
             }
             
             for callback in self._metrics_callbacks:
@@ -831,7 +843,7 @@ class MetricsCollector:
             message = json.dumps({
                 'type': 'real_time_metrics',
                 'data': asdict(self._real_time_metrics),
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': _utcnow().isoformat()
             }, default=str)
             
             # Send to all connected clients
@@ -858,7 +870,7 @@ class MetricsCollector:
         with self._metrics_lock:
             self._request_times.append(response_time_ms)
             self._request_count += 1
-            self._requests_per_second.append(datetime.utcnow())
+            self._requests_per_second.append(_utcnow())
             
             if not success:
                 self._error_count += 1
@@ -870,7 +882,7 @@ class MetricsCollector:
         metadata: Optional[Dict[str, Any]] = None
     ) -> None:
         """Track user engagement action."""
-        now = datetime.utcnow()
+        now = _utcnow()
         
         with self._metrics_lock:
             self._active_sessions[user_id] = now
@@ -896,7 +908,7 @@ class MetricsCollector:
     
     def track_page_view(self, user_id: str, page_path: str, metadata: Optional[Dict[str, Any]] = None) -> None:
         """Track page view for engagement metrics."""
-        now = datetime.utcnow()
+        now = _utcnow()
         
         with self._metrics_lock:
             self._page_views.append({
@@ -911,7 +923,7 @@ class MetricsCollector:
     def track_user_feedback(self, user_id: str, score: float, feedback_type: str, 
                            comments: Optional[str] = None) -> None:
         """Track user feedback for satisfaction metrics."""
-        now = datetime.utcnow()
+        now = _utcnow()
         
         with self._metrics_lock:
             self._user_feedback.append({
@@ -966,7 +978,7 @@ class MetricsCollector:
             agent_metrics = await AgentMetrics.create_for_agent(
                 agent_name=agent_name,
                 agent_version="1.0.0",  # TODO: Get from agent
-                started_at=datetime.utcnow() - timedelta(seconds=execution_time),
+                started_at=_utcnow() - timedelta(seconds=execution_time),
                 assessment_id=assessment_id
             )
             
@@ -1125,7 +1137,7 @@ class MetricsCollector:
                 active_connections=connections,
                 response_time_ms=avg_response_time,
                 error_rate_percent=error_rate,
-                uptime_seconds=(datetime.utcnow() - self.start_time).total_seconds(),
+                uptime_seconds=(_utcnow() - self.start_time).total_seconds(),
                 status=status
             )
             
@@ -1149,7 +1161,7 @@ class MetricsCollector:
             return self._metrics_cache[cache_key]
         
         try:
-            now = datetime.utcnow()
+            now = _utcnow()
             hour_ago = now - timedelta(hours=1)
             day_ago = now - timedelta(days=1)
             
@@ -1259,7 +1271,7 @@ class MetricsCollector:
             return self._metrics_cache[cache_key]
         
         try:
-            now = datetime.utcnow()
+            now = _utcnow()
             
             with self._metrics_lock:
                 # Calculate user satisfaction score
@@ -1334,7 +1346,7 @@ class MetricsCollector:
                 logger.debug("Network connections unavailable due to permissions")
             
             # Calculate uptime
-            uptime_seconds = (datetime.utcnow() - self.start_time).total_seconds()
+            uptime_seconds = (_utcnow() - self.start_time).total_seconds()
             
             # Calculate error rate
             error_rate = 0.0
@@ -1350,7 +1362,7 @@ class MetricsCollector:
             status = "healthy"
             if cpu_percent > 80 or memory.percent > 85 or error_rate > 5:
                 status = "critical"
-            elif cpu_percent > 60 or memory.percent > 70 or error_rate > 1:
+            elif cpu_percent > 60 or memory.percent > 75 or error_rate > 3:
                 status = "warning"
             
             return SystemHealthStatus(
@@ -1394,7 +1406,7 @@ class MetricsCollector:
                 logger.debug("Network connections unavailable due to permissions")
             
             # Calculate uptime
-            uptime_seconds = (datetime.utcnow() - self.start_time).total_seconds()
+            uptime_seconds = (_utcnow() - self.start_time).total_seconds()
             
             # Calculate error rate
             error_rate = 0.0
@@ -1410,7 +1422,7 @@ class MetricsCollector:
             status = "healthy"
             if cpu_percent > 80 or memory.percent > 85 or error_rate > 5:
                 status = "critical"
-            elif cpu_percent > 60 or memory.percent > 70 or error_rate > 1:
+            elif cpu_percent > 60 or memory.percent > 75 or error_rate > 3:
                 status = "warning"
             
             return SystemHealthStatus(
@@ -1441,19 +1453,19 @@ class MetricsCollector:
     async def get_user_engagement_summary(self) -> UserEngagementMetrics:
         """Get user engagement metrics summary."""
         try:
-            now = datetime.utcnow()
+            now = _utcnow()
             hour_ago = now - timedelta(hours=1)
             
             # Active sessions count
             active_sessions = sum(
                 1 for last_activity in self._active_sessions.values()
-                if (now - last_activity).total_seconds() < 1800  # 30 minutes
+                if (now - _ensure_aware(last_activity)).total_seconds() < 1800  # 30 minutes
             )
             
             # Recent actions
             recent_actions = [
                 action for action in self._user_actions
-                if action.get('timestamp', now) > hour_ago
+                if _ensure_aware(action.get('timestamp', now)) > hour_ago
             ]
             
             # Count action types
@@ -1545,7 +1557,7 @@ class MetricsCollector:
         if not cache_time:
             return False
         
-        return (datetime.utcnow() - cache_time).total_seconds() < self._cache_ttl
+        return (_utcnow() - cache_time).total_seconds() < self._cache_ttl
     
     async def get_metrics_dashboard_data(self) -> Dict[str, Any]:
         """Get comprehensive metrics data for dashboard."""
@@ -1555,10 +1567,10 @@ class MetricsCollector:
                 'user_engagement': asdict(await self.get_user_engagement_summary()),
                 'business_metrics': asdict(await self.get_business_metrics_summary()),
                 'real_time_metrics': asdict(self.get_real_time_metrics()),
-                'timestamp': datetime.utcnow().isoformat(),
+                'timestamp': _utcnow().isoformat(),
                 'collection_status': {
                     'is_collecting': self.is_collecting,
-                    'uptime_seconds': (datetime.utcnow() - self.start_time).total_seconds(),
+                    'uptime_seconds': (_utcnow() - self.start_time).total_seconds(),
                     'redis_connected': self.redis_client is not None,
                     'active_callbacks': len(self._metrics_callbacks),
                     'websocket_clients': len(self._websocket_clients)
@@ -1568,7 +1580,7 @@ class MetricsCollector:
             logger.error(f"Error getting dashboard data: {e}")
             return {
                 'error': str(e),
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': _utcnow().isoformat()
             }
     
     @asynccontextmanager
@@ -1607,7 +1619,7 @@ class MetricsCollector:
             message = json.dumps({
                 'type': 'real_time_metrics',
                 'data': asdict(self._real_time_metrics),
-                'timestamp': datetime.utcnow().isoformat()
+                'timestamp': _utcnow().isoformat()
             }, default=str)
             
             # Send to all connected clients

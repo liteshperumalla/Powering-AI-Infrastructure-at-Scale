@@ -160,6 +160,7 @@ const EnhancedNotificationSystem: React.FC = () => {
         <>
             <IconButton 
                 onClick={handleNotificationClick}
+                aria-label="notifications"
                 sx={{ 
                     color: 'text.primary',
                     '&:hover': {

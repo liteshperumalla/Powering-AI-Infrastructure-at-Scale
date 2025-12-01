@@ -16,6 +16,7 @@ import {
     Checkbox,
     Divider,
     Stack,
+    useTheme,
 } from '@mui/material';
 import {
     Visibility,
@@ -27,12 +28,14 @@ import {
     Google,
 } from '@mui/icons-material';
 import { GoogleLogin } from '@react-oauth/google';
+import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { register, clearError, googleLogin } from '@/store/slices/authSlice';
 import ResponsiveLayout from '@/components/ResponsiveLayout';
 
 export default function RegisterPage() {
+    const theme = useTheme();
     const router = useRouter();
     const dispatch = useAppDispatch();
     const { loading, error, isAuthenticated } = useAppSelector(state => state.auth);
@@ -50,6 +53,61 @@ export default function RegisterPage() {
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
     const [validationError, setValidationError] = useState('');
     const [showSuccess, setShowSuccess] = useState(false);
+
+    const getTextFieldStyles = (marginBottom = 2) => ({
+        mb: marginBottom,
+        '& .MuiOutlinedInput-root': {
+            borderRadius: 2,
+            backgroundColor: theme.palette.mode === 'dark'
+                ? 'rgba(255, 255, 255, 0.05)'
+                : 'rgba(255, 255, 255, 0.8)',
+            '& fieldset': {
+                borderColor: 'transparent',
+            },
+            '&:hover': {
+                backgroundColor: theme.palette.mode === 'dark'
+                    ? 'rgba(255, 255, 255, 0.1)'
+                    : 'rgba(255, 255, 255, 0.9)',
+                '& fieldset': {
+                    borderColor: 'transparent',
+                },
+            },
+            '&.Mui-focused': {
+                backgroundColor: theme.palette.mode === 'dark'
+                    ? 'rgba(255, 255, 255, 0.15)'
+                    : 'rgba(255, 255, 255, 1)',
+                boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
+                '& fieldset': {
+                    borderColor: 'transparent',
+                },
+            }
+        },
+        '& .MuiInputLabel-root': {
+            fontWeight: 500,
+            '&.MuiInputLabel-shrink': {
+                transform: 'translate(14px, -8px) scale(0.9)',
+                backgroundColor: theme.palette.mode === 'dark'
+                    ? 'rgba(15, 15, 15, 0.95)'
+                    : 'rgba(255, 255, 255, 0.95)',
+                borderRadius: '999px',
+                padding: '0 4px',
+            }
+        }
+    });
+
+    const createFloatingLabelProps = () => ({
+        shrink: true,
+        sx: {
+            fontWeight: 600,
+            color: 'text.secondary',
+            transform: 'translate(14px, -8px) scale(0.9)',
+            backgroundColor: theme.palette.mode === 'dark'
+                ? 'rgba(15, 15, 15, 0.95)'
+                : 'rgba(255, 255, 255, 0.95)',
+            px: 1,
+            borderRadius: '999px',
+        }
+    });
 
     // Redirect if already authenticated
     useEffect(() => {
@@ -210,9 +268,9 @@ export default function RegisterPage() {
                                 alignItems: 'center',
                                 width: '100%',
                                 borderRadius: 3,
-                                background: 'rgba(255, 255, 255, 0.95)',
+                                background: theme.palette.mode === 'dark' ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
                                 backdropFilter: 'blur(10px)',
-                                border: '1px solid rgba(255, 255, 255, 0.3)',
+                                border: theme.palette.mode === 'dark' ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(255, 255, 255, 0.3)',
                                 boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)',
                                 transition: 'all 0.3s ease-in-out',
                                 '&:hover': {
@@ -299,23 +357,8 @@ export default function RegisterPage() {
                             autoFocus
                             value={formData.fullName}
                             onChange={handleChange}
-                            sx={{
-                                mb: 2,
-                                '& .MuiOutlinedInput-root': {
-                                    borderRadius: 2,
-                                    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                                    '&:hover': {
-                                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                                    },
-                                    '&.Mui-focused': {
-                                        backgroundColor: 'rgba(255, 255, 255, 1)',
-                                        boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
-                                    }
-                                },
-                                '& .MuiInputLabel-root': {
-                                    fontWeight: 500,
-                                }
-                            }}
+                            sx={getTextFieldStyles(2)}
+                            InputLabelProps={createFloatingLabelProps()}
                             InputProps={{
                                 startAdornment: (
                                     <InputAdornment position="start">
@@ -334,23 +377,8 @@ export default function RegisterPage() {
                             autoComplete="email"
                             value={formData.email}
                             onChange={handleChange}
-                            sx={{
-                                mb: 2,
-                                '& .MuiOutlinedInput-root': {
-                                    borderRadius: 2,
-                                    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                                    '&:hover': {
-                                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                                    },
-                                    '&.Mui-focused': {
-                                        backgroundColor: 'rgba(255, 255, 255, 1)',
-                                        boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
-                                    }
-                                },
-                                '& .MuiInputLabel-root': {
-                                    fontWeight: 500,
-                                }
-                            }}
+                            sx={getTextFieldStyles(2)}
+                            InputLabelProps={createFloatingLabelProps()}
                             InputProps={{
                                 startAdornment: (
                                     <InputAdornment position="start">
@@ -368,23 +396,8 @@ export default function RegisterPage() {
                             autoComplete="organization"
                             value={formData.company}
                             onChange={handleChange}
-                            sx={{
-                                mb: 2,
-                                '& .MuiOutlinedInput-root': {
-                                    borderRadius: 2,
-                                    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                                    '&:hover': {
-                                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                                    },
-                                    '&.Mui-focused': {
-                                        backgroundColor: 'rgba(255, 255, 255, 1)',
-                                        boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
-                                    }
-                                },
-                                '& .MuiInputLabel-root': {
-                                    fontWeight: 500,
-                                }
-                            }}
+                            sx={getTextFieldStyles(2)}
+                            InputLabelProps={createFloatingLabelProps()}
                             InputProps={{
                                 startAdornment: (
                                     <InputAdornment position="start">
@@ -403,23 +416,8 @@ export default function RegisterPage() {
                             autoComplete="job-title"
                             value={formData.jobTitle}
                             onChange={handleChange}
-                            sx={{
-                                mb: 2,
-                                '& .MuiOutlinedInput-root': {
-                                    borderRadius: 2,
-                                    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                                    '&:hover': {
-                                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                                    },
-                                    '&.Mui-focused': {
-                                        backgroundColor: 'rgba(255, 255, 255, 1)',
-                                        boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
-                                    }
-                                },
-                                '& .MuiInputLabel-root': {
-                                    fontWeight: 500,
-                                }
-                            }}
+                            sx={getTextFieldStyles(2)}
+                            InputLabelProps={createFloatingLabelProps()}
                             InputProps={{
                                 startAdornment: (
                                     <InputAdornment position="start">
@@ -439,23 +437,8 @@ export default function RegisterPage() {
                             autoComplete="new-password"
                             value={formData.password}
                             onChange={handleChange}
-                            sx={{
-                                mb: 2,
-                                '& .MuiOutlinedInput-root': {
-                                    borderRadius: 2,
-                                    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                                    '&:hover': {
-                                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                                    },
-                                    '&.Mui-focused': {
-                                        backgroundColor: 'rgba(255, 255, 255, 1)',
-                                        boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
-                                    }
-                                },
-                                '& .MuiInputLabel-root': {
-                                    fontWeight: 500,
-                                }
-                            }}
+                            sx={getTextFieldStyles(2)}
+                            InputLabelProps={createFloatingLabelProps()}
                             InputProps={{
                                 startAdornment: (
                                     <InputAdornment position="start">
@@ -486,23 +469,8 @@ export default function RegisterPage() {
                             id="confirmPassword"
                             value={formData.confirmPassword}
                             onChange={handleChange}
-                            sx={{
-                                mb: 3,
-                                '& .MuiOutlinedInput-root': {
-                                    borderRadius: 2,
-                                    backgroundColor: 'rgba(255, 255, 255, 0.8)',
-                                    '&:hover': {
-                                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                                    },
-                                    '&.Mui-focused': {
-                                        backgroundColor: 'rgba(255, 255, 255, 1)',
-                                        boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
-                                    }
-                                },
-                                '& .MuiInputLabel-root': {
-                                    fontWeight: 500,
-                                }
-                            }}
+                            sx={getTextFieldStyles(3)}
+                            InputLabelProps={createFloatingLabelProps()}
                             InputProps={{
                                 startAdornment: (
                                     <InputAdornment position="start">
@@ -613,10 +581,9 @@ export default function RegisterPage() {
                         
                         <Box textAlign="center">
                             <Link
-                                component="button"
+                                component={NextLink}
+                                href="/auth/login"
                                 variant="body2"
-                                onClick={() => router.push('/auth/login')}
-                                type="button"
                                 sx={{
                                     fontWeight: 500,
                                     color: 'text.secondary',

@@ -304,8 +304,18 @@ const ModernNavbar = React.memo(function ModernNavbar({
                                 gap: 1,
                                 textDecoration: 'none',
                                 cursor: pathname === '/' ? 'default' : 'pointer',
+                                '& img': {
+                                    height: 32,
+                                    opacity: 1,
+                                    filter: 'drop-shadow(0 4px 14px rgba(103, 126, 234, 0.35))',
+                                    transition: 'transform 0.2s ease, filter 0.2s ease',
+                                },
                                 '&:hover': {
                                     color: pathname === '/' ? theme.palette.primary.main : theme.palette.primary.dark,
+                                    '& img': {
+                                        transform: 'translateY(-1px) scale(1.01)',
+                                        filter: 'drop-shadow(0 6px 18px rgba(103, 126, 234, 0.5))',
+                                    }
                                 }
                             }}
                         >

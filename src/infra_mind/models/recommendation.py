@@ -8,18 +8,19 @@ from datetime import datetime
 from typing import Dict, List, Optional, Any
 from decimal import Decimal
 from beanie import Document, Indexed
-from pydantic import Field, field_validator
+from pydantic import BaseModel, Field, field_validator
 from bson import Decimal128
 
 from ..schemas.base import Priority, RecommendationConfidence, CloudProvider
 
 
-class ServiceRecommendation(Document):
+class ServiceRecommendation(BaseModel):
     """
-    Individual cloud service recommendation.
-    
-    Learning Note: Breaking service recommendations into a separate model
-    allows for better querying and analysis of recommended services.
+    Individual cloud service recommendation (embedded document).
+
+    Learning Note: Using BaseModel instead of Document makes this an embedded
+    document that will be stored within the Recommendation document, ensuring
+    service data is always available with recommendations.
     """
     service_name: str = Field(description="Name of the cloud service")
     provider: CloudProvider = Field(description="Cloud provider (AWS, Azure, GCP)")
@@ -70,13 +71,15 @@ class ServiceRecommendation(Document):
         if isinstance(v, Decimal128):
             return Decimal(str(v))
         return v
-    
-    class Settings:
-        name = "service_recommendations"
-        indexes = [
-            [("provider", 1), ("service_category", 1)],
-            [("estimated_monthly_cost", 1)],
-        ]
+
+    @field_validator('provider', mode='before')
+    @classmethod
+    def normalize_provider(cls, value):
+        """Allow legacy provider values like 'AWS' or 'multi-cloud'."""
+        if isinstance(value, str):
+            normalized = value.strip().lower().replace("-", "_")
+            return normalized
+        return value
 
 
 class Recommendation(Document):
@@ -179,7 +182,13 @@ class Recommendation(Document):
         ge=0.0, le=1.0,
         description="How well this aligns with business requirements"
     )
-    
+
+    # Implementation tracking
+    implementation_status: str = Field(
+        default="pending",
+        description="Implementation status: pending, in_progress, completed, failed"
+    )
+
     # Metadata
     tags: List[str] = Field(default_factory=list, description="Recommendation tags")
     priority: Priority = Field(default=Priority.MEDIUM, description="Recommendation priority")

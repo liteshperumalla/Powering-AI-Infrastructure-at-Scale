@@ -1,5 +1,8 @@
 import '@testing-library/jest-dom';
 
+// Ensure public API URL is set during tests to avoid warnings and unintended network calls
+process.env.NEXT_PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 // Mock Next.js router
 jest.mock('next/navigation', () => ({
   useRouter() {

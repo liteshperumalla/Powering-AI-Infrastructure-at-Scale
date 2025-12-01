@@ -7,7 +7,7 @@ across multi-cloud infrastructure with automated threat detection and remediatio
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Any, Optional, Tuple
 from enum import Enum
 import json
@@ -118,7 +118,7 @@ class SecurityAuditService:
             
             audit_report = {
                 "audit_id": audit_id,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "summary": {
                     "total_findings": len(all_findings),
                     "critical_count": len([f for f in all_findings if f.get("severity") == SecurityLevel.CRITICAL]),
@@ -250,7 +250,7 @@ class SecurityAuditService:
                     "component_name": component.get("name"),
                     "provider": component.get("provider"),
                     "region": component.get("region"),
-                    "discovered_at": datetime.utcnow().isoformat(),
+                    "discovered_at": datetime.now(timezone.utc).isoformat(),
                     "vulnerability_type": VulnerabilityType.MISCONFIG,
                     "cvss_score": self._calculate_cvss_score(vulnerability["severity"]),
                     "exploitability": self._assess_exploitability(component, vulnerability)
@@ -571,7 +571,7 @@ class SecurityAuditService:
         """Load vulnerability database (simulated)."""
         return {
             "cve_database": "https://cve.mitre.org/",
-            "last_updated": datetime.utcnow().isoformat(),
+            "last_updated": datetime.now(timezone.utc).isoformat(),
             "total_vulnerabilities": 180000,
             "cloud_specific_checks": 1250
         }
@@ -633,7 +633,7 @@ class SecurityAuditService:
     def _generate_audit_id(self, infrastructure_data: Dict[str, Any]) -> str:
         """Generate unique audit ID."""
         content = json.dumps(infrastructure_data, sort_keys=True)
-        timestamp = datetime.utcnow().isoformat()
+        timestamp = datetime.now(timezone.utc).isoformat()
         return f"AUDIT-{hashlib.md5(f'{content}{timestamp}'.encode()).hexdigest()[:8]}"
     
     def _calculate_cvss_score(self, severity: SecurityLevel) -> float:

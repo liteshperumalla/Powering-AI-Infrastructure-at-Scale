@@ -319,7 +319,7 @@ export default function InteractiveTutorial({ open, onClose }: InteractiveTutori
                     <Box
                         sx={{
                             width: isMobile ? '100%' : 300,
-                            bgcolor: 'grey.50',
+                            bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
                             borderRight: isMobile ? 'none' : '1px solid',
                             borderColor: 'divider',
                             display: isMobile && activeStep !== -1 ? 'none' : 'block',
@@ -485,7 +485,7 @@ export default function InteractiveTutorial({ open, onClose }: InteractiveTutori
                                                         <Paper
                                                             sx={{
                                                                 height: 250,
-                                                                bgcolor: 'grey.100',
+                                                                bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
                                                                 display: 'flex',
                                                                 alignItems: 'center',
                                                                 justifyContent: 'center',
@@ -545,7 +545,7 @@ export default function InteractiveTutorial({ open, onClose }: InteractiveTutori
                 </Box>
             </DialogContent>
 
-            <DialogActions sx={{ p: 3, bgcolor: 'grey.50' }}>
+            <DialogActions sx={{ p: 3, bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50' }}>
                 <Box sx={{ flex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Button
                         onClick={handleBack}

@@ -363,7 +363,7 @@ export default function FeatureWalkthrough({ compact = false, showOnlyBasics = f
                                     bgcolor: 'white',
                                     color: 'primary.main',
                                     '&:hover': {
-                                        bgcolor: 'grey.100'
+                                        bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100'
                                     }
                                 }}
                                 onClick={() => {

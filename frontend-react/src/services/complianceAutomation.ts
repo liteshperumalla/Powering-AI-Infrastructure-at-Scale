@@ -393,6 +393,8 @@ class ComplianceAutomationService {
 
     constructor(assessmentId?: string) {
         this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+        console.log('🔧 ComplianceAutomationService initialized with baseUrl:', this.baseUrl);
+        console.log('🔧 Environment NEXT_PUBLIC_API_URL:', process.env.NEXT_PUBLIC_API_URL);
         this.token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
         this.assessmentId = assessmentId || null;
     }
@@ -402,7 +404,12 @@ class ComplianceAutomationService {
     }
 
     private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
-        const response = await fetch(`${this.baseUrl}${endpoint}`, {
+        const fullUrl = `${this.baseUrl}${endpoint}`;
+        console.log('🔧 Making request to:', fullUrl);
+        console.log('🔧 Base URL:', this.baseUrl);
+        console.log('🔧 Endpoint:', endpoint);
+
+        const response = await fetch(fullUrl, {
             ...options,
             headers: {
                 'Content-Type': 'application/json',
@@ -412,6 +419,7 @@ class ComplianceAutomationService {
         });
 
         if (!response.ok) {
+            console.error('❌ Request failed:', fullUrl, response.status, response.statusText);
             throw new Error(`Compliance Automation API Error: ${response.statusText}`);
         }
 
@@ -424,7 +432,49 @@ class ComplianceAutomationService {
             return {} as ComplianceDashboard;
         }
         const response = await this.makeRequest(`/api/v1/features/assessment/${this.assessmentId}/compliance`);
-        return response || {};
+
+        // Transform API response to dashboard format
+        const frameworks = response.frameworks || [];
+        const totalFrameworks = frameworks.length;
+        const compliantFrameworks = frameworks.filter((f: any) => f.status === 'compliant').length;
+
+        // Calculate overall compliance score (0-100)
+        const overall_compliance_score = totalFrameworks > 0
+            ? Math.round((compliantFrameworks / totalFrameworks) * 100)
+            : 0;
+
+        return {
+            overall_compliance_score,
+            total_frameworks: totalFrameworks,
+            frameworks_by_status: {
+                compliant: compliantFrameworks,
+                partially_compliant: frameworks.filter((f: any) => f.status === 'partially_compliant').length,
+                non_compliant: frameworks.filter((f: any) => f.status === 'non_compliant').length,
+                pending_assessment: frameworks.filter((f: any) => f.status === 'pending_assessment').length,
+            },
+            active_findings: {
+                critical: 0,
+                high: 0,
+                medium: 0,
+                low: 0,
+            },
+            remediation_progress: {
+                total_actions: 0,
+                completed_actions: 0,
+                in_progress_actions: 0,
+                overdue_actions: 0,
+                progress_percentage: 0,
+            },
+            automated_monitoring: {
+                total_checks: 0,
+                passing_checks: 0,
+                failing_checks: 0,
+                last_run: 'Never',
+            },
+            upcoming_deadlines: [],
+            recent_audits: [],
+            compliance_trends: [],
+        } as ComplianceDashboard;
     }
 
     async getComplianceOverview(timeframe: string = '30d'): Promise<{

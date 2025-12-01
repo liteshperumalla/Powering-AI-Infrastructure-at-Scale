@@ -16,6 +16,7 @@ import uuid
 from ..models.assessment import Assessment
 from ..models.recommendation import Recommendation
 from ..models.metrics import AgentMetrics
+from beanie.exceptions import CollectionWasNotInitialized
 from ..core.audit import log_data_access_event, AuditEventType
 from ..core.metrics_collector import get_metrics_collector
 from ..core.error_handling import error_handler, ErrorContext
@@ -159,12 +160,20 @@ class BaseAgent(ABC):
         
         # Initialize metrics if enabled
         if self.config.metrics_enabled:
-            self.metrics = await AgentMetrics.create_for_agent(
-                agent_name=self.config.name,
-                agent_version=self.config.version,
-                started_at=datetime.now(timezone.utc),
-                assessment_id=str(assessment.id)
-            )
+            try:
+                self.metrics = await AgentMetrics.create_for_agent(
+                    agent_name=self.config.name,
+                    agent_version=self.config.version,
+                    started_at=datetime.now(timezone.utc),
+                    assessment_id=str(assessment.id)
+                )
+            except CollectionWasNotInitialized:
+                logger.warning(
+                    "Skipping metrics creation for %s because Beanie collections "
+                    "are not initialized (likely running in test mode).",
+                    self.name,
+                )
+                self.metrics = None
         
         # Load memory if enabled
         if self.memory:
@@ -648,6 +657,11 @@ class AgentFactory:
             return None
         
         try:
+            if config is None:
+                config = AgentConfig(
+                    name=f"{role.value}_agent",
+                    role=role
+                )
             # Create agent instance - let each agent handle its own default config
             agent = agent_class(config)
             

@@ -110,6 +110,14 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
   const [error, setError] = useState<string | null>(null);
   const [complianceService] = useState(() => getComplianceAutomationService(assessmentId));
 
+  // Update service assessment ID when prop changes
+  useEffect(() => {
+    console.log('🔍 ComplianceAutomation - Received assessmentId:', assessmentId);
+    if (assessmentId) {
+      complianceService.setAssessmentId(assessmentId);
+    }
+  }, [assessmentId, complianceService]);
+
   // State for different sections
   const [dashboard, setDashboard] = useState<ComplianceDashboard | null>(null);
   const [frameworks, setFrameworks] = useState<ComplianceFramework[]>([]);
@@ -149,12 +157,15 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
   const checkTypes = ['configuration', 'policy', 'log_analysis', 'vulnerability_scan', 'access_review', 'data_classification'];
 
   useEffect(() => {
-    loadComplianceData();
-  }, []);
+    if (assessmentId) {
+      loadComplianceData();
+    }
+  }, [assessmentId]); // Reload when assessmentId changes
 
   const loadComplianceData = async () => {
     setLoading(true);
     try {
+      console.log('Loading compliance data for assessment:', assessmentId);
       const [
         dashboardData,
         frameworksData,
@@ -168,6 +179,9 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
         complianceService.getAudits(),
         complianceService.getActiveAlerts(),
       ]);
+
+      console.log('Frameworks data received:', frameworksData);
+      console.log('Frameworks count:', frameworksData?.length);
 
       setDashboard(dashboardData);
       setFrameworks(Array.isArray(frameworksData) ? frameworksData : []);
@@ -470,8 +484,8 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
       </Box>
       
       <Grid container spacing={3}>
-        {frameworks.map((framework) => (
-          <Grid item xs={12} md={6} lg={4} key={framework.id}>
+        {frameworks.map((framework, index) => (
+          <Grid item xs={12} md={6} lg={4} key={framework.id || framework.name || index}>
             <Card>
               <CardContent>
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
@@ -768,8 +782,8 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
               <FormControl fullWidth sx={{ mb: 2 }}>
                 <InputLabel>Frameworks</InputLabel>
                 <Select multiple defaultValue={[]}>
-                  {frameworks.map((framework) => (
-                    <MenuItem key={framework.id} value={framework.id}>
+                  {frameworks.map((framework, index) => (
+                    <MenuItem key={framework.id || framework.name || index} value={framework.id || framework.name}>
                       {framework.name}
                     </MenuItem>
                   ))}
@@ -967,8 +981,8 @@ const ComplianceAutomation: React.FC<ComplianceAutomationProps> = ({ assessmentI
                   value={newCheckData.framework_id}
                   onChange={(e) => setNewCheckData({ ...newCheckData, framework_id: e.target.value })}
                 >
-                  {frameworks.map((framework) => (
-                    <MenuItem key={framework.id} value={framework.id}>
+                  {frameworks.map((framework, index) => (
+                    <MenuItem key={framework.id || framework.name || index} value={framework.id || framework.name}>
                       {framework.name}
                     </MenuItem>
                   ))}

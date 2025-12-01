@@ -12,6 +12,7 @@ import {
     Alert,
     InputAdornment,
     IconButton,
+    useTheme,
 } from '@mui/material';
 import { 
     Lock, 
@@ -20,6 +21,7 @@ import {
     ArrowBack,
     CheckCircle 
 } from '@mui/icons-material';
+import NextLink from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import ResponsiveLayout from '@/components/ResponsiveLayout';
 
@@ -178,9 +180,9 @@ function ResetPasswordContent() {
                                 alignItems: 'center',
                                 width: '100%',
                                 borderRadius: 3,
-                                background: 'rgba(255, 255, 255, 0.95)',
+                                background: theme.palette.mode === 'dark' ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
                                 backdropFilter: 'blur(10px)',
-                                border: '1px solid rgba(255, 255, 255, 0.3)',
+                                border: theme.palette.mode === 'dark' ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(255, 255, 255, 0.3)',
                                 boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)',
                                 transition: 'all 0.3s ease-in-out',
                                 '&:hover': {
@@ -420,10 +422,9 @@ function ResetPasswordContent() {
                             {!success && (
                                 <Box textAlign="center" sx={{ mt: 2 }}>
                                     <Link
-                                        component="button"
+                                        component={NextLink}
+                                        href="/auth/login"
                                         variant="body2"
-                                        onClick={() => router.push('/auth/login')}
-                                        type="button"
                                         sx={{
                                             fontWeight: 500,
                                             color: 'text.secondary',
@@ -453,6 +454,7 @@ function ResetPasswordContent() {
 }
 
 export default function ResetPasswordPage() {
+    const theme = useTheme();
     return (
         <Suspense fallback={<div>Loading...</div>}>
             <ResetPasswordContent />

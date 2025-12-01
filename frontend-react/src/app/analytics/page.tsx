@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Container,
     Typography,
@@ -25,20 +25,15 @@ import {
     ListItem,
     ListItemText,
     LinearProgress,
-    Divider,
 } from '@mui/material';
+import { SelectChangeEvent } from '@mui/material/Select';
 import {
     Analytics as AnalyticsIcon,
     TrendingUp,
-    Assessment,
     Timeline,
-    Security,
     CloudQueue,
     ExpandMore,
     Refresh,
-    TrendingDown,
-    Warning,
-    CheckCircle,
     MonetizationOn,
     Speed,
     Shield,
@@ -46,23 +41,207 @@ import {
 import ResponsiveLayout from '@/components/ResponsiveLayout';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { apiClient } from '@/services/api';
-import { cacheBuster, forceRefresh } from '@/utils/cache-buster';
 import { useFreshData } from '@/hooks/useFreshData';
+
+interface CostCurrentAnalysis {
+    total_monthly_cost: number;
+    assessments_analyzed: number;
+}
+
+interface OptimizationOpportunity {
+    title?: string;
+    opportunity?: string;
+    priority?: string;
+    description?: string;
+    potential_savings?: number | string;
+    savings_percentage?: number | string;
+    implementation_effort?: string;
+    timeline?: string;
+    risk_level?: string;
+    categories?: string[];
+}
+
+interface CostModelingAnalytics {
+    current_analysis: CostCurrentAnalysis;
+    predictions: Record<string, unknown>[];
+    cost_optimization_opportunities: OptimizationOpportunity[];
+}
+
+interface ScalingSimulationsAnalytics {
+    simulations: Record<string, unknown>[];
+    global_recommendations: Record<string, unknown>[];
+}
+
+interface PerformanceAnalysis {
+    best_compute_performance?: string;
+    best_compute_value?: string;
+    cost_leader?: string;
+}
+
+interface PerformanceBenchmarksAnalytics {
+    performance_analysis: PerformanceAnalysis | null;
+    benchmarks: Record<string, unknown>;
+    recommendations: string[];
+}
+
+interface ComplianceStatus {
+    status: string;
+    score: number;
+}
+
+interface ThreatLandscape {
+    security_score?: number;
+    high_priority_issues?: number;
+    total_vulnerabilities?: number;
+}
+
+interface SecurityAnalytics {
+    global_security: {
+        threat_landscape?: ThreatLandscape;
+        compliance_status?: Record<string, ComplianceStatus>;
+    };
+    assessment_security: Record<string, unknown>[];
+}
+
+interface WorkloadDistributionEntry {
+    aws_percentage?: number;
+    gcp_percentage?: number;
+    azure_percentage?: number;
+    strategy?: string;
+}
+
+interface MultiCloudStrategy {
+    recommended_distribution?: {
+        primary_cloud?: string;
+        backup_cloud?: string;
+        rationale?: string;
+    };
+    workload_distribution?: Record<string, WorkloadDistributionEntry>;
+}
+
+interface MultiCloudAnalytics {
+    global_strategy: MultiCloudStrategy;
+    assessment_strategies: Record<string, unknown>[];
+}
+
+interface RecommendationTrends {
+    [key: string]: unknown;
+}
+
+interface PredictiveInsights {
+    cost_predictions?: {
+        annual_cost_forecast?: number;
+        confidence_level?: number;
+    };
+    capacity_planning?: Record<string, unknown>;
+    optimization_predictions?: {
+        automation_roi?: string;
+        multi_cloud_savings?: string;
+    };
+}
 
 interface AnalyticsData {
     timestamp: string;
     timeframe: string;
+    message?: string;
     analytics: {
-        cost_modeling: any;
-        scaling_simulations: any;
-        performance_benchmarks: any;
-        multi_cloud_analysis: any;
-        security_analytics: any;
-        recommendation_trends: any;
+        cost_modeling: CostModelingAnalytics;
+        scaling_simulations: ScalingSimulationsAnalytics;
+        performance_benchmarks: PerformanceBenchmarksAnalytics;
+        multi_cloud_analysis: MultiCloudAnalytics;
+        security_analytics: SecurityAnalytics;
+        recommendation_trends: RecommendationTrends;
     };
-    predictive_insights: any;
-    optimization_opportunities: any[];
+    predictive_insights: PredictiveInsights;
+    optimization_opportunities: OptimizationOpportunity[];
 }
+
+type AnalyticsApiResponse = Partial<AnalyticsData>;
+
+const EMPTY_ANALYTICS: AnalyticsData['analytics'] = {
+    cost_modeling: {
+        current_analysis: {
+            total_monthly_cost: 0,
+            assessments_analyzed: 0
+        },
+        predictions: [],
+        cost_optimization_opportunities: []
+    },
+    scaling_simulations: {
+        simulations: [],
+        global_recommendations: []
+    },
+    performance_benchmarks: {
+        performance_analysis: null,
+        benchmarks: {},
+        recommendations: []
+    },
+    multi_cloud_analysis: {
+        global_strategy: {},
+        assessment_strategies: []
+    },
+    security_analytics: {
+        global_security: {},
+        assessment_security: []
+    },
+    recommendation_trends: {}
+};
+
+const EMPTY_PREDICTIVE_INSIGHTS: PredictiveInsights = {
+    cost_predictions: {},
+    capacity_planning: {},
+    optimization_predictions: {}
+};
+
+const normalizeAnalyticsData = (data: AnalyticsApiResponse, fallbackTimeframe: string): AnalyticsData => {
+    const analytics = data.analytics ?? {};
+
+    return {
+        timestamp: data.timestamp ?? new Date().toISOString(),
+        timeframe: data.timeframe ?? fallbackTimeframe,
+        message: data.message,
+        analytics: {
+            cost_modeling: {
+                ...EMPTY_ANALYTICS.cost_modeling,
+                ...analytics.cost_modeling,
+                current_analysis: {
+                    ...EMPTY_ANALYTICS.cost_modeling.current_analysis,
+                    ...analytics.cost_modeling?.current_analysis
+                },
+                cost_optimization_opportunities: analytics.cost_modeling?.cost_optimization_opportunities ?? []
+            },
+            scaling_simulations: {
+                ...EMPTY_ANALYTICS.scaling_simulations,
+                ...analytics.scaling_simulations
+            },
+            performance_benchmarks: {
+                ...EMPTY_ANALYTICS.performance_benchmarks,
+                ...analytics.performance_benchmarks
+            },
+            multi_cloud_analysis: {
+                ...EMPTY_ANALYTICS.multi_cloud_analysis,
+                ...analytics.multi_cloud_analysis,
+                global_strategy: {
+                    ...EMPTY_ANALYTICS.multi_cloud_analysis.global_strategy,
+                    ...analytics.multi_cloud_analysis?.global_strategy
+                }
+            },
+            security_analytics: {
+                ...EMPTY_ANALYTICS.security_analytics,
+                ...analytics.security_analytics,
+                global_security: {
+                    ...EMPTY_ANALYTICS.security_analytics.global_security,
+                    ...analytics.security_analytics?.global_security
+                }
+            },
+            recommendation_trends: analytics.recommendation_trends ?? EMPTY_ANALYTICS.recommendation_trends
+        },
+        predictive_insights: data.predictive_insights ?? { ...EMPTY_PREDICTIVE_INSIGHTS },
+        optimization_opportunities: Array.isArray(data.optimization_opportunities)
+            ? data.optimization_opportunities
+            : []
+    };
+};
 
 export default function AnalyticsPage() {
     const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
@@ -70,18 +249,7 @@ export default function AnalyticsPage() {
     const [error, setError] = useState<string | null>(null);
     const [timeframe, setTimeframe] = useState('7d');
 
-    // Auto-refresh analytics data every 30 seconds
-    const { forceRefresh: refreshAnalytics, isStale, lastRefresh } = useFreshData('analytics', {
-        autoRefresh: true,
-        refreshInterval: 30000, // 30 seconds
-        dependencies: [timeframe],
-        onRefresh: () => {
-            console.log('🔄 Auto-refreshing analytics data...');
-            fetchAnalyticsData();
-        }
-    });
-
-    const fetchAnalyticsData = async () => {
+    const fetchAnalyticsData = useCallback(async () => {
         try {
             setLoading(true);
             setError(null);
@@ -108,40 +276,61 @@ export default function AnalyticsPage() {
                 hasMessage: !!data.message,
                 costModelingTotal: data.analytics?.cost_modeling?.current_analysis?.total_monthly_cost || 0
             });
-            
-            setAnalyticsData(data);
+
+            // DEBUG: Log cost optimization opportunities
+            console.log('💰 Cost Optimization Opportunities:',
+                data.analytics?.cost_modeling?.cost_optimization_opportunities || 'NONE');
+
+            const normalized = normalizeAnalyticsData(data, timeframe);
+
+            // DEBUG: Log normalized data
+            console.log('📦 Normalized cost opps:',
+                normalized.analytics?.cost_modeling?.cost_optimization_opportunities || 'NONE');
+
+            setAnalyticsData(normalized);
         } catch (err) {
             console.error('Failed to fetch analytics data:', err);
             setError(err instanceof Error ? err.message : 'Failed to load analytics data');
         } finally {
             setLoading(false);
         }
-    };
+    }, [timeframe]);
+
+    // Auto-refresh analytics data every 30 seconds
+    const { forceRefresh: refreshAnalytics, isStale, lastRefresh } = useFreshData('analytics', {
+        autoRefresh: true,
+        refreshInterval: 30000, // 30 seconds
+        dependencies: [timeframe],
+        onRefresh: () => {
+            console.log('🔄 Auto-refreshing analytics data...');
+            fetchAnalyticsData();
+        }
+    });
 
     // Effect to fetch data when timeframe changes
     useEffect(() => {
         console.log(`🔄 Analytics timeframe changed to: ${timeframe}`);
         fetchAnalyticsData();
-    }, [timeframe]);
+    }, [fetchAnalyticsData, timeframe]);
     
     // Listen for assessment completion events to refresh analytics
     useEffect(() => {
-        const handleAssessmentCompleted = (event: any) => {
+        const handleAssessmentCompleted = (event: CustomEvent<Record<string, unknown>>) => {
             console.log('Assessment completed, refreshing analytics:', event.detail);
-            // Refresh analytics data when an assessment is completed
             fetchAnalyticsData();
         };
         
         if (typeof window !== 'undefined') {
-            window.addEventListener('assessment-completed', handleAssessmentCompleted);
+            const listener: EventListener = (event) => handleAssessmentCompleted(event as CustomEvent<Record<string, unknown>>);
+            window.addEventListener('assessment-completed', listener);
             
             return () => {
-                window.removeEventListener('assessment-completed', handleAssessmentCompleted);
+                window.removeEventListener('assessment-completed', listener);
             };
         }
-    }, []);
+    }, [fetchAnalyticsData]);
 
-    const handleTimeframeChange = (event: any) => {
+    const handleTimeframeChange = (event: SelectChangeEvent<string>) => {
         setTimeframe(event.target.value);
     };
 
@@ -168,6 +357,19 @@ export default function AnalyticsPage() {
             default:
                 return 'info';
         }
+    };
+
+    const complianceStatus = analyticsData?.analytics.security_analytics.global_security.compliance_status;
+    const workloadDistribution = analyticsData?.analytics.multi_cloud_analysis.global_strategy.workload_distribution;
+    const parsePotentialSavings = (value?: number | string) => {
+        if (typeof value === 'number' && Number.isFinite(value)) {
+            return value;
+        }
+        if (typeof value === 'string') {
+            const numeric = Number(value.replace(/[^0-9.-]/g, ''));
+            return Number.isFinite(numeric) ? numeric : 0;
+        }
+        return 0;
     };
 
     if (loading) {
@@ -322,7 +524,7 @@ export default function AnalyticsPage() {
                                                         </AccordionSummary>
                                                         <AccordionDetails>
                                                             <List dense>
-                                                                {analyticsData.analytics.cost_modeling.cost_optimization_opportunities.map((opportunity: any, index: number) => (
+                                                                {analyticsData.analytics.cost_modeling.cost_optimization_opportunities.map((opportunity, index) => (
                                                                     <ListItem key={`cost-opp-${opportunity.opportunity?.replace(/\s+/g, '-') || index}`}>
                                                                         <ListItemText
                                                                             primary={opportunity.opportunity}
@@ -431,33 +633,67 @@ export default function AnalyticsPage() {
                                                     </Typography>
                                                 </Box>
 
-                                                {analyticsData.analytics.security_analytics.global_security.compliance_status && (
+                                                {complianceStatus && complianceStatus.note ? (
+                                                    <Accordion>
+                                                        <AccordionSummary expandIcon={<ExpandMore />}>
+                                                            <Typography variant="subtitle2">Compliance Status</Typography>
+                                                        </AccordionSummary>
+                                                        <AccordionDetails>
+                                                            <Alert severity="info">
+                                                                {complianceStatus.note}
+                                                            </Alert>
+                                                            {complianceStatus.available_frameworks && (
+                                                                <Box sx={{ mt: 2 }}>
+                                                                    <Typography variant="caption" display="block" gutterBottom>
+                                                                        Available Frameworks:
+                                                                    </Typography>
+                                                                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                                                                        {complianceStatus.available_frameworks.map((framework: string) => (
+                                                                            <Chip
+                                                                                key={framework}
+                                                                                label={framework}
+                                                                                size="small"
+                                                                                variant="outlined"
+                                                                            />
+                                                                        ))}
+                                                                    </Box>
+                                                                </Box>
+                                                            )}
+                                                        </AccordionDetails>
+                                                    </Accordion>
+                                                ) : complianceStatus && typeof complianceStatus === 'object' && !complianceStatus.note ? (
                                                     <Accordion>
                                                         <AccordionSummary expandIcon={<ExpandMore />}>
                                                             <Typography variant="subtitle2">Compliance Status</Typography>
                                                         </AccordionSummary>
                                                         <AccordionDetails>
                                                             <Grid container spacing={1}>
-                                                                {Object.entries(analyticsData.analytics.security_analytics.global_security.compliance_status).map(([standard, data]: [string, any]) => (
-                                                                    <Grid item xs={6} key={standard}>
-                                                                        <Box sx={{ textAlign: 'center', p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
-                                                                            <Typography variant="caption">{standard}</Typography>
-                                                                            <br />
-                                                                            <Chip 
-                                                                                label={data.status} 
-                                                                                size="small" 
-                                                                                color={getStatusColor(data.status)}
-                                                                                variant="outlined"
-                                                                            />
-                                                                            <br />
-                                                                            <Typography variant="caption">{data.score}%</Typography>
-                                                                        </Box>
-                                                                    </Grid>
-                                                                ))}
+                                                                {Object.entries(complianceStatus).map(([standard, data]: [string, any]) => {
+                                                                    // Only render if data has status property (legacy format)
+                                                                    if (data && typeof data === 'object' && data.status) {
+                                                                        return (
+                                                                            <Grid item xs={6} key={standard}>
+                                                                                <Box sx={{ textAlign: 'center', p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                                                                                    <Typography variant="caption">{standard}</Typography>
+                                                                                    <br />
+                                                                                    <Chip
+                                                                                        label={data.status}
+                                                                                        size="small"
+                                                                                        color={getStatusColor(data.status)}
+                                                                                        variant="outlined"
+                                                                                    />
+                                                                                    <br />
+                                                                                    <Typography variant="caption">{data.score}%</Typography>
+                                                                                </Box>
+                                                                            </Grid>
+                                                                        );
+                                                                    }
+                                                                    return null;
+                                                                })}
                                                             </Grid>
                                                         </AccordionDetails>
                                                     </Accordion>
-                                                )}
+                                                ) : null}
                                             </>
                                         ) : (
                                             <Alert severity="info">
@@ -491,22 +727,22 @@ export default function AnalyticsPage() {
                                                     </Typography>
                                                 </Box>
 
-                                                {analyticsData.analytics.multi_cloud_analysis.global_strategy.workload_distribution && (
+                                                {workloadDistribution && (
                                                     <Accordion>
                                                         <AccordionSummary expandIcon={<ExpandMore />}>
                                                             <Typography variant="subtitle2">Workload Distribution</Typography>
                                                         </AccordionSummary>
                                                         <AccordionDetails>
                                                             <Grid container spacing={2}>
-                                                                {Object.entries(analyticsData.analytics.multi_cloud_analysis.global_strategy.workload_distribution).map(([workloadType, distribution]: [string, any]) => (
+                                                                {Object.entries(workloadDistribution).map(([workloadType, distribution]) => (
                                                                     <Grid item xs={12} key={workloadType}>
                                                                         <Typography variant="subtitle2" sx={{ mb: 1 }}>
                                                                             {workloadType.replace(/_/g, ' ').toUpperCase()}
                                                                         </Typography>
                                                                         <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-                                                                            <Chip label={`AWS: ${distribution.aws_percentage}%`} size="small" />
-                                                                            <Chip label={`GCP: ${distribution.gcp_percentage}%`} size="small" />
-                                                                            <Chip label={`Azure: ${distribution.azure_percentage}%`} size="small" />
+                                                                            <Chip label={`AWS: ${distribution.aws_percentage ?? 0}%`} size="small" />
+                                                                            <Chip label={`GCP: ${distribution.gcp_percentage ?? 0}%`} size="small" />
+                                                                            <Chip label={`Azure: ${distribution.azure_percentage ?? 0}%`} size="small" />
                                                                         </Box>
                                                                         <Typography variant="body2" color="text.secondary">
                                                                             {distribution.strategy}
@@ -560,7 +796,7 @@ export default function AnalyticsPage() {
                                                             
                                                             <Box sx={{ mb: 2 }}>
                                                                 <Typography variant="h5" color="success.main">
-                                                                    {formatCurrency(opportunity.potential_savings)}
+                                                                    {formatCurrency(parsePotentialSavings(opportunity.potential_savings))}
                                                                 </Typography>
                                                                 <Typography variant="body2" color="text.secondary">
                                                                     {opportunity.savings_percentage}% potential savings

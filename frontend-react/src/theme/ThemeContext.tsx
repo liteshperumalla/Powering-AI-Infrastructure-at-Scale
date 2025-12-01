@@ -28,10 +28,11 @@ interface ThemeContextProviderProps {
 }
 
 export const ThemeContextProvider: React.FC<ThemeContextProviderProps> = ({ children }) => {
+  // Always start with 'light' to prevent hydration mismatch
   const [mode, setModeState] = useState<PaletteMode>('light');
   const [isHydrated, setIsHydrated] = useState(false);
 
-  // Initialize theme from localStorage or system preference
+  // Initialize theme from localStorage or system preference (client-side only)
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setIsHydrated(true);

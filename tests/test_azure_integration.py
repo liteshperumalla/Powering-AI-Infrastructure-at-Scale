@@ -5,6 +5,7 @@ Tests the Azure Retail Prices API, Compute, and SQL Database clients.
 Note: These tests work with real APIs and proper error handling.
 """
 
+import os
 import pytest
 import asyncio
 from unittest.mock import Mock, patch, AsyncMock
@@ -12,6 +13,12 @@ from datetime import datetime, timezone
 
 from src.infra_mind.cloud.azure import AzureClient, AzurePricingClient, AzureComputeClient, AzureSQLClient
 from src.infra_mind.cloud.base import CloudProvider, ServiceCategory, CloudService, CloudServiceResponse, CloudServiceError
+
+RUN_CLOUD_TESTS = os.getenv("RUN_CLOUD_INTEGRATION_TESTS") == "1"
+pytestmark = pytest.mark.skipif(
+    not RUN_CLOUD_TESTS,
+    reason="Azure integration tests require live credentials/network. Set RUN_CLOUD_INTEGRATION_TESTS=1 to enable.",
+)
 
 
 class TestAzurePricingClient:

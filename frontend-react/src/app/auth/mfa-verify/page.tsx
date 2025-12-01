@@ -15,6 +15,7 @@ import {
     Card,
     CardContent,
     Divider,
+    useTheme,
 } from '@mui/material';
 import { 
     Security, 
@@ -23,6 +24,7 @@ import {
     VpnKey,
     Login
 } from '@mui/icons-material';
+import NextLink from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense } from 'react';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
@@ -183,9 +185,9 @@ function MFAVerifyPageComponent() {
                                 alignItems: 'center',
                                 width: '100%',
                                 borderRadius: 3,
-                                background: 'rgba(255, 255, 255, 0.95)',
+                                background: theme.palette.mode === 'dark' ? 'rgba(30, 30, 30, 0.95)' : 'rgba(255, 255, 255, 0.95)',
                                 backdropFilter: 'blur(10px)',
-                                border: '1px solid rgba(255, 255, 255, 0.3)',
+                                border: theme.palette.mode === 'dark' ? '1px solid rgba(255, 255, 255, 0.1)' : '1px solid rgba(255, 255, 255, 0.3)',
                                 boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)',
                             }}
                         >
@@ -429,10 +431,9 @@ function MFAVerifyPageComponent() {
 
                             <Box textAlign="center">
                                 <Link
-                                    component="button"
+                                    component={NextLink}
+                                    href="/auth/login"
                                     variant="body2"
-                                    onClick={() => router.push('/auth/login')}
-                                    type="button"
                                     sx={{
                                         fontWeight: 500,
                                         color: 'text.secondary',
@@ -461,6 +462,7 @@ function MFAVerifyPageComponent() {
 }
 
 export default function MFAVerifyPage() {
+    const theme = useTheme();
     return (
         <Suspense fallback={<div>Loading...</div>}>
             <MFAVerifyPageComponent />

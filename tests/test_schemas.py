@@ -135,6 +135,7 @@ class TestBusinessSchemas:
     def test_complete_business_requirements(self):
         """Test creating complete business requirements."""
         business_req = BusinessRequirements(
+            company_name="Test Company",
             company_size=CompanySize.MEDIUM,
             industry=Industry.TECHNOLOGY,
             business_goals=[
@@ -170,6 +171,7 @@ class TestBusinessSchemas:
         # Missing business goals should fail
         with pytest.raises(ValidationError):
             BusinessRequirements(
+                company_name="Test Company",
                 company_size=CompanySize.MEDIUM,
                 industry=Industry.TECHNOLOGY,
                 business_goals=[],  # Empty list
@@ -318,6 +320,7 @@ class TestAssessmentSchemas:
             title="E-commerce Platform Assessment",
             description="Infrastructure assessment for scaling e-commerce platform",
             business_requirements=BusinessRequirements(
+                company_name="Test Company",
                 company_size=CompanySize.MEDIUM,
                 industry=Industry.RETAIL,
                 business_goals=[
@@ -371,6 +374,7 @@ class TestAssessmentSchemas:
             AssessmentCreate(
                 title="Hi",  # Too short
                 business_requirements=BusinessRequirements(
+                    company_name="Test Company",
                     company_size=CompanySize.SMALL,
                     industry=Industry.TECHNOLOGY,
                     business_goals=[BusinessGoal(goal="Test goal")],
@@ -444,6 +448,7 @@ class TestBaseSchemas:
         # Invalid enum values should fail validation
         with pytest.raises(ValidationError):
             BusinessRequirements(
+                company_name="Test Company",
                 company_size="invalid_size",  # Not a valid CompanySize
                 industry=Industry.TECHNOLOGY,
                 business_goals=[BusinessGoal(goal="Test")],

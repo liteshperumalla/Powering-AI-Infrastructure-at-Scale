@@ -14,6 +14,7 @@ import {
     IconButton,
     Divider,
     Stack,
+    useTheme,
 } from '@mui/material';
 import {
     Visibility,
@@ -24,12 +25,14 @@ import {
 } from '@mui/icons-material';
 import { GoogleLogin } from '@react-oauth/google';
 // Apple Sign-In will be implemented with native Apple JS SDK
+import NextLink from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { login, clearError, googleLogin } from '@/store/slices/authSlice';
 import ResponsiveLayout from '@/components/ResponsiveLayout';
 
 export default function LoginPage() {
+    const theme = useTheme();
     const router = useRouter();
     const dispatch = useAppDispatch();
     const { loading, error, isAuthenticated } = useAppSelector(state => state.auth);
@@ -223,9 +226,13 @@ export default function LoginPage() {
                                 alignItems: 'center',
                                 width: '100%',
                                 borderRadius: 3,
-                                background: 'rgba(255, 255, 255, 0.95)',
+                                background: theme.palette.mode === 'dark'
+                                    ? 'rgba(30, 30, 30, 0.95)'
+                                    : 'rgba(255, 255, 255, 0.95)',
                                 backdropFilter: 'blur(10px)',
-                                border: '1px solid rgba(255, 255, 255, 0.3)',
+                                border: theme.palette.mode === 'dark'
+                                    ? '1px solid rgba(255, 255, 255, 0.1)'
+                                    : '1px solid rgba(255, 255, 255, 0.3)',
                                 boxShadow: '0 20px 40px rgba(0, 0, 0, 0.1)',
                                 transition: 'all 0.3s ease-in-out',
                                 '&:hover': {
@@ -318,17 +325,53 @@ export default function LoginPage() {
                                         mb: 2,
                                         '& .MuiOutlinedInput-root': {
                                             borderRadius: 2,
-                                            backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                                            backgroundColor: theme.palette.mode === 'dark'
+                                                ? 'rgba(255, 255, 255, 0.05)'
+                                                : 'rgba(255, 255, 255, 0.8)',
+                                            '& fieldset': {
+                                                borderColor: 'transparent',
+                                            },
                                             '&:hover': {
-                                                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                                backgroundColor: theme.palette.mode === 'dark'
+                                                    ? 'rgba(255, 255, 255, 0.1)'
+                                                    : 'rgba(255, 255, 255, 0.9)',
+                                                '& fieldset': {
+                                                    borderColor: 'transparent',
+                                                },
                                             },
                                             '&.Mui-focused': {
-                                                backgroundColor: 'rgba(255, 255, 255, 1)',
+                                                backgroundColor: theme.palette.mode === 'dark'
+                                                    ? 'rgba(255, 255, 255, 0.15)'
+                                                    : 'rgba(255, 255, 255, 1)',
                                                 boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
+                                                '& fieldset': {
+                                                    borderColor: 'transparent',
+                                                },
                                             }
                                         },
                                         '& .MuiInputLabel-root': {
                                             fontWeight: 500,
+                                            '&.MuiInputLabel-shrink': {
+                                                transform: 'translate(14px, -8px) scale(0.9)',
+                                                backgroundColor: theme.palette.mode === 'dark'
+                                                    ? 'rgba(15, 15, 15, 0.95)'
+                                                    : 'rgba(255, 255, 255, 0.95)',
+                                                borderRadius: '999px',
+                                                px: 1,
+                                            }
+                                        }
+                                    }}
+                                    InputLabelProps={{
+                                        shrink: true,
+                                        sx: {
+                                            fontWeight: 600,
+                                            color: 'text.secondary',
+                                            transform: 'translate(14px, -8px) scale(0.9)',
+                                            backgroundColor: theme.palette.mode === 'dark'
+                                                ? 'rgba(15, 15, 15, 0.95)'
+                                                : 'rgba(255, 255, 255, 0.95)',
+                                            px: 1,
+                                            borderRadius: '999px',
                                         }
                                     }}
                                     InputProps={{
@@ -356,17 +399,49 @@ export default function LoginPage() {
                                         mb: 3,
                                         '& .MuiOutlinedInput-root': {
                                             borderRadius: 2,
-                                            backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                                            backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(255, 255, 255, 0.8)',
+                                            '& fieldset': {
+                                                borderColor: 'transparent',
+                                            },
                                             '&:hover': {
-                                                backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                                                backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.1)' : 'rgba(255, 255, 255, 0.9)',
+                                                '& fieldset': {
+                                                    borderColor: 'transparent',
+                                                },
                                             },
                                             '&.Mui-focused': {
-                                                backgroundColor: 'rgba(255, 255, 255, 1)',
+                                                backgroundColor: theme.palette.mode === 'dark'
+                                                    ? 'rgba(255, 255, 255, 0.15)'
+                                                    : 'rgba(255, 255, 255, 1)',
                                                 boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
+                                                '& fieldset': {
+                                                    borderColor: 'transparent',
+                                                },
                                             }
                                         },
                                         '& .MuiInputLabel-root': {
                                             fontWeight: 500,
+                                            '&.MuiInputLabel-shrink': {
+                                                transform: 'translate(14px, -8px) scale(0.9)',
+                                                backgroundColor: theme.palette.mode === 'dark'
+                                                    ? 'rgba(15, 15, 15, 0.95)'
+                                                    : 'rgba(255, 255, 255, 0.95)',
+                                                borderRadius: '999px',
+                                                px: 1,
+                                            }
+                                        }
+                                    }}
+                                    InputLabelProps={{
+                                        shrink: true,
+                                        sx: {
+                                            fontWeight: 600,
+                                            color: 'text.secondary',
+                                            transform: 'translate(14px, -8px) scale(0.9)',
+                                            backgroundColor: theme.palette.mode === 'dark'
+                                                ? 'rgba(15, 15, 15, 0.95)'
+                                                : 'rgba(255, 255, 255, 0.95)',
+                                            px: 1,
+                                            borderRadius: '999px',
                                         }
                                     }}
                                     InputProps={{
@@ -467,10 +542,9 @@ export default function LoginPage() {
                                 
                                 <Box textAlign="center" sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                                     <Link
-                                        component="button"
+                                        component={NextLink}
+                                        href="/auth/forgot-password"
                                         variant="body2"
-                                        onClick={() => router.push('/auth/forgot-password')}
-                                        type="button"
                                         sx={{
                                             fontWeight: 500,
                                             color: 'text.secondary',
@@ -486,10 +560,9 @@ export default function LoginPage() {
                                     </Link>
                                     
                                     <Link
-                                        component="button"
+                                        component={NextLink}
+                                        href="/auth/register"
                                         variant="body2"
-                                        onClick={() => router.push('/auth/register')}
-                                        type="button"
                                         sx={{
                                             fontWeight: 500,
                                             color: 'text.secondary',

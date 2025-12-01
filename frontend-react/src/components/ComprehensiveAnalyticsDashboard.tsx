@@ -25,6 +25,7 @@ import {
     Paper,
     Tabs,
     Tab,
+    CircularProgress,
 } from '@mui/material';
 import {
     TrendingUp,

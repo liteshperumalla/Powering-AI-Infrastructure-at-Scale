@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { safeToFixed, formatDuration } from '../utils/numberUtils';
-import { useApiData } from '../hooks/useOptimizedApi';
+import { useApiDataFixed as useApiData } from '../hooks/useApiDataFixed';
 import { SkeletonDashboard } from './skeletons/SkeletonCard';
 import {
     Box,

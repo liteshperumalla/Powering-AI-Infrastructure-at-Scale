@@ -78,7 +78,7 @@ __all__ = [
 DOCUMENT_MODELS = [
     Assessment,
     Recommendation,
-    ServiceRecommendation,
+    # ServiceRecommendation is now a BaseModel (embedded), not a Document
     User,
     Report,
     ReportSection,

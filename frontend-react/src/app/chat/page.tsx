@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import {
     Box,
     Container,
@@ -25,6 +27,8 @@ import {
     Rating,
     Drawer,
     Tooltip,
+    Stack,
+    useTheme,
 } from '@mui/material';
 import {
     Send as SendIcon,
@@ -41,6 +45,9 @@ import {
     MoreVert as MoreVertIcon,
     Close as CloseIcon,
     Menu as MenuIcon,
+    Timeline as TimelineIcon,
+    Security as SecurityIcon,
+    Bolt as BoltIcon,
 } from '@mui/icons-material';
 import { formatDistanceToNow } from 'date-fns';
 import ResponsiveLayout from '@/components/ResponsiveLayout';
@@ -86,7 +93,29 @@ const CONVERSATION_CONTEXTS = [
     { value: 'decision_making', label: 'Decision Making', icon: '' },
 ];
 
+const ASSISTANT_HIGHLIGHTS = [
+    {
+        title: 'Context-Aware Intelligence',
+        description: 'Understands your ongoing assessments, infrastructure drafts, and chat history to craft responses that stay on-topic.',
+        icon: TimelineIcon,
+        color: '#67a4ff'
+    },
+    {
+        title: 'Secure Architectural Insight',
+        description: 'Blends platform knowledge with best practices to suggest compliant architectures across AWS, Azure, GCP, and hybrid stacks.',
+        icon: SecurityIcon,
+        color: '#7f9cf5'
+    },
+    {
+        title: 'Actionable Playbooks',
+        description: 'Generates step-by-step plans for modernization, optimization, and incident response that you can apply immediately.',
+        icon: BoltIcon,
+        color: '#b794f4'
+    }
+];
+
 export default function ChatPage() {
+    const theme = useTheme();
     const { user, isAuthenticated, loading: authLoading } = useAppSelector(state => state.auth);
 
     // State management
@@ -226,7 +255,7 @@ export default function ChatPage() {
             setAvailableReports([]);
             return;
         }
-        
+
         try {
             setLoadingReports(true);
             const reports = await apiClient.getReports(assessmentId);
@@ -238,6 +267,25 @@ export default function ChatPage() {
             setLoadingReports(false);
         }
     };
+
+    // Load all reports when Report Analysis context is selected
+    useEffect(() => {
+        const loadAllReports = async () => {
+            if (selectedContext === 'report_analysis' && isUserLoggedInForced && newChatDialog) {
+                try {
+                    setLoadingReports(true);
+                    const reports = await apiClient.getReports(); // No assessmentId = get all reports
+                    setAvailableReports(reports || []);
+                } catch (error) {
+                    console.error('Failed to load all reports:', error);
+                    setAvailableReports([]);
+                } finally {
+                    setLoadingReports(false);
+                }
+            }
+        };
+        loadAllReports();
+    }, [selectedContext, isUserLoggedInForced, newChatDialog]);
     
     // Auto-focus message input
     useEffect(() => {
@@ -615,13 +663,13 @@ export default function ChatPage() {
         return contextConfig?.label || context;
     };
     
-    const renderMessage = (message: ChatMessage) => {
+    const renderMessage = (message: ChatMessage, index?: number) => {
         const isUser = message.role === 'user';
         const isSystem = message.role === 'system';
         
         return (
             <Box
-                key={message.id}
+                key={message.id || `${message.role}-${index ?? 0}-${message.timestamp}`}
                 sx={{
                     display: 'flex',
                     flexDirection: isUser ? 'row-reverse' : 'row',
@@ -649,15 +697,64 @@ export default function ChatPage() {
                         color: isUser ? 'primary.contrastText' : 'text.primary'
                     }}
                 >
-                    <Typography
-                        variant="body1"
-                        sx={{ 
-                            whiteSpace: 'pre-wrap',
-                            wordBreak: 'break-word'
+                    <Box
+                        sx={{
+                            '& p': { margin: 0, marginBottom: 1 },
+                            '& h1, & h2, & h3, & h4, & h5, & h6': {
+                                marginTop: 2,
+                                marginBottom: 1,
+                                fontWeight: 600
+                            },
+                            '& ul, & ol': {
+                                marginLeft: 2,
+                                marginBottom: 1
+                            },
+                            '& code': {
+                                bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                                padding: '2px 6px',
+                                borderRadius: '4px',
+                                fontFamily: 'monospace'
+                            },
+                            '& pre': {
+                                bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                                padding: 2,
+                                borderRadius: 1,
+                                overflow: 'auto',
+                                marginBottom: 1
+                            },
+                            '& pre code': {
+                                bgcolor: 'transparent',
+                                padding: 0
+                            },
+                            '& blockquote': {
+                                borderLeft: '4px solid',
+                                borderColor: 'primary.main',
+                                paddingLeft: 2,
+                                marginLeft: 0,
+                                marginBottom: 1,
+                                fontStyle: 'italic'
+                            },
+                            '& table': {
+                                borderCollapse: 'collapse',
+                                width: '100%',
+                                marginBottom: 1
+                            },
+                            '& th, & td': {
+                                border: '1px solid',
+                                borderColor: (theme) => theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                                padding: 1,
+                                textAlign: 'left'
+                            },
+                            '& th': {
+                                bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.800' : 'grey.100',
+                                fontWeight: 600
+                            }
                         }}
                     >
-                        {message.content}
-                    </Typography>
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {message.content}
+                        </ReactMarkdown>
+                    </Box>
                     
                     <Typography
                         variant="caption"
@@ -789,17 +886,34 @@ export default function ChatPage() {
     return (
         <ProtectedRoute requireAuth={false}>
             <ResponsiveLayout title="AI Assistant">
-                <Box sx={{
-                    display: 'flex',
-                    height: 'calc(100vh - 140px)',
-                    position: 'relative',
-                    mt: 1,
-                    borderRadius: 2,
-                    overflow: 'hidden',
-                    bgcolor: 'background.paper',
-                    boxShadow: 1,
-                    zIndex: 1
-                }}>
+                <Box
+                    sx={{
+                        position: 'relative',
+                        display: 'flex',
+                        height: 'calc(100vh - 140px)',
+                        mt: 1,
+                        borderRadius: 3,
+                        overflow: 'hidden',
+                        boxShadow: theme => theme.shadows[6],
+                        background: theme.palette.mode === 'dark'
+                            ? 'linear-gradient(135deg, rgba(15,23,41,0.95) 0%, rgba(25,33,56,0.95) 35%, rgba(45,28,64,0.95) 100%)'
+                            : 'linear-gradient(135deg, #f4f7fb 0%, #ffffff 60%)',
+                        '&::before': {
+                            content: '""',
+                            position: 'absolute',
+                            inset: 0,
+                            background: theme.palette.mode === 'dark'
+                                ? 'radial-gradient(circle at 20% 20%, rgba(103,126,234,0.2), transparent 40%), radial-gradient(circle at 80% 0%, rgba(118,75,162,0.15), transparent 45%)'
+                                : 'radial-gradient(circle at 20% 20%, rgba(103,126,234,0.12), transparent 40%)',
+                            pointerEvents: 'none',
+                            zIndex: 0
+                        },
+                        '& > *': {
+                            position: 'relative',
+                            zIndex: 1
+                        }
+                    }}
+                >
                     {/* Sidebar Drawer */}
                     <Drawer
                         variant="persistent"
@@ -964,7 +1078,7 @@ export default function ChatPage() {
                                 flexGrow: 1,
                                 overflow: 'auto',
                                 p: 2,
-                                bgcolor: 'grey.50'
+                                bgcolor: theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50'
                             }}
                         >
                             {error && (
@@ -985,128 +1099,197 @@ export default function ChatPage() {
                                         flexDirection: 'column',
                                         alignItems: 'center',
                                         justifyContent: 'center',
-                                        height: '100%',
+                                        minHeight: '100%',
+                                        p: { xs: 3, md: 5 },
                                         textAlign: 'center',
-                                        p: 4,
+                                        gap: 4,
                                     }}
                                 >
-                                    {/* Modern Avatar with Gradient */}
-                                    <Avatar
+                                    <Paper
+                                        elevation={0}
                                         sx={{
-                                            width: 100,
-                                            height: 100,
-                                            mb: 3,
-                                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                                            boxShadow: '0 8px 32px rgba(102, 126, 234, 0.3)',
+                                            maxWidth: 900,
+                                            width: '100%',
+                                            borderRadius: 4,
+                                            px: { xs: 4, md: 6 },
+                                            py: { xs: 4, md: 6 },
+                                            background: theme.palette.mode === 'dark'
+                                                ? 'linear-gradient(145deg, rgba(39,47,73,0.95) 0%, rgba(21,24,40,0.95) 100%)'
+                                                : 'linear-gradient(145deg, #f7f9fd 0%, #ffffff 100%)',
+                                            boxShadow: theme.palette.mode === 'dark'
+                                                ? '0 30px 80px rgba(7, 10, 24, 0.65)'
+                                                : '0 30px 80px rgba(15, 23, 43, 0.12)',
+                                            border: theme.palette.mode === 'dark'
+                                                ? '1px solid rgba(255,255,255,0.1)'
+                                                : '1px solid rgba(15,23,42,0.05)'
                                         }}
                                     >
-                                        <AIIcon sx={{ fontSize: 48 }} />
-                                    </Avatar>
-
-                                    <Typography 
-                                        variant="h3" color="text.primary" 
-                                        gutterBottom 
-                                        sx={{ 
-                                            fontWeight: 700,
-                                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                                            backgroundClip: 'text',
-                                            WebkitBackgroundClip: 'text',
-                                            WebkitTextFillColor: 'transparent',
-                                            mb: 2,
-                                        }}
-                                    >
-                                        AI Infrastructure Assistant
-                                    </Typography>
-                                    
-                                    <Typography variant="h6" color="text.secondary" sx={{ mb: 4, maxWidth: 600, fontWeight: 400 }}>
-                                        {isAuthenticated 
-                                            ? "I'm here to help you with infrastructure planning, assessments, reports, technical questions, and decision-making. Start a conversation to begin!"
-                                            : "Ask me anything about cloud infrastructure, DevOps, Kubernetes, AWS, Azure, GCP, Alibaba Cloud, IBM Cloud, and more!"
-                                        }
-                                    </Typography>
-                                    
-                                    {/* Quick Action Chips */}
-                                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', justifyContent: 'center', mb: 4 }}>
-                                        {['AWS Architecture', 'Kubernetes Deployment', 'Cost Optimization', 'Security Best Practices', 'CI/CD Pipeline'].map((topic) => (
-                                            <Chip
-                                                key={topic}
-                                                label={topic}
-                                                variant="outlined"
-                                                color="primary"
-                                                onClick={() => setNewMessage(`Tell me about ${topic}`)}
-                                                sx={{ 
-                                                    cursor: 'pointer',
-                                                    '&:hover': { bgcolor: 'primary.light' }
-                                                }}
-                                            />
-                                        ))}
-                                    </Box>
-
-                                    <Box sx={{ display: 'flex', gap: 2, flexDirection: { xs: 'column', sm: 'row' } }}>
-                                        {/* Show Continue Chat button if user has conversations */}
-                                        {isUserLoggedInForced && conversations.length > 0 && (
-                                            <Button
-                                                variant="outlined"
-                                                size="large"
-                                                startIcon={<HistoryIcon />}
-                                                onClick={() => loadConversation(conversations[0].id)}
-                                                sx={{
-                                                    borderRadius: 3,
-                                                    px: 4,
-                                                    py: 1.5,
-                                                    fontSize: '1.1rem',
-                                                    textTransform: 'none',
-                                                    fontWeight: 600,
-                                                    borderColor: 'primary.main',
-                                                    color: 'primary.main',
-                                                    '&:hover': {
-                                                        bgcolor: 'primary.light',
-                                                        borderColor: 'primary.dark',
-                                                    }
-                                                }}
-                                            >
-                                                Continue Last Chat
-                                            </Button>
-                                        )}
-
-                                        {/* Always show "Start Chat" button - different behavior based on auth */}
-                                        <Button
-                                            variant="contained"
-                                            size="large"
-                                            startIcon={<AddIcon />}
-                                            onClick={() => {
-                                                if (isUserLoggedInForced) {
-                                                    setNewChatDialog(true);
-                                                } else {
-                                                    // For non-authenticated users, just start typing
-                                                    if (textFieldRef.current) {
-                                                        textFieldRef.current.focus();
-                                                    }
-                                                }
-                                            }}
+                                        <Avatar
                                             sx={{
-                                                borderRadius: 3,
-                                                px: 4,
-                                                py: 1.5,
-                                                fontSize: '1.1rem',
-                                                textTransform: 'none',
-                                                fontWeight: 600,
-                                                boxShadow: '0 4px 20px rgba(102, 126, 234, 0.3)',
+                                                width: 96,
+                                                height: 96,
+                                                mb: 3,
+                                                mx: 'auto',
+                                                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                                                boxShadow: '0 20px 45px rgba(102, 126, 234, 0.35)',
                                             }}
                                         >
-                                            {isUserLoggedInForced ? 'Start New Conversation' : 'Start Chatting'}
-                                        </Button>
-                                    </Box>
-                                    
-                                    {!isUserLoggedInForced && (
-                                        <Typography variant="body2" color="text.secondary" sx={{ mt: 2, opacity: 0.8 }}>
-                                            Tip: Simple chat mode - just type your question and press Enter
+                                            <AIIcon sx={{ fontSize: 48 }} />
+                                        </Avatar>
+
+                                        <Typography
+                                            variant="h3"
+                                            gutterBottom
+                                            sx={{
+                                                fontWeight: 800,
+                                                background: 'linear-gradient(135deg, #8da2fb 0%, #d6bcfa 100%)',
+                                                backgroundClip: 'text',
+                                                WebkitBackgroundClip: 'text',
+                                                WebkitTextFillColor: 'transparent',
+                                                letterSpacing: -0.5,
+                                            }}
+                                        >
+                                            AI Infrastructure Assistant
                                         </Typography>
-                                    )}
+
+                                        <Typography variant="h6" color="text.secondary" sx={{ mb: 4, maxWidth: 660, mx: 'auto' }}>
+                                            {isAuthenticated
+                                                ? "Bring your toughest infrastructure questions. I’ll analyze your context, assessments, and data to provide expert-level recommendations in seconds."
+                                                : "Explore architecture strategy, DevOps automation, cost optimization, compliance, and more. Sign in to unlock advanced, context-aware conversations."}
+                                        </Typography>
+
+                                        <Stack
+                                            direction="row"
+                                            spacing={1}
+                                            useFlexGap
+                                            flexWrap="wrap"
+                                            justifyContent="center"
+                                            sx={{ mb: 4 }}
+                                        >
+                                            {['AWS Architecture', 'Kubernetes Deployment', 'Cost Optimization', 'Security Best Practices', 'CI/CD Pipeline'].map((topic) => (
+                                                <Chip
+                                                    key={topic}
+                                                    label={topic}
+                                                    variant="outlined"
+                                                    color="primary"
+                                                    onClick={() => setNewMessage(`Tell me about ${topic}`)}
+                                                    sx={{
+                                                        borderRadius: 999,
+                                                        borderColor: 'primary.main',
+                                                        bgcolor: theme.palette.mode === 'dark' ? 'rgba(103,126,234,0.08)' : 'rgba(103,126,234,0.12)',
+                                                        '&:hover': {
+                                                            bgcolor: 'primary.light',
+                                                            color: 'primary.contrastText'
+                                                        }
+                                                    }}
+                                                />
+                                            ))}
+                                        </Stack>
+
+                                        <Stack
+                                            direction={{ xs: 'column', sm: 'row' }}
+                                            spacing={2}
+                                            justifyContent="center"
+                                        >
+                                            {isUserLoggedInForced && conversations.length > 0 && (
+                                                <Button
+                                                    variant="outlined"
+                                                    size="large"
+                                                    startIcon={<HistoryIcon />}
+                                                    onClick={() => loadConversation(conversations[0].id)}
+                                                    sx={{
+                                                        borderRadius: 999,
+                                                        px: 4,
+                                                        py: 1.5,
+                                                        fontSize: '1rem',
+                                                        textTransform: 'none',
+                                                        fontWeight: 600,
+                                                        borderColor: 'primary.light',
+                                                        color: 'primary.light',
+                                                        '&:hover': {
+                                                            borderColor: 'primary.main',
+                                                            bgcolor: theme.palette.mode === 'dark' ? 'rgba(103,126,234,0.15)' : 'rgba(103,126,234,0.18)',
+                                                        }
+                                                    }}
+                                                >
+                                                    Continue Last Chat
+                                                </Button>
+                                            )}
+
+                                            <Button
+                                                variant="contained"
+                                                size="large"
+                                                startIcon={<AddIcon />}
+                                                onClick={() => {
+                                                    if (isUserLoggedInForced) {
+                                                        setNewChatDialog(true);
+                                                    } else {
+                                                        if (textFieldRef.current) {
+                                                            textFieldRef.current.focus();
+                                                        }
+                                                    }
+                                                }}
+                                                sx={{
+                                                    borderRadius: 999,
+                                                    px: 4,
+                                                    py: 1.5,
+                                                    fontSize: '1rem',
+                                                    textTransform: 'none',
+                                                    fontWeight: 600,
+                                                    boxShadow: '0 15px 45px rgba(102, 126, 234, 0.35)',
+                                                }}
+                                            >
+                                                {isUserLoggedInForced ? 'Start New Conversation' : 'Start Chatting'}
+                                            </Button>
+                                        </Stack>
+                                    </Paper>
+
+                                    <Stack
+                                        direction={{ xs: 'column', md: 'row' }}
+                                        spacing={2}
+                                        sx={{ width: '100%', maxWidth: 960 }}
+                                    >
+                                        {ASSISTANT_HIGHLIGHTS.map(({ title, description, icon: HighlightIcon, color }) => (
+                                            <Paper
+                                                key={title}
+                                                elevation={0}
+                                                sx={{
+                                                    flex: 1,
+                                                    p: 3,
+                                                    borderRadius: 3,
+                                                    bgcolor: theme.palette.mode === 'dark'
+                                                        ? 'rgba(18, 22, 35, 0.9)'
+                                                        : 'rgba(255,255,255,0.92)',
+                                                    border: theme.palette.mode === 'dark'
+                                                        ? '1px solid rgba(255,255,255,0.06)'
+                                                        : '1px solid rgba(15,23,42,0.06)'
+                                                }}
+                                            >
+                                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 2 }}>
+                                                    <Avatar
+                                                        sx={{
+                                                            bgcolor: color,
+                                                            width: 44,
+                                                            height: 44,
+                                                            boxShadow: '0 12px 24px rgba(0,0,0,0.2)'
+                                                        }}
+                                                    >
+                                                        <HighlightIcon sx={{ color: '#fff' }} />
+                                                    </Avatar>
+                                                    <Typography variant="subtitle1" fontWeight={600}>
+                                                        {title}
+                                                    </Typography>
+                                                </Box>
+                                                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'left' }}>
+                                                    {description}
+                                                </Typography>
+                                            </Paper>
+                                        ))}
+                                    </Stack>
                                 </Box>
                             ) : (
                                 <>
-                                    {messages.map(renderMessage)}
+                                    {messages.map((message, index) => renderMessage(message, index))}
                                     <div ref={messagesEndRef} />
                                 </>
                             )}

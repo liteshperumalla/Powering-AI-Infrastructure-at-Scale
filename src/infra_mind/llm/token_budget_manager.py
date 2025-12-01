@@ -5,13 +5,24 @@ Manages token budgets, truncation strategies, and context window optimization
 for different LLM models with varying context limits.
 """
 
-import tiktoken
+try:
+    import tiktoken  # type: ignore
+except Exception:  # pragma: no cover - optional dependency
+    tiktoken = None
 from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass
 from enum import Enum
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class _FallbackEncoder:
+    """Simple encoder used when tiktoken isn't available/offline."""
+
+    def encode(self, text: str) -> List[int]:
+        approx_tokens = max(1, len(text) // 4)
+        return list(range(approx_tokens))
 
 
 class TruncationStrategy(Enum):
@@ -148,20 +159,22 @@ class TokenBudgetManager:
 
     def _get_encoder(self, model_name: str):
         """Get tiktoken encoder for model."""
+        if tiktoken is None:
+            logger.warning("tiktoken not available; using fallback encoder")
+            return _FallbackEncoder()
+
         try:
-            # Try model-specific encoding
-            if "gpt-4" in model_name.lower():
+            normalized = model_name.lower()
+            if "gpt-4" in normalized:
                 return tiktoken.encoding_for_model("gpt-4")
-            elif "gpt-3.5" in model_name.lower():
+            if "gpt-3.5" in normalized:
                 return tiktoken.encoding_for_model("gpt-3.5-turbo")
-            elif "claude" in model_name.lower():
-                # Claude uses similar tokenization to GPT-4
+            if "claude" in normalized:
                 return tiktoken.encoding_for_model("gpt-4")
-            else:
-                return tiktoken.get_encoding("cl100k_base")
+            return tiktoken.get_encoding("cl100k_base")
         except Exception as e:
             logger.warning(f"Failed to get encoder for {model_name}: {e}")
-            return tiktoken.get_encoding("cl100k_base")
+            return _FallbackEncoder()
 
     def count_tokens(self, text: str) -> int:
         """

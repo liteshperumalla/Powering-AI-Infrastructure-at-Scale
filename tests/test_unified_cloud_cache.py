@@ -496,6 +496,7 @@ class TestCacheWarmingService:
         
         # Start service with short interval for testing
         await warming_service.start_warming_service(cycle_interval_minutes=1)
+        await asyncio.sleep(0.05)
         
         # Verify service is running
         assert warming_service.is_running is True

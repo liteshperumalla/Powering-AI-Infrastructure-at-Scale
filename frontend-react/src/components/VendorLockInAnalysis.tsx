@@ -528,20 +528,39 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
       </Box>
       
       <Grid container spacing={3}>
-        {Array.isArray(migrationScenarios) && migrationScenarios.length > 0 ? migrationScenarios.map((scenario) => (
-          <Grid item xs={12} lg={6} key={scenario.id}>
+        {Array.isArray(migrationScenarios) && migrationScenarios.length > 0 ? migrationScenarios.map((scenario) => {
+          const timeline = scenario?.timeline || {
+            planning_phase: 'N/A',
+            execution_phase: 'N/A',
+            validation_phase: 'N/A',
+            total_duration: 'N/A',
+          };
+          const targetProviders = Array.isArray(scenario?.target_providers)
+            ? scenario.target_providers
+                .map((provider) => typeof provider === 'string' ? provider : String(provider || ''))
+                .filter(Boolean)
+                .join(', ')
+            : 'Not specified';
+          const scenarioName = scenario?.scenario_name || 'Migration Scenario';
+          const scenarioType = scenario?.scenario_type || 'General';
+          const benefits = Array.isArray(scenario?.benefits) ? scenario.benefits : [];
+          const costAnalysis = scenario?.cost_analysis || {};
+          const riskAssessment = scenario?.risk_assessment || {};
+
+          return (
+          <Grid item xs={12} lg={6} key={scenario?.id || scenarioName}>
             <Card>
               <CardContent>
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                  <Typography variant="h6" color="text.primary">{scenario.scenario_name}</Typography>
+                  <Typography variant="h6" color="text.primary">{scenarioName}</Typography>
                   <Chip
-                    label={scenario.scenario_type}
+                    label={scenarioType}
                     variant="outlined"
                   />
                 </Box>
                 
                 <Typography variant="body2" color="text.secondary" mb={2}>
-                  Target Providers: {scenario.target_providers.join(', ')}
+                  Target Providers: {targetProviders}
                 </Typography>
                 
                 {/* Timeline */}
@@ -549,17 +568,17 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
                   <Typography variant="subtitle2" mb={1}>Timeline</Typography>
                   <Stepper orientation="horizontal" activeStep={-1}>
                     <Step>
-                      <StepLabel>Planning ({scenario.timeline.planning_phase})</StepLabel>
+                      <StepLabel>Planning ({timeline.planning_phase})</StepLabel>
                     </Step>
                     <Step>
-                      <StepLabel>Execution ({scenario.timeline.execution_phase})</StepLabel>
+                      <StepLabel>Execution ({timeline.execution_phase})</StepLabel>
                     </Step>
                     <Step>
-                      <StepLabel>Validation ({scenario.timeline.validation_phase})</StepLabel>
+                      <StepLabel>Validation ({timeline.validation_phase})</StepLabel>
                     </Step>
                   </Stepper>
                   <Typography variant="body2" color="primary" sx={{ mt: 1 }}>
-                    Total Duration: {scenario.timeline.total_duration}
+                    Total Duration: {timeline.total_duration}
                   </Typography>
                 </Box>
                 
@@ -570,7 +589,7 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
                       Migration Cost
                     </Typography>
                     <Typography variant="h6" color="warning.main">
-                      ${scenario.cost_analysis?.migration_costs?.toLocaleString() || '0'}
+                      ${costAnalysis.migration_costs ? costAnalysis.migration_costs.toLocaleString() : '0'}
                     </Typography>
                   </Grid>
                   <Grid item xs={6}>
@@ -578,21 +597,21 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
                       Break Even
                     </Typography>
                     <Typography variant="h6" color="success.main">
-                      {scenario.cost_analysis?.break_even_point || 'N/A'}
+                      {costAnalysis.break_even_point || 'N/A'}
                     </Typography>
                   </Grid>
                 </Grid>
                 
                 {/* Risk Assessment */}
                 <Box mb={2}>
-                  <Typography variant="subtitle2" mb={1}>Risk Score: {scenario.risk_assessment?.overall_risk_score || 0}/100</Typography>
+                  <Typography variant="subtitle2" mb={1}>Risk Score: {riskAssessment.overall_risk_score || 0}/100</Typography>
                   <LinearProgress
                     variant="determinate"
-                    value={scenario.risk_assessment?.overall_risk_score || 0}
+                    value={riskAssessment.overall_risk_score || 0}
                     color={getRiskColor(
-                      (scenario.risk_assessment?.overall_risk_score || 0) >= 80 ? 'critical' :
-                      (scenario.risk_assessment?.overall_risk_score || 0) >= 60 ? 'high' :
-                      (scenario.risk_assessment?.overall_risk_score || 0) >= 40 ? 'medium' : 'low'
+                      (riskAssessment.overall_risk_score || 0) >= 80 ? 'critical' :
+                      (riskAssessment.overall_risk_score || 0) >= 60 ? 'high' :
+                      (riskAssessment.overall_risk_score || 0) >= 40 ? 'medium' : 'low'
                     ) as any}
                   />
                 </Box>
@@ -600,21 +619,31 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
                 {/* Benefits */}
                 <Accordion>
                   <AccordionSummary expandIcon={<ExpandMore />}>
-                    <Typography variant="body2">Benefits ({scenario.benefits?.length || 0})</Typography>
+                    <Typography variant="body2">Benefits ({benefits.length})</Typography>
                   </AccordionSummary>
                   <AccordionDetails>
                     <List dense>
-                      {(scenario.benefits || []).map((benefit, index) => (
-                        <ListItem key={index}>
-                          <ListItemIcon>
-                            <CheckCircle color="success" fontSize="small" />
-                          </ListItemIcon>
-                          <ListItemText
-                            primary={benefit.benefit_type.replace('_', ' ')}
-                            secondary={benefit.description}
-                          />
-                        </ListItem>
-                      ))}
+                      {benefits.map((benefit, index) => {
+                        const rawBenefitType = benefit?.benefit_type;
+                        const benefitType = typeof rawBenefitType === 'string'
+                          ? rawBenefitType.replace('_', ' ')
+                          : 'Benefit';
+                        const benefitDescription = typeof benefit?.description === 'string'
+                          ? benefit.description
+                          : 'No description available';
+
+                        return (
+                          <ListItem key={`${scenarioName}-benefit-${index}`}>
+                            <ListItemIcon>
+                              <CheckCircle color="success" fontSize="small" />
+                            </ListItemIcon>
+                            <ListItemText
+                              primary={benefitType}
+                              secondary={benefitDescription}
+                            />
+                          </ListItem>
+                        );
+                      })}
                     </List>
                   </AccordionDetails>
                 </Accordion>
@@ -637,7 +666,8 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
               </CardContent>
             </Card>
           </Grid>
-        )) : (
+        );
+        }) : (
           <Grid item xs={12}>
             <Typography variant="body2" color="text.secondary" textAlign="center">
               No migration scenarios available

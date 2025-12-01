@@ -6,6 +6,7 @@ data export/portability, and audit trail functionality.
 import pytest
 import asyncio
 from datetime import datetime, timezone, timedelta
+from types import SimpleNamespace
 from unittest.mock import Mock, patch, AsyncMock
 from bson import ObjectId
 
@@ -24,6 +25,7 @@ from src.infra_mind.core.compliance import (
 )
 from src.infra_mind.models.user import User
 from src.infra_mind.models.assessment import Assessment
+from src.infra_mind.services.features_generator import generate_compliance_dashboard
 
 
 class TestDataRetentionPolicy:
@@ -476,6 +478,45 @@ class TestComplianceIntegration:
             # Verify consent is withdrawn
             status = manager.check_consent_status(user_id, consent_type)
             assert status == ConsentStatus.WITHDRAWN
+
+
+class TestComplianceAutomationDashboard:
+    """Ensure compliance automation dashboard generation works for any assessment."""
+    
+    @pytest.mark.asyncio
+    async def test_generate_compliance_dashboard_includes_framework_versions(self):
+        """Compliance dashboard should produce framework metadata for new assessments."""
+        security_requirements = {
+            "notes": "encryption, tls, mfa, audit logging, dlp, third party risk, emergency access",
+            "iam_policies": {"review_interval_days": 90},
+            "pci_penetration_testing_frequency_days": 180,
+            "hipaa_baas_agreements": True,
+            "gdpr_data_mapping": True
+        }
+        infrastructure_requirements = {
+            "cloud_providers": ["aws"],
+            "network_segmentation": True,
+            "backup_strategy": "encrypted backups stored in multi-region"
+        }
+        assessment = SimpleNamespace(
+            id=ObjectId(),
+            business_requirements={"industry": "technology"},
+            technical_requirements={
+                "compliance_requirements": ["SOC 2"],
+                "security_requirements": security_requirements,
+                "infrastructure_requirements": infrastructure_requirements,
+                "performance_requirements": {"response_time": "<200ms"}
+            },
+            created_at=datetime.now(timezone.utc)
+        )
+        
+        result = await generate_compliance_dashboard(assessment)
+        
+        assert "error" not in result
+        assert result["frameworks"], "Expected compliance frameworks in dashboard"
+        soc2_framework = next((f for f in result["frameworks"] if f["name"] == "SOC 2"), None)
+        assert soc2_framework is not None
+        assert soc2_framework["version"] == "2017"
 
 
 if __name__ == "__main__":

@@ -36,7 +36,9 @@ import { useRecommendationsData } from '../../hooks/useFreshData';
 import RecommendationInsightsPanel from '../../components/RecommendationInsightsPanel';
 
 interface Recommendation {
-  _id: string;
+  _id?: string;
+  id?: string;
+  recommendation_id?: string;
   agent_name: string;
   agent_type: string;
   category: string;
@@ -75,6 +77,10 @@ function RecommendationsPageContent() {
   const [error, setError] = useState<string | null>(null);
   const [viewStartTimes, setViewStartTimes] = useState<Record<string, number>>({});
 
+  const getRecommendationIdentifier = (rec: Recommendation, fallback?: number) => {
+    return rec._id || rec.id || rec.recommendation_id || (rec.title ? rec.title.replace(/\s+/g, '-').toLowerCase() : undefined) || `rec-${fallback ?? 'unknown'}`;
+  };
+
   const assessmentId = searchParams.get('assessment_id');
 
   // ML Interaction Tracking Functions
@@ -105,11 +111,10 @@ function RecommendationsPageContent() {
   // Track view when recommendation becomes visible
   useEffect(() => {
     if (recommendations.length > 0) {
-      recommendations.forEach((rec) => {
-        // Only track if recommendation has a valid ID
-        if (rec._id) {
-          // Record view start time
-          setViewStartTimes(prev => ({ ...prev, [rec._id]: Date.now() }));
+      recommendations.forEach((rec, index) => {
+        const recId = getRecommendationIdentifier(rec, index);
+        if (recId) {
+          setViewStartTimes(prev => ({ ...prev, [recId]: Date.now() }));
         }
       });
     }
@@ -241,9 +246,10 @@ function RecommendationsPageContent() {
 
   // Generate action plan
   const generateActionPlan = (insight: any) => {
-    const relatedRecs = recommendations.filter(r =>
-      insight.related_recommendations.includes(r._id)
-    );
+    const relatedRecs = recommendations.filter(r => {
+      const recIdentifier = r._id || r.id || r.recommendation_id;
+      return recIdentifier ? insight.related_recommendations.includes(recIdentifier) : false;
+    });
 
     const planText = `
 🎯 Action Plan: ${insight.title}
@@ -288,9 +294,10 @@ Generated: ${new Date().toLocaleDateString()}
 
   // Show cost breakdown
   const showCostBreakdown = (insight: any) => {
-    const relatedRecs = recommendations.filter(r =>
-      insight.related_recommendations.includes(r._id)
-    );
+    const relatedRecs = recommendations.filter(r => {
+      const recIdentifier = r._id || r.id || r.recommendation_id;
+      return recIdentifier ? insight.related_recommendations.includes(recIdentifier) : false;
+    });
 
     const breakdown = relatedRecs.map(rec => ({
       title: rec.title,
@@ -657,11 +664,14 @@ Generated: ${new Date().toLocaleString()}
         </Paper>
       ) : (
         <Grid container spacing={3}>
-          {recommendations.map((rec) => (
-            <Grid item xs={12} key={rec._id} id={`rec-${rec._id}`}>
+          {recommendations.map((rec, index) => {
+            const recKey = getRecommendationIdentifier(rec, index);
+            const actionId = rec._id || rec.id || rec.recommendation_id || recKey;
+            return (
+            <Grid item xs={12} key={recKey} id={`rec-${actionId}`}>
               <Card
                 sx={{ cursor: 'pointer', '&:hover': { boxShadow: 4 } }}
-                onClick={() => handleRecommendationClick(rec._id)}
+                onClick={() => handleRecommendationClick(actionId)}
               >
                 <CardContent>
                   {/* Header */}
@@ -718,7 +728,7 @@ Generated: ${new Date().toLocaleString()}
                   <Grid container spacing={2} sx={{ mb: 3 }}>
                     {[
                       ...(rec.estimated_cost_savings > 0 ? [{
-                        key: `cost-savings-${rec._id}`,
+                        key: `cost-savings-${recKey}`,
                         content: (
                           <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'success.light', color: 'success.contrastText' }}>
                             <MonetizationOnIcon sx={{ mb: 1 }} />
@@ -732,7 +742,7 @@ Generated: ${new Date().toLocaleString()}
                         )
                       }] : []),
                       {
-                        key: `implementation-effort-${rec._id}`,
+                        key: `implementation-effort-${recKey}`,
                         content: (
                           <Paper sx={{ p: 2, textAlign: 'center' }}>
                             <TrendingUpIcon sx={{ mb: 1 }} />
@@ -746,7 +756,7 @@ Generated: ${new Date().toLocaleString()}
                         )
                       },
                       ...(rec.estimated_implementation_time ? [{
-                        key: `timeline-${rec._id}`,
+                        key: `timeline-${recKey}`,
                         content: (
                           <Paper sx={{ p: 2, textAlign: 'center' }}>
                             <Typography variant="h6" color="text.primary">
@@ -759,7 +769,7 @@ Generated: ${new Date().toLocaleString()}
                         )
                       }] : []),
                       ...(rec.cloud_provider ? [{
-                        key: `cloud-provider-${rec._id}`,
+                        key: `cloud-provider-${recKey}`,
                         content: (
                           <Paper sx={{ p: 2, textAlign: 'center' }}>
                             <CloudIcon sx={{ mb: 1 }} />
@@ -772,8 +782,8 @@ Generated: ${new Date().toLocaleString()}
                           </Paper>
                         )
                       }] : [])
-                    ].map((metric: any) => (
-                      <Grid item xs={12} sm={6} md={3} key={metric.key}>
+                    ].map((metric: any, metricIndex: number) => (
+                      <Grid item xs={12} sm={6} md={3} key={metric.key || `${recKey}-metric-${metricIndex}`}>
                         {metric.content}
                       </Grid>
                     ))}
@@ -789,7 +799,7 @@ Generated: ${new Date().toLocaleString()}
                         {(rec.benefits || []).map((benefit, idx) => {
                           const benefitText = typeof benefit === 'string' ? benefit : String(benefit);
                           return (
-                            <Typography key={`benefit-${rec._id}-${idx}`} variant="body2" sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Typography key={`benefit-${recKey}-${idx}`} variant="body2" sx={{ display: 'flex', alignItems: 'center' }}>
                               • {benefitText}
                             </Typography>
                           );
@@ -808,7 +818,7 @@ Generated: ${new Date().toLocaleString()}
                         {(rec.implementation_steps || []).map((step, idx) => {
                           const stepText = typeof step === 'string' ? step : String(step);
                           return (
-                            <Typography key={`step-${rec._id}-${idx}`} variant="body2" sx={{ display: 'flex', alignItems: 'flex-start' }}>
+                            <Typography key={`step-${recKey}-${idx}`} variant="body2" sx={{ display: 'flex', alignItems: 'flex-start' }}>
                               {idx + 1}. {stepText}
                             </Typography>
                           );
@@ -827,7 +837,7 @@ Generated: ${new Date().toLocaleString()}
                         {(rec.risks || []).map((risk, idx) => {
                           const riskText = typeof risk === 'string' ? risk : String(risk);
                           return (
-                            <Typography key={`risk-${rec._id}-${idx}`} variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Typography key={`risk-${recKey}-${idx}`} variant="body2" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
                               ⚠️ {riskText}
                             </Typography>
                           );
@@ -844,7 +854,7 @@ Generated: ${new Date().toLocaleString()}
                       size="small"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleSaveClick(rec._id);
+                        handleSaveClick(actionId);
                       }}
                     >
                       Save for Later
@@ -855,7 +865,7 @@ Generated: ${new Date().toLocaleString()}
                       color="primary"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleImplementClick(rec._id);
+                        handleImplementClick(actionId);
                       }}
                     >
                       Mark as Implemented
@@ -864,7 +874,8 @@ Generated: ${new Date().toLocaleString()}
                 </CardContent>
               </Card>
             </Grid>
-          ))}
+          );
+          })}
         </Grid>
       )}
     </Container>

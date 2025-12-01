@@ -138,7 +138,22 @@ class EventManager:
                             callback(event)
                     except Exception as e:
                         logger.error(f"Error in event callback: {str(e)}", exc_info=True)
-    
+
+    async def emit(self, event_type: EventType, data: Optional[Dict[str, Any]] = None) -> None:
+        """
+        Convenience method to emit an event with minimal parameters.
+
+        Args:
+            event_type: Type of event to emit
+            data: Optional event data
+        """
+        event = AgentEvent(
+            event_type=event_type,
+            agent_name=data.get("agent_name", "system") if data else "system",
+            data=data or {}
+        )
+        await self.publish(event)
+
     async def publish_agent_started(self, agent_name: str, data: Optional[Dict[str, Any]] = None) -> None:
         """Publish agent started event."""
         event = AgentEvent(

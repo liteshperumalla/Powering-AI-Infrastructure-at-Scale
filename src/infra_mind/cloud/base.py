@@ -216,38 +216,45 @@ class BaseCloudClient(ABC):
         from ..core.unified_cloud_cache import get_unified_cache_manager, ServiceType
         from ..core.resilience import resilience_manager
         from ..core.advanced_rate_limiter import advanced_rate_limiter, RateLimitExceeded
+        from ..core.cache import rate_limiter as legacy_rate_limiter, cache_manager as legacy_cache_manager
         
-        if not self.cache_enabled:
-            # Call fetch_func - it might be async or sync
-            import inspect
-            import asyncio
+        import inspect
 
+        async def _execute_fetch_direct():
+            """Execute fetch_func handling sync/async callables."""
             result = fetch_func()
-            # Check if the result is a coroutine (from lambda that calls async function)
             if inspect.iscoroutine(result):
                 return await result
-            # Check if result is awaitable but not yet called
-            elif inspect.iscoroutinefunction(fetch_func):
+            if inspect.iscoroutinefunction(fetch_func):
                 return await fetch_func()
-            else:
-                # Synchronous function - we already called it
-                return result
+            return result
+
+        if not self.cache_enabled:
+            return await _execute_fetch_direct()
         
         # Get unified cache manager
         unified_cache = await get_unified_cache_manager()
         if not unified_cache:
-            # Fallback to direct API call if cache not available
             logger.warning("Unified cache manager not available, calling API directly")
-            import inspect
-            import asyncio
-
-            result = fetch_func()
-            if inspect.iscoroutine(result):
-                return await result
-            elif inspect.iscoroutinefunction(fetch_func):
-                return await fetch_func()
-            else:
-                return result
+            if legacy_rate_limiter:
+                try:
+                    status = await legacy_rate_limiter.check_rate_limit(self.provider.value, service)
+                except Exception as exc:
+                    logger.warning(f"Legacy rate limiter check failed: {exc}")
+                else:
+                    if status and not status.get("allowed", True):
+                        if hasattr(legacy_cache_manager, "get"):
+                            stale_data = await legacy_cache_manager.get(
+                                self.provider.value,
+                                service,
+                                region
+                            )
+                            if stale_data:
+                                stale_data["rate_limited"] = True
+                                stale_data["is_stale"] = True
+                                stale_data["retry_after"] = status.get("reset_time")
+                                return stale_data
+            return await _execute_fetch_direct()
         
         # Map service names to ServiceType enum
         service_type_mapping = {
@@ -297,6 +304,41 @@ class BaseCloudClient(ABC):
         except Exception as e:
             logger.warning(f"Error accessing unified cache: {e}")
         
+        # Respect legacy cache rate limiter if configured
+        legacy_rate_status = None
+        if legacy_rate_limiter:
+            try:
+                legacy_rate_status = await legacy_rate_limiter.check_rate_limit(self.provider.value, service)
+            except Exception as exc:
+                logger.warning(f"Legacy rate limiter check failed: {exc}")
+                legacy_rate_status = None
+
+            if legacy_rate_status and not legacy_rate_status.get("allowed", True):
+                if unified_cache:
+                    stale_data = await unified_cache.get_cached_data(
+                        provider=self.provider.value,
+                        service_type=service_type,
+                        region=region,
+                        params=params,
+                        allow_stale=True
+                    )
+                    if stale_data:
+                        stale_data["rate_limited"] = True
+                        stale_data["is_stale"] = True
+                        stale_data["retry_after"] = legacy_rate_status.get("reset_time")
+                        return stale_data
+                elif legacy_cache_manager and hasattr(legacy_cache_manager, "get"):
+                    stale_data = await legacy_cache_manager.get(
+                        self.provider.value,
+                        service,
+                        region
+                    )
+                    if stale_data:
+                        stale_data["rate_limited"] = True
+                        stale_data["is_stale"] = True
+                        stale_data["retry_after"] = legacy_rate_status.get("reset_time")
+                        return stale_data
+
         # Use resilience manager for comprehensive error handling
         try:
             from ..core.resilience import resilience_manager
@@ -328,6 +370,7 @@ class BaseCloudClient(ABC):
                                 
                                 if stale_data:
                                     stale_data["rate_limited"] = True
+                                    stale_data["is_stale"] = True
                                     stale_data["retry_after"] = e.retry_after
                                     return stale_data
                             

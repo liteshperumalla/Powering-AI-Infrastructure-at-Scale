@@ -158,12 +158,11 @@ class ProductionCacheManager:
         if self.config.password:
             connection_kwargs["password"] = self.config.password
         
-        self.connection_pool = ConnectionPool.from_url(
+        self.connection_pool = None
+        self.redis_client = redis.from_url(
             self.config.redis_url,
             **connection_kwargs
         )
-        
-        self.redis_client = Redis(connection_pool=self.connection_pool)
     
     async def _connect_cluster(self) -> None:
         """Connect to Redis cluster."""
@@ -1139,7 +1138,33 @@ class CacheFactory:
 
 
 # Global cache manager instance
-cache_manager: Optional[ProductionCacheManager] = None
+
+
+class _NullCacheManager:
+    """Fallback cache manager used when Redis isn't initialized (e.g., tests)."""
+
+    _connected = False
+
+    async def connect(self):
+        raise ConnectionError("Cache system is not initialized")
+
+    async def disconnect(self):
+        return None
+
+    async def get(self, *args, **kwargs):
+        return None
+
+    async def set(self, *args, **kwargs):
+        return False
+
+    async def delete(self, *args, **kwargs):
+        return False
+
+    async def get_cache_stats(self):
+        return {"connected": False}
+
+
+cache_manager: Union[ProductionCacheManager, _NullCacheManager] = _NullCacheManager()
 rate_limiter: Optional[ProductionRateLimiter] = None
 
 
@@ -1167,7 +1192,7 @@ async def init_cache(redis_url: Optional[str] = None) -> None:
     except Exception as e:
         logger.error(f"Failed to initialize cache system: {e}")
         # Create a disabled cache manager for graceful degradation
-        cache_manager = None
+        cache_manager = _NullCacheManager()
         rate_limiter = None
         raise
 
@@ -1177,8 +1202,11 @@ async def cleanup_cache() -> None:
     global cache_manager
     
     if cache_manager:
-        await cache_manager.disconnect()
-        cache_manager = None
+        try:
+            await cache_manager.disconnect()
+        except Exception:
+            pass
+        cache_manager = _NullCacheManager()
     
     logger.info("Cache system cleaned up")
 
@@ -1193,6 +1221,24 @@ async def get_rate_limiter() -> Optional[ProductionRateLimiter]:
     return rate_limiter
 
 
-# Backward compatibility aliases
-CacheManager = ProductionCacheManager
+# Backward compatibility aliases/wrappers
+class CacheManager(ProductionCacheManager):
+    """
+    Wrapper that preserves legacy constructor signatures for tests and scripts.
+    Accepts either a CacheConfig instance or the historical redis_url/default_ttl
+    parameters used throughout the codebase.
+    """
+
+    def __init__(self, config_or_url: Union[CacheConfig, str], default_ttl: int = 3600, **kwargs):
+        if isinstance(config_or_url, CacheConfig):
+            super().__init__(config_or_url)
+        else:
+            config = CacheConfig(
+                redis_url=config_or_url,
+                default_ttl=default_ttl,
+                **kwargs,
+            )
+            super().__init__(config)
+
+
 RateLimiter = ProductionRateLimiter

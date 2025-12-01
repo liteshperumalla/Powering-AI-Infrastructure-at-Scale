@@ -226,8 +226,8 @@ class ComplianceAgent(BaseAgent):
         regulation_reasons = {}
         
         # Analyze business context to determine applicable regulations
-        industry = business_req.get("industry").lower()
-        company_location = business_req.get("company_location").lower()
+        industry = (business_req.get("industry") or "").lower()
+        company_location = (business_req.get("company_location") or "").lower()
         data_types = business_req.get("data_types", [])
         target_markets = business_req.get("target_markets", [])
         

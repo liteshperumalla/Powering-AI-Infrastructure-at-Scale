@@ -7,7 +7,7 @@ and comprehensive security features.
 
 from fastapi import APIRouter, HTTPException, status, Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional
 import logging
 from datetime import datetime
@@ -21,6 +21,18 @@ from ..schemas.base import SuccessResponse, ErrorResponse
 
 logger = logging.getLogger(__name__)
 
+
+def _normalize_email(value):
+    if isinstance(value, str):
+        return value.lower().strip()
+    return value
+
+
+def _strip_optional(value):
+    if isinstance(value, str):
+        return value.strip()
+    return value
+
 # Create router
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -32,9 +44,10 @@ class LoginRequest(BaseModel):
     password: str = Field(description="User password", min_length=1, max_length=128)
     remember_me: bool = Field(default=False, description="Extend token expiration")
     
-    @validator('email')
-    def validate_email(cls, v):
-        return v.lower().strip()
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_email(cls, value):
+        return _normalize_email(value)
 
 
 class RegisterRequest(BaseModel):
@@ -45,17 +58,20 @@ class RegisterRequest(BaseModel):
     company_name: Optional[str] = Field(default=None, description="Company name", max_length=200)
     job_title: Optional[str] = Field(default=None, description="Job title", max_length=100)
     
-    @validator('email')
-    def validate_email(cls, v):
-        return v.lower().strip()
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_email(cls, value):
+        return _normalize_email(value)
     
-    @validator('full_name')
-    def validate_full_name(cls, v):
-        return v.strip()
+    @field_validator("full_name", mode="before")
+    @classmethod
+    def validate_full_name(cls, value):
+        return _strip_optional(value)
     
-    @validator('company_name')
-    def validate_company_name(cls, v):
-        return v.strip() if v else None
+    @field_validator("company_name", mode="before")
+    @classmethod
+    def validate_company_name(cls, value):
+        return _strip_optional(value)
 
 
 class TokenResponse(BaseModel):
@@ -77,9 +93,10 @@ class PasswordResetRequest(BaseModel):
     """Password reset request model."""
     email: EmailStr = Field(description="User email address")
     
-    @validator('email')
-    def validate_email(cls, v):
-        return v.lower().strip()
+    @field_validator("email", mode="before")
+    @classmethod
+    def validate_email(cls, value):
+        return _normalize_email(value)
 
 
 class PasswordResetConfirm(BaseModel):
@@ -116,13 +133,15 @@ class ProfileUpdateRequest(BaseModel):
     company: Optional[str] = Field(default=None, description="Company name", max_length=200)
     preferences: Optional[dict] = Field(default=None, description="User preferences")
 
-    @validator('full_name')
-    def validate_full_name(cls, v):
-        return v.strip() if v else None
+    @field_validator("full_name", mode="before")
+    @classmethod
+    def validate_full_name(cls, value):
+        return _strip_optional(value)
     
-    @validator('company')
-    def validate_company(cls, v):
-        return v.strip() if v else None
+    @field_validator("company", mode="before")
+    @classmethod
+    def validate_company(cls, value):
+        return _strip_optional(value)
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)

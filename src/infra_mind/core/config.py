@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     api_prefix: str = "/api/v1"
+    use_celery_for_assessments: bool = Field(
+        default=True,
+        description="Queue assessments via Celery instead of running locally"
+    )
     
     # Security Configuration
     secret_key: SecretStr = Field(

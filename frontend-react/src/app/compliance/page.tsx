@@ -4,6 +4,7 @@ import { useSearchParams } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
 import ResponsiveLayout from '../../components/ResponsiveLayout';
+import ProtectedRoute from '../../components/ProtectedRoute';
 import ComplianceAutomation from '../../components/ComplianceAutomation';
 
 export default function CompliancePage() {
@@ -14,11 +15,15 @@ export default function CompliancePage() {
     const urlAssessmentId = searchParams?.get('assessment_id');
     const assessmentId = urlAssessmentId || currentAssessment?.id;
 
-    // No redirect - just handle the case when there's no assessment
+    console.log('🔍 Compliance Page - URL Param:', urlAssessmentId);
+    console.log('🔍 Compliance Page - Redux Assessment:', currentAssessment?.id);
+    console.log('🔍 Compliance Page - Final Assessment ID:', assessmentId);
 
     return (
-        <ResponsiveLayout title="Compliance Automation">
-            <ComplianceAutomation assessmentId={assessmentId} />
-        </ResponsiveLayout>
+        <ProtectedRoute>
+            <ResponsiveLayout title="Compliance Automation">
+                <ComplianceAutomation assessmentId={assessmentId} />
+            </ResponsiveLayout>
+        </ProtectedRoute>
     );
 }

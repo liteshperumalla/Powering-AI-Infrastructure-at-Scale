@@ -4,102 +4,147 @@ Tests for authentication system.
 Tests JWT token management, password hashing, and authentication flows.
 """
 
+import asyncio
 import pytest
 from datetime import datetime, timedelta, timezone
 import jwt
 from unittest.mock import patch, AsyncMock
 
 from src.infra_mind.core.auth import (
-    TokenManager, PasswordManager, AuthService, AuthenticationError,
-    SECRET_KEY, ALGORITHM
+    TokenManager,
+    PasswordManager,
+    AuthService,
+    AuthenticationError,
+    TokenType,
+    SECRET_KEY,
+    ALGORITHM,
 )
 from src.infra_mind.core.rbac import Role, Permission, AccessControl, RolePermissions
+
+
+class DummyUser:
+    """Lightweight user object for token/access-control tests."""
+
+    def __init__(
+        self,
+        user_id: str = "user123",
+        email: str = "test@example.com",
+        role: str = "user",
+        full_name: str = "Test User",
+        is_active: bool = True,
+    ) -> None:
+        self.id = user_id
+        self.email = email
+        self.role = role
+        self.full_name = full_name
+        self.is_active = is_active
+
+
+@pytest.fixture
+def token_manager() -> TokenManager:
+    """Provide a TokenManager instance for tests."""
+    return TokenManager()
+
+
+@pytest.fixture
+def sample_user() -> DummyUser:
+    """Return an active sample user."""
+    return DummyUser()
 
 
 class TestTokenManager:
     """Test JWT token management."""
     
-    def test_create_access_token(self):
+    def test_create_access_token(self, token_manager: TokenManager, sample_user: DummyUser):
         """Test access token creation."""
-        data = {"sub": "user123", "email": "test@example.com"}
-        token = TokenManager.create_access_token(data)
+        token = token_manager.create_access_token(sample_user)
         
         assert isinstance(token, str)
         assert len(token) > 50  # JWT tokens are long
         
         # Decode and verify
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        assert payload["sub"] == "user123"
-        assert payload["email"] == "test@example.com"
-        assert payload["type"] == "access"
+        payload = jwt.decode(
+            token,
+            SECRET_KEY,
+            algorithms=[ALGORITHM],
+            audience="infra-mind-api",
+            issuer="infra-mind",
+        )
+        assert payload["sub"] == sample_user.id
+        assert payload["email"] == sample_user.email
+        assert payload["token_type"] == TokenType.ACCESS.value
         assert "exp" in payload
     
-    def test_create_refresh_token(self):
+    def test_create_refresh_token(self, token_manager: TokenManager, sample_user: DummyUser):
         """Test refresh token creation."""
-        data = {"sub": "user123", "email": "test@example.com"}
-        token = TokenManager.create_refresh_token(data)
+        token = token_manager.create_refresh_token(sample_user)
         
         assert isinstance(token, str)
         assert len(token) > 50
         
-        # Decode and verify
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        assert payload["sub"] == "user123"
-        assert payload["type"] == "refresh"
-    
-    def test_verify_valid_token(self):
-        """Test verification of valid token."""
-        data = {"sub": "user123", "email": "test@example.com"}
-        token = TokenManager.create_access_token(data)
-        
-        payload = TokenManager.verify_token(token, "access")
-        
-        assert payload["sub"] == "user123"
-        assert payload["email"] == "test@example.com"
-        assert payload["type"] == "access"
-    
-    def test_verify_expired_token(self):
-        """Test verification of expired token."""
-        data = {"sub": "user123", "email": "test@example.com"}
-        
-        # Create token with past expiration
-        past_time = datetime.now(timezone.utc) - timedelta(hours=1)
-        expired_token = jwt.encode(
-            {**data, "exp": past_time, "type": "access"},
+        payload = jwt.decode(
+            token,
             SECRET_KEY,
-            algorithm=ALGORITHM
+            algorithms=[ALGORITHM],
+            audience="infra-mind-api",
+            issuer="infra-mind",
+        )
+        assert payload["sub"] == sample_user.id
+        assert payload["token_type"] == TokenType.REFRESH.value
+    
+    @pytest.mark.asyncio
+    async def test_verify_valid_token(self, token_manager: TokenManager, sample_user: DummyUser):
+        """Test verification of valid token."""
+        token = token_manager.create_access_token(sample_user)
+        
+        claims = await token_manager.verify_token(token, TokenType.ACCESS)
+        
+        assert claims.sub == sample_user.id
+        assert claims.email == sample_user.email
+        assert claims.token_type == TokenType.ACCESS.value
+    
+    @pytest.mark.asyncio
+    async def test_verify_expired_token(self, token_manager: TokenManager, sample_user: DummyUser):
+        """Test verification of expired token."""
+        expired_token = token_manager.create_access_token(
+            sample_user, expires_delta=timedelta(seconds=-1)
         )
         
         with pytest.raises(AuthenticationError, match="Token has expired"):
-            TokenManager.verify_token(expired_token, "access")
+            await token_manager.verify_token(expired_token, TokenType.ACCESS)
     
-    def test_verify_wrong_token_type(self):
+    @pytest.mark.asyncio
+    async def test_verify_wrong_token_type(self, token_manager: TokenManager, sample_user: DummyUser):
         """Test verification with wrong token type."""
-        data = {"sub": "user123", "email": "test@example.com"}
-        access_token = TokenManager.create_access_token(data)
+        access_token = token_manager.create_access_token(sample_user)
         
         with pytest.raises(AuthenticationError, match="Invalid token type"):
-            TokenManager.verify_token(access_token, "refresh")
+            await token_manager.verify_token(access_token, TokenType.REFRESH)
     
-    def test_verify_invalid_token(self):
+    @pytest.mark.asyncio
+    async def test_verify_invalid_token(self, token_manager: TokenManager):
         """Test verification of invalid token."""
         invalid_token = "invalid.jwt.token"
         
         with pytest.raises(AuthenticationError, match="Token validation failed"):
-            TokenManager.verify_token(invalid_token, "access")
+            await token_manager.verify_token(invalid_token, TokenType.ACCESS)
     
-    def test_refresh_access_token(self):
+    @pytest.mark.asyncio
+    async def test_refresh_access_token(self, token_manager: TokenManager, sample_user: DummyUser, monkeypatch):
         """Test refreshing access token."""
-        data = {"sub": "user123", "email": "test@example.com", "role": "user"}
-        refresh_token = TokenManager.create_refresh_token(data)
+        refresh_token = token_manager.create_refresh_token(sample_user)
         
-        new_access_token = TokenManager.refresh_access_token(refresh_token)
+        monkeypatch.setattr(
+            "src.infra_mind.core.auth.User.get",
+            AsyncMock(return_value=sample_user),
+        )
         
-        # Verify new access token
-        payload = TokenManager.verify_token(new_access_token, "access")
-        assert payload["sub"] == "user123"
-        assert payload["email"] == "test@example.com"
-        assert payload["type"] == "access"
+        new_access_token, refreshed_user = await token_manager.refresh_access_token(refresh_token)
+        
+        assert refreshed_user is sample_user
+        claims = await token_manager.verify_token(new_access_token, TokenType.ACCESS)
+        assert claims.sub == sample_user.id
+        assert claims.email == sample_user.email
 
 
 class TestPasswordManager:
@@ -107,7 +152,7 @@ class TestPasswordManager:
     
     def test_hash_password(self):
         """Test password hashing."""
-        password = "test_password_123"
+        password = "SecurePass123!"
         hashed = PasswordManager.hash_password(password)
         
         assert hashed != password
@@ -116,7 +161,7 @@ class TestPasswordManager:
     
     def test_verify_password(self):
         """Test password verification."""
-        password = "test_password_123"
+        password = "SecurePass123!"
         hashed = PasswordManager.hash_password(password)
         
         # Correct password should verify
@@ -147,8 +192,9 @@ class TestRolePermissions:
         # Admin should have all permissions
         assert Permission.CREATE_ASSESSMENT in admin_permissions
         assert Permission.DELETE_USER in admin_permissions
-        assert Permission.MANAGE_SYSTEM in admin_permissions
+        assert Permission.ACCESS_ADMIN_API in admin_permissions
         assert Permission.VIEW_LOGS in admin_permissions
+        assert Permission.MANAGE_SYSTEM not in admin_permissions
     
     def test_user_permissions(self):
         """Test user role has basic permissions."""
@@ -179,7 +225,7 @@ class TestRolePermissions:
     
     def test_has_permission(self):
         """Test permission checking."""
-        assert RolePermissions.has_permission(Role.ADMIN, Permission.MANAGE_SYSTEM) is True
+        assert RolePermissions.has_permission(Role.ADMIN, Permission.ACCESS_ADMIN_API) is True
         assert RolePermissions.has_permission(Role.USER, Permission.MANAGE_SYSTEM) is False
         assert RolePermissions.has_permission(Role.USER, Permission.CREATE_ASSESSMENT) is True
 
@@ -210,28 +256,19 @@ class TestAccessControl:
     
     def test_user_has_permission(self):
         """Test user permission checking."""
-        class MockUser:
-            role = "admin"
+        admin_user = DummyUser(role="admin")
         
-        admin_user = MockUser()
-        
-        assert AccessControl.user_has_permission(admin_user, Permission.MANAGE_SYSTEM) is True
+        assert AccessControl.user_has_permission(admin_user, Permission.ACCESS_ADMIN_API) is True
+        assert AccessControl.user_has_permission(admin_user, Permission.MANAGE_SYSTEM) is False
         
         # Test with regular user
-        class MockRegularUser:
-            role = "user"
-        
-        regular_user = MockRegularUser()
+        regular_user = DummyUser(role="user")
         assert AccessControl.user_has_permission(regular_user, Permission.MANAGE_SYSTEM) is False
         assert AccessControl.user_has_permission(regular_user, Permission.CREATE_ASSESSMENT) is True
     
     def test_user_can_access_own_resource(self):
         """Test user can access their own resources."""
-        class MockUser:
-            id = "user123"
-            role = "user"
-        
-        user = MockUser()
+        user = DummyUser(user_id="user123", role="user")
         
         # User can access their own resource
         assert AccessControl.user_can_access_resource(
@@ -245,11 +282,7 @@ class TestAccessControl:
     
     def test_admin_can_access_all_resources(self):
         """Test admin can access all resources."""
-        class MockUser:
-            id = "admin123"
-            role = "admin"
-        
-        admin = MockUser()
+        admin = DummyUser(user_id="admin123", role="admin")
         
         # Admin can access any resource
         assert AccessControl.user_can_access_resource(
@@ -264,79 +297,78 @@ class TestAccessControl:
 class TestAuthenticationIntegration:
     """Test authentication integration scenarios."""
     
-    def test_full_authentication_flow(self):
+    @pytest.mark.asyncio
+    async def test_full_authentication_flow(self, monkeypatch):
         """Test complete authentication flow."""
-        # 1. Hash password
-        password = "secure_password_123"
+        password = "SecurePassword123!"
         hashed_password = PasswordManager.hash_password(password)
         
-        # 2. Create tokens
-        user_data = {
-            "sub": "user123",
-            "email": "test@example.com",
-            "role": "user"
-        }
-        access_token = TokenManager.create_access_token(user_data)
-        refresh_token = TokenManager.create_refresh_token(user_data)
+        token_manager = TokenManager()
+        user = DummyUser(
+            user_id="user123",
+            email="test@example.com",
+            role="user",
+            full_name="Integration Tester",
+        )
         
-        # 3. Verify access token
-        payload = TokenManager.verify_token(access_token, "access")
-        assert payload["sub"] == "user123"
-        assert payload["email"] == "test@example.com"
+        access_token = token_manager.create_access_token(user)
+        refresh_token = token_manager.create_refresh_token(user)
         
-        # 4. Refresh token
-        new_access_token = TokenManager.refresh_access_token(refresh_token)
-        new_payload = TokenManager.verify_token(new_access_token, "access")
-        assert new_payload["sub"] == "user123"
+        claims = await token_manager.verify_token(access_token, TokenType.ACCESS)
+        assert claims.sub == "user123"
+        assert claims.email == "test@example.com"
         
-        # 5. Verify password
+        monkeypatch.setattr(
+            "src.infra_mind.core.auth.User.get",
+            AsyncMock(return_value=user),
+        )
+        new_access_token, refreshed_user = await token_manager.refresh_access_token(refresh_token)
+        assert refreshed_user is user
+        new_claims = await token_manager.verify_token(new_access_token, TokenType.ACCESS)
+        assert new_claims.sub == "user123"
+        
         assert PasswordManager.verify_password(password, hashed_password) is True
     
-    def test_token_expiration_handling(self):
+    @pytest.mark.asyncio
+    async def test_token_expiration_handling(self, monkeypatch):
         """Test handling of expired tokens."""
-        # Create token with very short expiration
-        data = {"sub": "user123", "email": "test@example.com"}
+        token_manager = TokenManager()
+        user = DummyUser(user_id="user123", email="test@example.com")
+        monkeypatch.setattr(
+            "src.infra_mind.core.auth.User.get",
+            AsyncMock(return_value=user),
+        )
+        
         short_expiry = timedelta(seconds=1)
-        token = TokenManager.create_access_token(data, short_expiry)
+        token = token_manager.create_access_token(user, short_expiry)
         
-        # Token should be valid immediately
-        payload = TokenManager.verify_token(token, "access")
-        assert payload["sub"] == "user123"
+        claims = await token_manager.verify_token(token, TokenType.ACCESS)
+        assert claims.sub == "user123"
         
-        # Wait for token to expire (in real test, you might mock time)
-        import time
-        time.sleep(2)
+        await asyncio.sleep(2)
         
-        # Token should now be expired
         with pytest.raises(AuthenticationError, match="Token has expired"):
-            TokenManager.verify_token(token, "access")
+            await token_manager.verify_token(token, TokenType.ACCESS)
     
     def test_role_hierarchy(self):
         """Test role hierarchy in access control."""
-        # Create users with different roles
-        class MockUser:
-            def __init__(self, user_id, role):
-                self.id = user_id
-                self.role = role
+        super_admin = DummyUser(user_id="super1", role="super_admin")
+        admin = DummyUser(user_id="admin1", role="admin")
+        manager = DummyUser(user_id="manager1", role="manager")
+        user = DummyUser(user_id="user1", role="user")
+        viewer = DummyUser(user_id="viewer1", role="viewer")
         
-        admin = MockUser("admin1", "admin")
-        manager = MockUser("manager1", "manager")
-        user = MockUser("user1", "user")
-        viewer = MockUser("viewer1", "viewer")
-        
-        # Test permission hierarchy
-        assert AccessControl.user_has_permission(admin, Permission.MANAGE_SYSTEM) is True
+        assert AccessControl.user_has_permission(super_admin, Permission.MANAGE_SYSTEM) is True
+        assert AccessControl.user_has_permission(admin, Permission.MANAGE_SYSTEM) is False
         assert AccessControl.user_has_permission(manager, Permission.MANAGE_SYSTEM) is False
         assert AccessControl.user_has_permission(user, Permission.MANAGE_SYSTEM) is False
         assert AccessControl.user_has_permission(viewer, Permission.MANAGE_SYSTEM) is False
         
-        # Test read permissions
         assert AccessControl.user_has_permission(admin, Permission.READ_ASSESSMENT) is True
         assert AccessControl.user_has_permission(manager, Permission.READ_ASSESSMENT) is True
         assert AccessControl.user_has_permission(user, Permission.READ_ASSESSMENT) is True
         assert AccessControl.user_has_permission(viewer, Permission.READ_ASSESSMENT) is True
         
-        # Test write permissions
         assert AccessControl.user_has_permission(admin, Permission.CREATE_ASSESSMENT) is True
         assert AccessControl.user_has_permission(manager, Permission.CREATE_ASSESSMENT) is True
         assert AccessControl.user_has_permission(user, Permission.CREATE_ASSESSMENT) is True

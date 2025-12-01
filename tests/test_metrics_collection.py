@@ -38,7 +38,7 @@ class TestMetricsCollector:
     @pytest.mark.asyncio
     async def test_metrics_collector_initialization(self, metrics_collector):
         """Test metrics collector initialization."""
-        assert metrics_collector.collection_interval == 60
+        assert metrics_collector.collection_interval == 30
         assert not metrics_collector.is_collecting
         assert metrics_collector._collection_task is None
         assert isinstance(metrics_collector.start_time, datetime)

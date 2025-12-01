@@ -6,7 +6,7 @@ to ensure consistent structured outputs.
 """
 
 import json
-from typing import Dict, Any, List, Optional, Type
+from typing import Dict, Any, List, Optional, Type, Tuple
 from pydantic import BaseModel, Field, ValidationError
 from dataclasses import dataclass
 import logging

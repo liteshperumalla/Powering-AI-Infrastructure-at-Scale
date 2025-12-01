@@ -222,7 +222,7 @@ const InteractiveReportViewer: React.FC<InteractiveReportViewerProps> = ({
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
-                                            bgcolor: 'grey.50',
+                                            bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
                                             border: '1px dashed',
                                             borderColor: 'grey.300',
                                             cursor: 'pointer'
@@ -261,7 +261,7 @@ const InteractiveReportViewer: React.FC<InteractiveReportViewerProps> = ({
                                     <Box
                                         sx={{
                                             p: 2,
-                                            bgcolor: 'grey.50',
+                                            bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50',
                                             borderRadius: 1,
                                             cursor: 'pointer'
                                         }}

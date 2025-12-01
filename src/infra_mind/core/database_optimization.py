@@ -23,11 +23,49 @@ class DatabaseOptimizer:
         self.database = database
         self.optimization_log = []
     
+    async def _safe_create_indexes(
+        self, 
+        collection_name: str, 
+        indexes: List[IndexModel]
+    ) -> Optional[List[str]]:
+        """Safely create indexes on a collection with existence check."""
+        try:
+            # Check if collection exists
+            collection_names = await self.database.list_collection_names()
+            
+            # Get or create collection
+            collection = self.database[collection_name]
+            
+            # Verify collection is accessible
+            if collection is None:
+                logger.warning(f"Collection {collection_name} is not accessible, skipping indexes")
+                return None
+            
+            # Create indexes
+            await collection.create_indexes(indexes)
+            logger.debug(f"Created {len(indexes)} indexes for {collection_name}")
+            return [str(idx.document) for idx in indexes]
+            
+        except Exception as e:
+            error_str = str(e)
+            # Index conflicts are acceptable in production
+            if "IndexOptionsConflict" in error_str or "IndexAlreadyExists" in error_str:
+                logger.debug(f"Indexes already exist for {collection_name} (acceptable)")
+                return [str(idx.document) for idx in indexes]
+            else:
+                logger.error(f"Failed to create indexes for {collection_name}: {error_str}")
+                return None
+    
     async def create_production_indexes(self) -> Dict[str, List[str]]:
         """Create optimized indexes for production workloads."""
         logger.info("Creating production database indexes...")
         
         created_indexes = {}
+        
+        # Validate database is available
+        if self.database is None:
+            logger.warning("Database is not initialized, skipping index creation")
+            return created_indexes
         
         try:
             # Assessment indexes for high-performance queries
@@ -55,8 +93,10 @@ class DatabaseOptimizer:
                 ])
             ]
             
-            await self.database.assessments.create_indexes(assessment_indexes)
-            created_indexes["assessments"] = [str(idx.document) for idx in assessment_indexes]
+            # Use safe index creation for all collections
+            result = await self._safe_create_indexes("assessments", assessment_indexes)
+            if result:
+                created_indexes["assessments"] = result
             
             # User indexes for authentication and access control
             user_indexes = [
@@ -67,8 +107,9 @@ class DatabaseOptimizer:
                 IndexModel([("company", ASCENDING), ("role", ASCENDING)])
             ]
             
-            await self.database.users.create_indexes(user_indexes)
-            created_indexes["users"] = [str(idx.document) for idx in user_indexes]
+            result = await self._safe_create_indexes("users", user_indexes)
+            if result:
+                created_indexes["users"] = result
             
             # Experiment indexes for A/B testing performance
             experiment_indexes = [
@@ -78,8 +119,9 @@ class DatabaseOptimizer:
                 IndexModel([("created_by", ASCENDING), ("status", ASCENDING)])
             ]
             
-            await self.database.experiments.create_indexes(experiment_indexes)
-            created_indexes["experiments"] = [str(idx.document) for idx in experiment_indexes]
+            result = await self._safe_create_indexes("experiments", experiment_indexes)
+            if result:
+                created_indexes["experiments"] = result
             
             # Experiment event indexes for analytics
             experiment_event_indexes = [
@@ -90,8 +132,9 @@ class DatabaseOptimizer:
                 IndexModel([("variant_name", ASCENDING), ("event_type", ASCENDING)])
             ]
             
-            await self.database.experiment_events.create_indexes(experiment_event_indexes)
-            created_indexes["experiment_events"] = [str(idx.document) for idx in experiment_event_indexes]
+            result = await self._safe_create_indexes("experiment_events", experiment_event_indexes)
+            if result:
+                created_indexes["experiment_events"] = result
             
             # Feedback indexes for analytics and reporting
             feedback_indexes = [
@@ -103,8 +146,9 @@ class DatabaseOptimizer:
                 IndexModel([("processed", ASCENDING), ("created_at", ASCENDING)])
             ]
             
-            await self.database.user_feedback.create_indexes(feedback_indexes)
-            created_indexes["user_feedback"] = [str(idx.document) for idx in feedback_indexes]
+            result = await self._safe_create_indexes("user_feedback", feedback_indexes)
+            if result:
+                created_indexes["user_feedback"] = result
             
             # Quality metrics indexes
             quality_indexes = [
@@ -113,8 +157,9 @@ class DatabaseOptimizer:
                 IndexModel([("quality_score", DESCENDING), ("created_at", DESCENDING)])
             ]
             
-            await self.database.quality_metrics.create_indexes(quality_indexes)
-            created_indexes["quality_metrics"] = [str(idx.document) for idx in quality_indexes]
+            result = await self._safe_create_indexes("quality_metrics", quality_indexes)
+            if result:
+                created_indexes["quality_metrics"] = result
             
             # Recommendation indexes
             recommendation_indexes = [
@@ -123,8 +168,9 @@ class DatabaseOptimizer:
                 IndexModel([("category", ASCENDING), ("confidence", DESCENDING)])
             ]
             
-            await self.database.recommendations.create_indexes(recommendation_indexes)
-            created_indexes["recommendations"] = [str(idx.document) for idx in recommendation_indexes]
+            result = await self._safe_create_indexes("recommendations", recommendation_indexes)
+            if result:
+                created_indexes["recommendations"] = result
             
             # Report indexes
             report_indexes = [
@@ -133,8 +179,9 @@ class DatabaseOptimizer:
                 IndexModel([("created_by", ASCENDING), ("created_at", DESCENDING)])
             ]
             
-            await self.database.reports.create_indexes(report_indexes)
-            created_indexes["reports"] = [str(idx.document) for idx in report_indexes]
+            result = await self._safe_create_indexes("reports", report_indexes)
+            if result:
+                created_indexes["reports"] = result
             
             logger.success(f"Created indexes for {len(created_indexes)} collections")
             self.optimization_log.append({

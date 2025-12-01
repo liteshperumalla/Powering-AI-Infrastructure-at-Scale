@@ -322,7 +322,7 @@ const AssessmentResultsChart: React.FC<AssessmentResultsChartProps> = ({
                 </Box>
 
                 {/* Overall Score */}
-                <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                <Box sx={{ mt: 2, p: 2, bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.900' : 'grey.50', borderRadius: 1 }}>
                     <Typography variant="subtitle2" gutterBottom>
                         Overall Assessment Score
                     </Typography>

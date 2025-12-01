@@ -410,7 +410,7 @@ export default function DashboardPage() {
 
     const handleBulkDelete = async () => {
         if (selectedAssessments.length === 0) return;
-        
+
         if (!confirm(`Are you sure you want to delete ${selectedAssessments.length} assessments? This action cannot be undone.`)) {
             return;
         }
@@ -430,8 +430,19 @@ export default function DashboardPage() {
                 message: `Successfully deleted ${selectedAssessments.length} assessments`
             }));
 
+            // Clear selected assessments list
             setSelectedAssessments([]);
-            dispatch(fetchAssessments()); // Refresh data
+
+            // Clear selectedAssessment if it was deleted
+            if (selectedAssessment && selectedAssessments.includes(selectedAssessment.id)) {
+                setSelectedAssessment(null);
+            }
+
+            // Clear any cached data for deleted assessments
+            selectedAssessments.forEach(id => clearAssessmentCache(id));
+
+            // Refresh assessment list - this will trigger useEffect to reload dashboard data
+            await dispatch(fetchAssessments()).unwrap();
         } catch (error) {
             console.error('Bulk delete failed:', error);
             dispatch(addNotification({
@@ -2023,12 +2034,12 @@ export default function DashboardPage() {
                                                 <Typography variant="caption" color="text.secondary">
                                                     Progress: {Math.round(((draft.current_step || 0) + 1) / 5 * 100)}%
                                                 </Typography>
-                                                <Box sx={{ 
-                                                    width: '100%', 
-                                                    height: 4, 
-                                                    bgcolor: 'grey.300', 
-                                                    borderRadius: 2, 
-                                                    mt: 0.5 
+                                                <Box sx={{
+                                                    width: '100%',
+                                                    height: 4,
+                                                    bgcolor: (theme) => theme.palette.mode === 'dark' ? 'grey.700' : 'grey.300',
+                                                    borderRadius: 2,
+                                                    mt: 0.5
                                                 }}>
                                                     <Box sx={{ 
                                                         width: `${Math.round(((draft.current_step || 0) + 1) / 5 * 100)}%`, 

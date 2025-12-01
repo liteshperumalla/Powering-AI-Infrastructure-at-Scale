@@ -267,7 +267,7 @@ class DatabaseAuditor:
                 indexes = await collection.index_information()
                 
                 # Get index stats
-                index_stats = []
+                index_stats = {}
                 try:
                     stats_result = await self.db.command("collStats", collection_name, indexDetails=True)
                     index_stats = stats_result.get('indexSizes', {})
