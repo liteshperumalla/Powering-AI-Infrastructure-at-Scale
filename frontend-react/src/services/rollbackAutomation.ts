@@ -1,5 +1,7 @@
 'use client';
 
+import AuthStorage from '../utils/authStorage';
+
 export interface Deployment {
     id: string;
     name: string;
@@ -229,17 +231,20 @@ export interface RollbackTemplate {
 
 class RollbackAutomationService {
     private baseUrl: string;
-    private token: string | null = null;
 
     constructor() {
         this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        this.token = typeof window !== 'undefined' ? typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null : null;
+    }
+
+    // Get token dynamically for each request to handle login/logout properly
+    private getToken(): string | null {
+        return AuthStorage.getTokenFromAnySource();
     }
 
     private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
         // Map rollback endpoints to available dashboard/admin endpoints
         let mappedEndpoint = endpoint;
-        
+
         // Map rollback-specific endpoints to available ones
         if (endpoint.startsWith('/api/rollback/')) {
             // Use dashboard/admin analytics instead
@@ -255,12 +260,13 @@ class RollbackAutomationService {
             }
         }
 
+        const token = this.getToken();
         try {
             const response = await fetch(`${this.baseUrl}${mappedEndpoint}`, {
                 ...options,
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.token}`,
+                    ...(token && { 'Authorization': `Bearer ${token}` }),
                     ...options.headers,
                 },
             });
@@ -701,6 +707,27 @@ class RollbackAutomationService {
             return {};
         }
     }
+}
+
+// Type aliases for component compatibility
+export type DeploymentInfo = Deployment;
+export type AutoTrigger = RollbackTrigger;
+export type ValidationProcedure = ValidationCheck;
+export type DRPlan = DataRecoveryPlan;
+export type HealthMetric = DeploymentMetrics;
+
+export interface RollbackMetrics {
+    total_plans: number;
+    active_deployments: number;
+    success_rate: number;
+    avg_rollback_time: string;
+    total_rollbacks?: number;
+    rollbacks_by_environment?: Record<string, number>;
+    trend_data?: Array<{
+        date: string;
+        rollback_count: number;
+        success_count: number;
+    }>;
 }
 
 // Singleton instance

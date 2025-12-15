@@ -1,5 +1,7 @@
 'use client';
 
+import AuthStorage from '../utils/authStorage';
+
 export interface User {
     id: string;
     name: string;
@@ -184,19 +186,23 @@ export interface ChangeImpactAnalysis {
 
 class ApprovalWorkflowService {
     private baseUrl: string;
-    private token: string | null = null;
 
     constructor() {
         this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        this.token = typeof window !== 'undefined' ? typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null : null;
+    }
+
+    // Get token dynamically for each request to handle login/logout properly
+    private getToken(): string | null {
+        return AuthStorage.getTokenFromAnySource();
     }
 
     private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
+        const token = this.getToken();
         const response = await fetch(`${this.baseUrl}${endpoint}`, {
             ...options,
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.token}`,
+                ...(token && { 'Authorization': `Bearer ${token}` }),
                 ...options.headers,
             },
         });

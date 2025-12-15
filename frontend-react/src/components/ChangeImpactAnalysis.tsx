@@ -40,6 +40,8 @@ import {
     Badge,
     TreeView,
     TreeItem,
+    Tabs,
+    Tab,
 } from '@mui/material';
 import {
     ExpandMore as ExpandMoreIcon,
@@ -64,6 +66,8 @@ import {
     AccountTree as DependencyIcon,
     TrendingUp as TrendingUpIcon,
     TrendingDown as TrendingDownIcon,
+    History as HistoryIcon,
+    Science as InteractiveIcon,
 } from '@mui/icons-material';
 import { 
     getChangeImpactService, 
@@ -83,12 +87,28 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
     initialChangeRequest,
     onAnalysisComplete,
 }) => {
+    // Tab state
+    const [activeTab, setActiveTab] = useState<'interactive' | 'historical'>('interactive');
+
+    // Interactive mode states
     const [activeStep, setActiveStep] = useState(0);
     const [loading, setLoading] = useState(false);
     const [analysisResult, setAnalysisResult] = useState<ImpactAnalysisResult | null>(null);
     const [resources, setResources] = useState<Resource[]>([]);
     const [selectedResources, setSelectedResources] = useState<string[]>([]);
-    
+
+    // Historical mode states
+    const [historicalAssessments, setHistoricalAssessments] = useState<Array<{
+        id: string;
+        name: string;
+        created_at: string;
+        status: string;
+        environment: string;
+    }>>([]);
+    const [selectedAssessment, setSelectedAssessment] = useState<string | null>(null);
+    const [historicalLoading, setHistoricalLoading] = useState(false);
+    const [authError, setAuthError] = useState<string | null>(null);
+
     // Form states
     const [changeForm, setChangeForm] = useState({
         title: initialChangeRequest?.title || '',
@@ -108,8 +128,12 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
     const impactService = getChangeImpactService();
 
     useEffect(() => {
-        loadResources();
-    }, [changeForm.target_environment]);
+        if (activeTab === 'interactive') {
+            loadResources();
+        } else {
+            loadHistoricalAssessments();
+        }
+    }, [activeTab]);
 
     const loadResources = async () => {
         try {
@@ -118,6 +142,36 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
         } catch (error) {
             console.error('Failed to load resources:', error);
             setResources([]);
+        }
+    };
+
+    const loadHistoricalAssessments = async () => {
+        setHistoricalLoading(true);
+        setAuthError(null);
+        try {
+            const assessments = await impactService.getHistoricalAssessments();
+            setHistoricalAssessments(assessments);
+        } catch (error: any) {
+            console.error('Failed to load historical assessments:', error);
+            if (error.message?.includes('Session expired') || error.message?.includes('Authentication required')) {
+                setAuthError(error.message);
+            }
+            setHistoricalAssessments([]);
+        } finally {
+            setHistoricalLoading(false);
+        }
+    };
+
+    const loadAssessmentImpact = async (assessmentId: string) => {
+        setLoading(true);
+        try {
+            const impact = await impactService.getAssessmentImpact(assessmentId);
+            setAnalysisResult(impact);
+            setSelectedAssessment(assessmentId);
+        } catch (error) {
+            console.error('Failed to load assessment impact:', error);
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -230,6 +284,35 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
                 Change Impact Analysis
             </Typography>
 
+            {/* Tab Switcher */}
+            <Paper sx={{ mb: 3 }}>
+                <Tabs
+                    value={activeTab}
+                    onChange={(e, newValue) => {
+                        setActiveTab(newValue);
+                        setAnalysisResult(null);
+                        setSelectedAssessment(null);
+                    }}
+                    indicatorColor="primary"
+                    textColor="primary"
+                >
+                    <Tab
+                        icon={<InteractiveIcon />}
+                        iconPosition="start"
+                        label="New Analysis"
+                        value="interactive"
+                    />
+                    <Tab
+                        icon={<HistoryIcon />}
+                        iconPosition="start"
+                        label="Past Assessments"
+                        value="historical"
+                    />
+                </Tabs>
+            </Paper>
+
+            {/* Interactive Analysis Tab */}
+            {activeTab === 'interactive' && (
             <Stepper activeStep={activeStep} orientation="vertical">
                 {/* Step 1: Configuration */}
                 <Step>
@@ -693,6 +776,285 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
                     </StepContent>
                 </Step>
             </Stepper>
+            )}
+
+            {/* Historical Assessments Tab */}
+            {activeTab === 'historical' && (
+                <Box>
+                    {historicalLoading ? (
+                        <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}>
+                            <CircularProgress />
+                        </Box>
+                    ) : (
+                        <Grid container spacing={3}>
+                            {/* Assessments List */}
+                            {!selectedAssessment && (
+                                <Grid item xs={12}>
+                                    <Card>
+                                        <CardContent>
+                                            <Typography variant="h6" color="text.primary" sx={{ mb: 3 }}>
+                                                Select an Assessment to View Impact Analysis
+                                            </Typography>
+                                            {authError && (
+                                                <Alert severity="error" sx={{ mb: 2 }}>
+                                                    {authError} Please navigate to the login page to authenticate.
+                                                </Alert>
+                                            )}
+                                            {!authError && historicalAssessments.length === 0 && (
+                                                <Alert severity="info">
+                                                    No assessments found. Complete an infrastructure assessment first.
+                                                </Alert>
+                                            )}
+                                            {!authError && historicalAssessments.length > 0 && (
+                                                <Grid container spacing={2}>
+                                                    {historicalAssessments.map((assessment) => (
+                                                        <Grid item xs={12} sm={6} md={4} key={assessment.id}>
+                                                            <Card
+                                                                sx={{
+                                                                    cursor: 'pointer',
+                                                                    '&:hover': { boxShadow: 6 },
+                                                                    border: 1,
+                                                                    borderColor: 'divider',
+                                                                }}
+                                                                onClick={() => loadAssessmentImpact(assessment.id)}
+                                                            >
+                                                                <CardContent>
+                                                                    <Stack spacing={2}>
+                                                                        <Typography variant="h6" noWrap>
+                                                                            {assessment.name}
+                                                                        </Typography>
+                                                                        <Stack direction="row" spacing={1}>
+                                                                            <Chip
+                                                                                size="small"
+                                                                                label={assessment.status}
+                                                                                color={assessment.status === 'completed' ? 'success' : 'default'}
+                                                                            />
+                                                                            <Chip
+                                                                                size="small"
+                                                                                label={assessment.environment}
+                                                                                variant="outlined"
+                                                                            />
+                                                                        </Stack>
+                                                                        <Typography variant="caption" color="text.secondary">
+                                                                            Created: {new Date(assessment.created_at).toLocaleDateString()}
+                                                                        </Typography>
+                                                                        <Button
+                                                                            variant="outlined"
+                                                                            size="small"
+                                                                            startIcon={<ViewIcon />}
+                                                                            fullWidth
+                                                                        >
+                                                                            View Impact
+                                                                        </Button>
+                                                                    </Stack>
+                                                                </CardContent>
+                                                            </Card>
+                                                        </Grid>
+                                                    ))}
+                                                </Grid>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                </Grid>
+                            )}
+
+                            {/* Impact Analysis Results */}
+                            {selectedAssessment && analysisResult && (
+                                <Grid item xs={12}>
+                                    <Button
+                                        variant="outlined"
+                                        onClick={() => {
+                                            setSelectedAssessment(null);
+                                            setAnalysisResult(null);
+                                        }}
+                                        sx={{ mb: 2 }}
+                                    >
+                                        ← Back to Assessments
+                                    </Button>
+
+                                    {/* Reuse the same analysis result display from step 2 */}
+                                    <Grid container spacing={3}>
+                                        {/* Risk Overview */}
+                                        <Grid item xs={12} md={4}>
+                                            <Card>
+                                                <CardContent>
+                                                    <Stack spacing={2} alignItems="center">
+                                                        <Box sx={{ position: 'relative', display: 'inline-flex' }}>
+                                                            <CircularProgress
+                                                                variant="determinate"
+                                                                value={analysisResult.overall_risk_score}
+                                                                size={120}
+                                                                thickness={8}
+                                                                color={getRiskColor(analysisResult.risk_level) as any}
+                                                            />
+                                                            <Box
+                                                                sx={{
+                                                                    top: 0,
+                                                                    left: 0,
+                                                                    bottom: 0,
+                                                                    right: 0,
+                                                                    position: 'absolute',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                }}
+                                                            >
+                                                                <Typography variant="h4" color="text.secondary" component="div">
+                                                                    {analysisResult.overall_risk_score}
+                                                                </Typography>
+                                                            </Box>
+                                                        </Box>
+                                                        <Chip
+                                                            icon={getRiskIcon(analysisResult.risk_level)}
+                                                            label={`${analysisResult.risk_level.toUpperCase()} RISK`}
+                                                            color={getRiskColor(analysisResult.risk_level) as any}
+                                                            size="medium"
+                                                        />
+                                                        <Typography variant="body2" color="text.secondary" textAlign="center">
+                                                            Confidence: {Math.round(analysisResult.confidence_score * 100)}%
+                                                        </Typography>
+                                                    </Stack>
+                                                </CardContent>
+                                            </Card>
+                                        </Grid>
+
+                                        {/* Key Metrics */}
+                                        <Grid item xs={12} md={8}>
+                                            <Card>
+                                                <CardContent>
+                                                    <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
+                                                        Impact Summary
+                                                    </Typography>
+                                                    <Grid container spacing={3}>
+                                                        <Grid item xs={6} md={3}>
+                                                            <Stack alignItems="center" spacing={1}>
+                                                                <InfraIcon color="primary" fontSize="large" />
+                                                                <Typography variant="h4" color="text.primary">
+                                                                    {analysisResult.blast_radius.total_affected_count}
+                                                                </Typography>
+                                                                <Typography variant="caption" textAlign="center">
+                                                                    Resources Affected
+                                                                </Typography>
+                                                            </Stack>
+                                                        </Grid>
+                                                        <Grid item xs={6} md={3}>
+                                                            <Stack alignItems="center" spacing={1}>
+                                                                <UsersIcon color="warning" fontSize="large" />
+                                                                <Typography variant="h4" color="text.primary">
+                                                                    {analysisResult.business_impact.user_impact_assessment.affected_users.toLocaleString()}
+                                                                </Typography>
+                                                                <Typography variant="caption" textAlign="center">
+                                                                    Users Impacted
+                                                                </Typography>
+                                                            </Stack>
+                                                        </Grid>
+                                                        <Grid item xs={6} md={3}>
+                                                            <Stack alignItems="center" spacing={1}>
+                                                                <CostIcon color="error" fontSize="large" />
+                                                                <Typography variant="h4" color="text.primary">
+                                                                    ${analysisResult.business_impact.financial_impact.potential_cost_change.toLocaleString()}
+                                                                </Typography>
+                                                                <Typography variant="caption" textAlign="center">
+                                                                    Potential Cost Impact
+                                                                </Typography>
+                                                            </Stack>
+                                                        </Grid>
+                                                        <Grid item xs={6} md={3}>
+                                                            <Stack alignItems="center" spacing={1}>
+                                                                <ScheduleIcon color="info" fontSize="large" />
+                                                                <Typography variant="h4" color="text.primary">
+                                                                    {analysisResult.timeline_analysis.estimated_duration}
+                                                                </Typography>
+                                                                <Typography variant="caption" textAlign="center">
+                                                                    Estimated Duration
+                                                                </Typography>
+                                                            </Stack>
+                                                        </Grid>
+                                                    </Grid>
+                                                </CardContent>
+                                            </Card>
+                                        </Grid>
+
+                                        {/* Charts */}
+                                        <Grid item xs={12} md={6}>
+                                            <Card>
+                                                <CardContent>
+                                                    <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
+                                                        Impact Distribution
+                                                    </Typography>
+                                                    <InteractiveCharts
+                                                        config={{
+                                                            type: 'pie',
+                                                            title: '',
+                                                            data: generateImpactDistribution(),
+                                                            colors: ['#f44336', '#ff9800'],
+                                                        }}
+                                                        height={300}
+                                                        exportable={false}
+                                                    />
+                                                </CardContent>
+                                            </Card>
+                                        </Grid>
+
+                                        <Grid item xs={12} md={6}>
+                                            <Card>
+                                                <CardContent>
+                                                    <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
+                                                        Risk Breakdown
+                                                    </Typography>
+                                                    <InteractiveCharts
+                                                        config={{
+                                                            type: 'bar',
+                                                            title: '',
+                                                            data: generateRiskBreakdown(),
+                                                            colors: ['#2196f3'],
+                                                        }}
+                                                        height={300}
+                                                        exportable={false}
+                                                    />
+                                                </CardContent>
+                                            </Card>
+                                        </Grid>
+
+                                        {/* Recommendations */}
+                                        {analysisResult.risk_mitigation.recommendations.length > 0 && (
+                                            <Grid item xs={12}>
+                                                <Card>
+                                                    <CardContent>
+                                                        <Typography variant="h6" color="text.primary" sx={{ mb: 2 }}>
+                                                            Recommendations
+                                                        </Typography>
+                                                        <List>
+                                                            {analysisResult.risk_mitigation.recommendations.map((rec, idx) => (
+                                                                <React.Fragment key={idx}>
+                                                                    <ListItem>
+                                                                        <ListItemIcon>
+                                                                            <Chip
+                                                                                size="small"
+                                                                                label={rec.priority}
+                                                                                color={getRiskColor(rec.priority) as any}
+                                                                            />
+                                                                        </ListItemIcon>
+                                                                        <ListItemText
+                                                                            primary={rec.title}
+                                                                            secondary={rec.description}
+                                                                        />
+                                                                    </ListItem>
+                                                                    {idx < analysisResult.risk_mitigation.recommendations.length - 1 && <Divider />}
+                                                                </React.Fragment>
+                                                            ))}
+                                                        </List>
+                                                    </CardContent>
+                                                </Card>
+                                            </Grid>
+                                        )}
+                                    </Grid>
+                                </Grid>
+                            )}
+                        </Grid>
+                    )}
+                </Box>
+            )}
         </Box>
     );
 };

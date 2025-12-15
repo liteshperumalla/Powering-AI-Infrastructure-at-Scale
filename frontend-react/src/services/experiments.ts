@@ -1,8 +1,10 @@
 /**
  * A/B Testing and Experiments API Service
- * 
+ *
  * Provides functions to interact with the experiments API endpoints
  */
+
+import AuthStorage from '../utils/authStorage';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -145,12 +147,10 @@ export async function getExperimentDashboard(): Promise<any> {
   return response.json();
 }
 
-// Helper function to get auth token
+// Helper function to get auth token - uses centralized AuthStorage
 function getAuthToken(): string {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('authToken') || '';
-  }
-  return '';
+  // Use AuthStorage to get token from any valid source
+  return AuthStorage.getTokenFromAnySource() || '';
 }
 
 // Hook for using experiments in React components

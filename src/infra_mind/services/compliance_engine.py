@@ -1678,4 +1678,4 @@ class ComplianceCheckEngine:
 
 
 # Global instance
-compliance_engine = ComplianceEngine()
+compliance_engine = ComplianceCheckEngine()

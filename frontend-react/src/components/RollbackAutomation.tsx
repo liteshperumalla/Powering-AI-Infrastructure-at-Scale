@@ -319,25 +319,28 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
             </TableRow>
           </TableHead>
           <TableBody>
-            {Array.isArray(rollbackPlans) ? rollbackPlans.map((plan) => (
+            {Array.isArray(rollbackPlans) && rollbackPlans.length > 0 ? rollbackPlans.map((plan: any) => (
               <TableRow key={plan.id}>
-                <TableCell>{plan.name}</TableCell>
-                <TableCell>{plan.deployment_id}</TableCell>
+                <TableCell>{plan.recommendation_title || plan.name || 'Unnamed Plan'}</TableCell>
+                <TableCell>{plan.recommendation_id || plan.deployment_id || '-'}</TableCell>
                 <TableCell>
-                  <Chip label={plan.rollback_strategy} size="small" variant="outlined" />
+                  <Chip label={plan.rollback_strategy || 'Blue-Green'} size="small" variant="outlined" />
                 </TableCell>
                 <TableCell>
-                  <Chip 
-                    label={plan.status} 
+                  <Chip
+                    label={plan.status || 'ready'}
                     size="small"
-                    color={plan.status === 'ready' ? 'success' : 'default'}
+                    color="success"
                   />
                 </TableCell>
-                <TableCell>{new Date(plan.created_at).toLocaleDateString()}</TableCell>
+                <TableCell>
+                  {plan.created_at ? new Date(plan.created_at).toLocaleDateString() :
+                   `RTO: ${plan.recovery_time_objective || 'N/A'}`}
+                </TableCell>
                 <TableCell>
                   <Tooltip title="Execute Rollback">
-                    <IconButton 
-                      size="small" 
+                    <IconButton
+                      size="small"
                       onClick={() => {
                         setSelectedRollbackPlan(plan);
                         setExecutionDialog(true);
@@ -475,16 +478,16 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
           <CardContent>
             <Typography variant="h6" color="text.primary" mb={2}>Health Metrics</Typography>
             <List>
-              {Array.isArray(healthChecks) ? healthChecks.slice(0, 5).map((check, index) => (
-                <ListItem key={index}>
+              {Array.isArray(healthChecks) && healthChecks.length > 0 ? healthChecks.slice(0, 5).map((check: any, index) => (
+                <ListItem key={check.id || index}>
                   <ListItemIcon>
                     {check.status === 'healthy' ? <CheckCircle color="success" /> :
                      check.status === 'unhealthy' ? <Error color="error" /> :
                      <Warning color="warning" />}
                   </ListItemIcon>
-                  <ListItemText 
-                    primary={check.check_name}
-                    secondary={`Score: ${check.health_score}/100`}
+                  <ListItemText
+                    primary={check.name || check.check_name || 'Health Check'}
+                    secondary={`Success Rate: ${check.success_rate || check.health_score || 0}% | Response: ${check.response_time_ms || 0}ms`}
                   />
                 </ListItem>
               )) : (
@@ -513,17 +516,17 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {Array.isArray(autoTriggers) ? autoTriggers.map((trigger) => (
+                  {Array.isArray(autoTriggers) && autoTriggers.length > 0 ? autoTriggers.map((trigger: any) => (
                     <TableRow key={trigger.id}>
                       <TableCell>{trigger.name}</TableCell>
                       <TableCell>
                         <Typography variant="body2">
-                          {trigger.conditions.health_threshold && `Health < ${trigger.conditions.health_threshold}%`}
-                          {trigger.conditions.error_rate_threshold && ` | Error Rate > ${trigger.conditions.error_rate_threshold}%`}
+                          {trigger.condition?.metric && `${trigger.condition.metric} ${trigger.condition.operator || '>'} ${trigger.condition.value}${trigger.condition.unit ? ` ${trigger.condition.unit}` : ''}`}
+                          {trigger.condition?.consecutive_failures && `${trigger.condition.consecutive_failures} consecutive failures`}
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        <Chip label={trigger.action_type} size="small" variant="outlined" />
+                        <Chip label={trigger.type || 'auto'} size="small" variant="outlined" />
                       </TableCell>
                       <TableCell>
                         <FormControlLabel

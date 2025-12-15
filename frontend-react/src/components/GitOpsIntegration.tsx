@@ -125,7 +125,7 @@ const GitOpsIntegration: React.FC = () => {
                 gitOpsService.getIaCTemplates(),
                 gitOpsService.getDeploymentPlans(),
             ]);
-            
+
             // Ensure data is arrays and handle null/undefined responses
             setRepositories(Array.isArray(repos) ? repos : []);
             setTemplates(Array.isArray(templates) ? templates : []);
@@ -289,42 +289,43 @@ const GitOpsIntegration: React.FC = () => {
                                     </Alert>
                                 ) : (
                                     <List>
-                                        {repositories.map((repo) => (
-                                            <React.Fragment key={repo.id}>
+                                        {repositories.filter(repo => repo && repo.id).map((repo) => (
+                                            <React.Fragment key={repo?.id || Math.random()}>
                                                 <ListItem>
                                                     <ListItemIcon>
-                                                        {repo.provider === 'github' ? <GitHub /> : <GitLab />}
+                                                        {(repo?.provider || 'github') === 'github' ? <GitHub /> : <GitLab />}
                                                     </ListItemIcon>
                                                     <ListItemText
-                                                        primary={repo.full_name}
+                                                        primary={repo?.full_name || repo?.name || 'Unknown Repository'}
                                                         secondary={
                                                             <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
                                                                 <Chip
                                                                     size="small"
-                                                                    label={repo.provider}
+                                                                    label={repo?.provider || 'github'}
                                                                     color="primary"
                                                                     variant="outlined"
                                                                 />
                                                                 <Chip
                                                                     size="small"
-                                                                    label={repo.private ? 'Private' : 'Public'}
-                                                                    color={repo.private ? 'warning' : 'success'}
+                                                                    label={repo?.private ? 'Private' : 'Public'}
+                                                                    color={repo?.private ? 'warning' : 'success'}
                                                                     variant="outlined"
                                                                 />
                                                                 <Chip
                                                                     size="small"
-                                                                    label={`Default: ${repo.default_branch}`}
+                                                                    label={`Default: ${repo?.default_branch || 'main'}`}
                                                                     variant="outlined"
                                                                 />
                                                             </Stack>
                                                         }
+                                                        secondaryTypographyProps={{ component: 'div' }}
                                                     />
                                                     <ListItemSecondaryAction>
                                                         <Stack direction="row" spacing={1}>
                                                             <Tooltip title="View Repository">
                                                                 <IconButton
                                                                     size="small"
-                                                                    onClick={() => window.open(repo.url, '_blank')}
+                                                                    onClick={() => window.open(repo?.url || '#', '_blank')}
                                                                 >
                                                                     <LaunchIcon />
                                                                 </IconButton>
@@ -460,6 +461,7 @@ const GitOpsIntegration: React.FC = () => {
                                                         </Stack>
                                                     </React.Fragment>
                                                 }
+                                                secondaryTypographyProps={{ component: 'div' }}
                                             />
                                             <ListItemSecondaryAction>
                                                 <Button
@@ -567,27 +569,27 @@ const GitOpsIntegration: React.FC = () => {
                                     </Alert>
                                 ) : (
                                     <List>
-                                        {deploymentPlans.map((plan) => (
-                                            <React.Fragment key={plan.id}>
+                                        {deploymentPlans.filter(plan => plan && plan.id).map((plan) => (
+                                            <React.Fragment key={plan?.id || Math.random()}>
                                                 <ListItem>
                                                     <ListItemIcon>
                                                         <DeployIcon color="primary" />
                                                     </ListItemIcon>
                                                     <ListItemText
-                                                        primary={plan.name}
+                                                        primary={plan?.name || 'Unnamed Plan'}
                                                         secondary={
                                                             <Stack direction="row" spacing={1} sx={{ mt: 1 }}>
                                                                 <Chip
                                                                     size="small"
-                                                                    label={plan.environment}
+                                                                    label={plan?.environment || 'dev'}
                                                                     color={
-                                                                        plan.environment === 'prod' ? 'error' :
-                                                                        plan.environment === 'staging' ? 'warning' : 'primary'
+                                                                        (plan?.environment || 'dev') === 'prod' ? 'error' :
+                                                                        (plan?.environment || 'dev') === 'staging' ? 'warning' : 'primary'
                                                                     }
                                                                 />
                                                                 <Chip
                                                                     size="small"
-                                                                    label={plan.template.provider}
+                                                                    label={plan?.template?.provider || 'terraform'}
                                                                     variant="outlined"
                                                                 />
                                                                 {plan.auto_deploy && (
@@ -600,6 +602,7 @@ const GitOpsIntegration: React.FC = () => {
                                                                 )}
                                                             </Stack>
                                                         }
+                                                        secondaryTypographyProps={{ component: 'div' }}
                                                     />
                                                     <ListItemSecondaryAction>
                                                         <Stack direction="row" spacing={1}>

@@ -314,11 +314,13 @@ const InteractiveCharts: React.FC<InteractiveChartsProps> = ({
                         <Pie
                             data={filteredData}
                             cx="50%"
-                            cy="50%"
-                            outerRadius={120}
+                            cy="45%"
+                            innerRadius={0}
+                            outerRadius={80}
                             fill={colors[0]}
                             dataKey="value"
-                            label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                            label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                            labelLine={false}
                             animationDuration={chartSettings.animated ? 1000 : 0}
                         >
                             {filteredData.map((entry, index) => (
@@ -326,7 +328,14 @@ const InteractiveCharts: React.FC<InteractiveChartsProps> = ({
                             ))}
                         </Pie>
                         {chartSettings.showTooltip && <RechartsTooltip />}
-                        {chartSettings.showLegend && <Legend />}
+                        {chartSettings.showLegend && (
+                            <Legend
+                                verticalAlign="bottom"
+                                height={36}
+                                iconType="circle"
+                                wrapperStyle={{ paddingTop: '20px' }}
+                            />
+                        )}
                     </PieChart>
                 );
 

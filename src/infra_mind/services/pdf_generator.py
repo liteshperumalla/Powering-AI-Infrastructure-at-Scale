@@ -38,7 +38,7 @@ class PDFReportGenerator:
             alignment=TA_CENTER,
             textColor=colors.HexColor('#1976d2')
         ))
-        
+
         # Section heading style
         self.styles.add(ParagraphStyle(
             name='SectionHeading',
@@ -51,7 +51,7 @@ class PDFReportGenerator:
             borderColor=colors.HexColor('#1976d2'),
             borderPadding=5
         ))
-        
+
         # Subsection heading style
         self.styles.add(ParagraphStyle(
             name='SubsectionHeading',
@@ -61,7 +61,7 @@ class PDFReportGenerator:
             spaceBefore=12,
             textColor=colors.HexColor('#424242')
         ))
-        
+
         # Content style
         self.styles.add(ParagraphStyle(
             name='ContentText',
@@ -71,7 +71,7 @@ class PDFReportGenerator:
             alignment=TA_JUSTIFY,
             leading=14
         ))
-        
+
         # Key findings style
         self.styles.add(ParagraphStyle(
             name='KeyFinding',
@@ -82,6 +82,41 @@ class PDFReportGenerator:
             bulletIndent=10,
             alignment=TA_LEFT
         ))
+
+    def _format_markdown_text(self, text: str) -> str:
+        """Convert markdown formatting to ReportLab XML tags."""
+        if not text:
+            return ""
+
+        # Convert **bold** to <b>bold</b>
+        import re
+        text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+
+        # Handle bullet points with proper formatting
+        lines = text.split('\n')
+        formatted_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith('- ') or stripped.startswith('• '):
+                # Remove bullet and add proper formatting
+                formatted_lines.append('  • ' + stripped[2:])
+            else:
+                formatted_lines.append(line)
+
+        return '\n'.join(formatted_lines)
+
+    def _calculate_word_count(self, report_data: Dict[str, Any]) -> int:
+        """Calculate total word count from all sections."""
+        word_count = 0
+        sections = report_data.get('sections', [])
+
+        for section in sections:
+            if isinstance(section, dict):
+                content = section.get('content', '')
+                if content:
+                    word_count += len(content.split())
+
+        return word_count
     
     def generate_pdf(self, report_data: Dict[str, Any]) -> bytes:
         """
@@ -129,7 +164,9 @@ class PDFReportGenerator:
             return pdf_bytes
             
         except Exception as e:
+            import traceback
             logger.error(f"Failed to generate PDF: {e}")
+            logger.error(f"Traceback: {traceback.format_exc()}")
             raise
     
     def _add_title_page(self, story: List[Flowable], report_data: Dict[str, Any]):
@@ -152,12 +189,18 @@ class PDFReportGenerator:
         elif hasattr(created_date, 'strftime'):
             created_date = created_date.strftime('%Y-%m-%d')
         
+        # Calculate actual metadata values
+        word_count = self._calculate_word_count(report_data)
+        # Pages will be calculated after PDF generation, so we'll show estimated count
+        sections = report_data.get('sections', [])
+        estimated_pages = max(1, len(sections))  # Rough estimate based on sections
+
         metadata_data = [
-            ['Report ID:', report_data.get('report_id')],
+            ['Report ID:', str(report_data.get('report_id', 'N/A'))],
             ['Generated:', str(created_date)],
-            ['Status:', report_data.get('status', 'Completed').title()],
-            ['Pages:', str(report_data.get('total_pages'))],
-            ['Word Count:', f"{report_data.get('word_count', 0):,}"]
+            ['Status:', str(report_data.get('status', 'Completed')).title()],
+            ['Pages:', str(estimated_pages) + ' (est.)'],
+            ['Word Count:', f"{word_count:,}"]
         ]
         
         metadata_table = Table(metadata_data, colWidths=[2*inch, 3*inch])
@@ -176,11 +219,18 @@ class PDFReportGenerator:
         
         # Executive summary if available
         sections = report_data.get('sections', [])
-        exec_summary = next((s for s in sections if 'executive' in s.get('title').lower()), None)
-        
-        if exec_summary and exec_summary.get('content'):
+        # Safely find executive summary section (handle both dict and string sections)
+        exec_summary = None
+        for s in sections:
+            if isinstance(s, dict) and 'executive' in s.get('title', '').lower():
+                exec_summary = s
+                break
+
+        if exec_summary and isinstance(exec_summary, dict) and exec_summary.get('content'):
             story.append(Paragraph("Executive Summary", self.styles['SectionHeading']))
-            story.append(Paragraph(exec_summary['content'], self.styles['ContentText']))
+            # Apply markdown formatting
+            formatted_content = self._format_markdown_text(exec_summary['content'])
+            story.append(Paragraph(formatted_content, self.styles['ContentText']))
             story.append(Spacer(1, 20))
         
         story.append(PageBreak())
@@ -188,11 +238,19 @@ class PDFReportGenerator:
     def _add_report_sections(self, story: List[Flowable], report_data: Dict[str, Any]):
         """Add main report sections to the PDF."""
         sections = report_data.get('sections', [])
-        
+
         for section in sections:
-            section_title = section.get('title', 'Untitled Section')
-            section_content = section.get('content')
-            section_type = section.get('type', 'content')
+            # Handle both dict and string sections
+            if isinstance(section, dict):
+                section_title = section.get('title', 'Untitled Section')
+                section_content = section.get('content')
+                section_type = section.get('type', 'content')
+            elif isinstance(section, str):
+                section_title = section
+                section_content = None
+                section_type = 'content'
+            else:
+                continue  # Skip invalid sections
             
             # Skip executive summary as it's already in title page
             if 'executive' in section_title.lower():
@@ -206,8 +264,11 @@ class PDFReportGenerator:
             
             # Add section content
             if section_content:
+                # Apply markdown formatting
+                formatted_content = self._format_markdown_text(section_content)
+
                 # Split long content into paragraphs
-                paragraphs = section_content.split('\n\n')
+                paragraphs = formatted_content.split('\n\n')
                 for para in paragraphs:
                     if para.strip():
                         story.append(Paragraph(para.strip(), self.styles['ContentText']))
@@ -221,7 +282,7 @@ class PDFReportGenerator:
             story.append(Paragraph("Key Findings", self.styles['SectionHeading']))
             
             for i, finding in enumerate(key_findings, 1):
-                if finding.strip():
+                if finding and isinstance(finding, str) and finding.strip():
                     story.append(Paragraph(f"• {finding}", self.styles['KeyFinding']))
         
         # Add recommendations if available
@@ -231,7 +292,7 @@ class PDFReportGenerator:
             story.append(Paragraph("Recommendations", self.styles['SectionHeading']))
             
             for i, rec in enumerate(recommendations, 1):
-                if rec.strip():
+                if rec and isinstance(rec, str) and rec.strip():
                     story.append(Paragraph(f"{i}. {rec}", self.styles['ContentText']))
                     story.append(Spacer(1, 8))
     

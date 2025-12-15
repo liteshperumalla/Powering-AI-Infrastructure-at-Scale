@@ -1,5 +1,7 @@
 'use client';
 
+import AuthStorage from '../utils/authStorage';
+
 export interface ComplianceFramework {
     id: string;
     name: string;
@@ -388,15 +390,18 @@ export interface ComplianceDashboard {
 
 class ComplianceAutomationService {
     private baseUrl: string;
-    private token: string | null = null;
     private assessmentId: string | null = null;
 
     constructor(assessmentId?: string) {
         this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
         console.log('🔧 ComplianceAutomationService initialized with baseUrl:', this.baseUrl);
         console.log('🔧 Environment NEXT_PUBLIC_API_URL:', process.env.NEXT_PUBLIC_API_URL);
-        this.token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
         this.assessmentId = assessmentId || null;
+    }
+
+    // Get token dynamically for each request to handle login/logout properly
+    private getToken(): string | null {
+        return AuthStorage.getTokenFromAnySource();
     }
 
     setAssessmentId(assessmentId: string) {
@@ -409,11 +414,12 @@ class ComplianceAutomationService {
         console.log('🔧 Base URL:', this.baseUrl);
         console.log('🔧 Endpoint:', endpoint);
 
+        const token = this.getToken();
         const response = await fetch(fullUrl, {
             ...options,
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.token}`,
+                ...(token && { 'Authorization': `Bearer ${token}` }),
                 ...options.headers,
             },
         });

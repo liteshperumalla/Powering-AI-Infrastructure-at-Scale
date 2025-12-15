@@ -84,10 +84,11 @@ async def _resolve_query_result(query_result: Any):
 class CreateExperimentRequest(BaseModel):
     """Request model for creating experiment."""
     name: str = Field(..., description="Experiment name")
-    description: str = Field(..., description="Experiment description") 
+    description: str = Field(..., description="Experiment description")
     feature_flag: str = Field(..., description="Feature flag identifier")
     target_metric: str = Field(..., description="Primary metric to optimize")
     variants: List[Dict[str, Any]] = Field(..., min_length=2, description="Experiment variants")
+    assessment_id: Optional[str] = Field(default=None, description="Associated assessment ID")
 
 
 class ExperimentResponse(BaseModel):
@@ -106,9 +107,9 @@ class ExperimentResponse(BaseModel):
 @router.get("/", response_model=List[ExperimentResponse])
 async def list_experiments(
     status_filter: Optional[str] = Query(None, alias="status", description="Filter by status"),
-    current_user: User = Depends(require_enterprise_access)
+    current_user: User = Depends(get_current_user)
 ):
-    """List all experiments (admin only)."""
+    """List all experiments for the current user."""
     try:
         # Build query
         query = {}
@@ -136,7 +137,9 @@ async def list_experiments(
                         "id": str(variant.id),
                         "name": variant.name,
                         "type": variant.type.value,
-                        "traffic_percentage": variant.traffic_percentage
+                        "traffic_percentage": variant.traffic_percentage,
+                        "configuration": variant.configuration,
+                        "description": variant.description
                     })
             
             result.append(ExperimentResponse(
@@ -166,9 +169,9 @@ async def list_experiments(
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def create_experiment(
     request: CreateExperimentRequest,
-    current_user: User = Depends(require_enterprise_access)
+    current_user: User = Depends(get_current_user)
 ):
-    """Create a new A/B test experiment (admin only)."""
+    """Create a new A/B test experiment."""
     try:
         # Create experiment variants first
         variant_ids = []
@@ -188,6 +191,7 @@ async def create_experiment(
             name=request.name,
             description=request.description,
             feature_flag=request.feature_flag,
+            assessment_id=request.assessment_id,
             variants=variant_ids,
             target_metric=request.target_metric,
             created_by=current_user.email,
@@ -216,9 +220,9 @@ async def create_experiment(
 @router.get("/{experiment_id}")
 async def get_experiment(
     experiment_id: str,
-    current_user: User = Depends(require_enterprise_access)
+    current_user: User = Depends(get_current_user)
 ):
-    """Get experiment details (admin only)."""
+    """Get experiment details."""
     try:
         experiment = await Experiment.get(experiment_id)
         if not experiment:
@@ -284,9 +288,9 @@ async def get_experiment(
 @router.post("/{experiment_id}/start")
 async def start_experiment(
     experiment_id: str,
-    current_user: User = Depends(require_enterprise_access)
+    current_user: User = Depends(get_current_user)
 ):
-    """Start an experiment (admin only)."""
+    """Start an experiment."""
     try:
         experiment = await Experiment.get(experiment_id)
         if not experiment:
@@ -460,9 +464,9 @@ async def track_experiment_event(
 
 @router.get("/dashboard/data")
 async def get_dashboard_data(
-    current_user: User = Depends(require_enterprise_access)
+    current_user: User = Depends(get_current_user)
 ):
-    """Get A/B testing dashboard data (admin only)."""
+    """Get A/B testing dashboard data."""
     try:
         # Get experiment counts by status
         total_experiments = await Experiment.find().count()
@@ -472,8 +476,31 @@ async def get_dashboard_data(
         # Get recent experiments
         recent_experiments = await Experiment.find().sort(-Experiment.created_at).limit(5).to_list()
 
-        # Get total participants (events)
+        # Get total participants (unique users from events)
+        all_events = await ExperimentEvent.find().to_list()
+        unique_users = len(set(e.user_id for e in all_events)) if all_events else 0
+
+        # Calculate conversion rate (percentage of users who converted/completed action)
+        # For now, use events with positive value as conversions
         total_events = await ExperimentEvent.find().count()
+        conversion_events = await ExperimentEvent.find(
+            ExperimentEvent.event_value > 0
+        ).count()
+        conversion_rate = round((conversion_events / total_events * 100), 2) if total_events > 0 else 0
+
+        # Calculate average test duration (in days)
+        completed_exps = await Experiment.find(Experiment.status == ExperimentStatus.COMPLETED).to_list()
+        if completed_exps:
+            total_duration_days = 0
+            count_with_dates = 0
+            for exp in completed_exps:
+                if exp.started_at and exp.ended_at:
+                    duration = (exp.ended_at - exp.started_at).total_seconds() / 86400  # Convert to days
+                    total_duration_days += duration
+                    count_with_dates += 1
+            avg_duration = round(total_duration_days / count_with_dates, 1) if count_with_dates > 0 else 0
+        else:
+            avg_duration = 0
 
         experiment_summaries = []
         for exp in recent_experiments:
@@ -481,7 +508,7 @@ async def get_dashboard_data(
             participant_count = await ExperimentEvent.find(
                 ExperimentEvent.experiment_id == str(exp.id)
             ).count()
-            
+
             experiment_summaries.append({
                 "id": str(exp.id),
                 "name": exp.name,
@@ -489,16 +516,19 @@ async def get_dashboard_data(
                 "participants": participant_count,
                 "created_at": exp.created_at.isoformat()
             })
-        
+
         return {
             "total_experiments": total_experiments,
             "active_experiments": active_experiments,
             "completed_experiments": completed_experiments,
-            "total_participants": total_events,
+            "total_participants": unique_users,
+            "total_users": unique_users,  # Alias for frontend compatibility
+            "overall_conversion_rate": conversion_rate,
+            "avg_duration": avg_duration,
             "recent_experiments": experiment_summaries,
             "generated_at": datetime.now(timezone.utc).isoformat()
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to get dashboard data: {str(e)}")
         raise HTTPException(

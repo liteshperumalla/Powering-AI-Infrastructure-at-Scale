@@ -287,15 +287,25 @@ class ApiClient {
         };
 
         try {
-            console.log('🌐 API Request:', { method: config.method || 'GET', url, hasAuth: !!headers.Authorization });
+            const hasAuth = !!headers.Authorization;
+            const tokenPreview = hasAuth ? headers.Authorization?.substring(0, 30) + '...' : 'none';
+            console.log('🌐 API Request:', {
+                method: config.method || 'GET',
+                url,
+                hasAuth,
+                token: tokenPreview
+            });
             const response = await fetch(url, config);
 
             if (!response.ok) {
-                console.error('❌ API Request failed:', {
+                const errorDetails = {
                     status: response.status,
                     statusText: response.statusText,
-                    url
-                });
+                    url,
+                    method: config.method || 'GET',
+                    hasAuth: !!headers.Authorization
+                };
+                console.error('❌ API Request failed:', errorDetails);
                 let errorData: ApiError;
 
                 try {

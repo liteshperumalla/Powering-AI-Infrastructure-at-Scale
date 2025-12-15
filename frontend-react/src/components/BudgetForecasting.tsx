@@ -109,6 +109,7 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
 
   // State for different sections
   const [forecasts, setForecasts] = useState<CostForecast[]>([]);
+  const [forecastChartData, setForecastChartData] = useState<any[]>([]); // For Overview tab charts
   const [budgetAllocations, setBudgetAllocations] = useState<BudgetAllocation[]>([]);
   const [optimizationOpportunities, setOptimizationOpportunities] = useState<OptimizationOpportunity[]>([]);
   const [costModels, setCostModels] = useState<CostModel[]>([]);
@@ -119,6 +120,12 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
   const [forecastDialog, setForecastDialog] = useState(false);
   const [modelDialog, setModelDialog] = useState(false);
   const [allocationDialog, setAllocationDialog] = useState(false);
+  const [modelPerformanceDialog, setModelPerformanceDialog] = useState(false);
+  const [opportunityDetailsDialog, setOpportunityDetailsDialog] = useState(false);
+
+  // Selected items for dialogs
+  const [selectedModel, setSelectedModel] = useState<CostModel | null>(null);
+  const [selectedOpportunity, setSelectedOpportunity] = useState<OptimizationOpportunity | null>(null);
   
   // Form states
   const [newForecastData, setNewForecastData] = useState({
@@ -152,14 +159,49 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
       const { apiClient } = await import('../services/api');
       const budgetData = await apiClient.get<any>(`/features/assessment/${assessmentId}/budget`);
 
-      // Map the API response to component state
-      // The API returns budget forecasting data in the format we need
-      setCurrentSpending(budgetData.summary || {});
-      setOptimizationOpportunities(budgetData.recommendations || []);
-      setBudgetAllocations(budgetData.breakdown || []);
-      setForecasts(budgetData.forecasts || []);
-      setCostModels(budgetData.models || []);
+      console.log('📊 Budget Data Loaded:', budgetData);
+
+      // Map the real backend data to component state
+      setCurrentSpending({
+        current_month: budgetData.current_monthly_estimate || 0,
+        projected_month_end: budgetData.forecast_months?.[0]?.projected_cost || 0,
+        budget_remaining: (budgetData.summary?.monthly_budget_limit || 0) - (budgetData.current_monthly_estimate || 0),
+        days_remaining: Math.floor(((budgetData.summary?.monthly_budget_limit || 0) / (budgetData.current_monthly_estimate || 1)) * 30),
+        total_estimated: budgetData.summary?.total_estimated || 0,
+        annual_projection: budgetData.annual_projection || 0,
+      });
+
+      // Transform forecast_months into chart data format for Overview tab
+      const chartData = (budgetData.forecast_months || []).map((month: any) => ({
+        period: month.month,
+        predicted_cost: month.projected_cost,
+        actual_cost: month.projected_cost, // Use projected as actual for now
+        budget_allocated: month.budget_allocated,
+        variance: month.variance
+      }));
+
+      // Store chart data separately
+      setForecastChartData(chartData);
+
+      // Keep forecasts empty for now (will be populated when user creates forecasts)
+      setForecasts([]);
+
+      // Budget allocation data (create from forecast)
+      setBudgetAllocations(budgetData.forecast_months?.map((f: any) => ({
+        category: f.month,
+        allocated: f.budget_allocated,
+        spent: f.projected_cost,
+        remaining: f.variance
+      })) || []);
+
+      // Get optimization opportunities from backend
+      setOptimizationOpportunities(budgetData.optimization_opportunities || []);
+
+      // Get budget alerts from backend
       setBudgetAlerts(budgetData.alerts || []);
+
+      // Get AI cost models from backend (if available)
+      setCostModels(budgetData.cost_models || []);
 
     } catch (error) {
       setError('Failed to load budget forecasting data');
@@ -220,15 +262,15 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
             <Card>
               <CardContent>
                 <Typography variant="h6" color="primary.main">
-                  ${currentSpending.current_month_spend?.toLocaleString() || '0'}
+                  ${currentSpending.current_month?.toLocaleString() || '0'}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Current Month Spend
                 </Typography>
-                <LinearProgress 
-                  variant="determinate" 
-                  value={(currentSpending.current_month_spend && currentSpending.projected_month_end) 
-                    ? (currentSpending.current_month_spend / currentSpending.projected_month_end) * 100 
+                <LinearProgress
+                  variant="determinate"
+                  value={(currentSpending.current_month && currentSpending.projected_month_end)
+                    ? (currentSpending.current_month / currentSpending.projected_month_end) * 100
                     : 0}
                   sx={{ mt: 1 }}
                 />
@@ -266,7 +308,7 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
             <Card>
               <CardContent>
                 <Typography variant="h6" color="error.main">
-                  {currentSpending.days_remaining_at_current_rate || '0'}
+                  {currentSpending.days_remaining || '0'}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
                   Days Remaining at Current Rate
@@ -282,15 +324,15 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
         <Card>
           <CardContent>
             <Typography variant="h6" color="text.primary" mb={2}>Forecast vs Actual Spending</Typography>
-            {forecasts.length > 0 && forecasts[0].forecast_data.length > 0 && (
+            {forecastChartData.length > 0 && (
               <ResponsiveContainer width="100%" height={400}>
-                <ComposedChart data={forecasts[0].forecast_data}>
+                <ComposedChart data={forecastChartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="period" />
                   <YAxis />
                   <ChartTooltip />
                   <Area type="monotone" dataKey="predicted_cost" fill="#8884d8" fillOpacity={0.3} />
-                  <Line type="monotone" dataKey="actual_cost" stroke="#82ca9d" strokeWidth={3} />
+                  <Line type="monotone" dataKey="budget_allocated" stroke="#82ca9d" strokeWidth={3} />
                 </ComposedChart>
               </ResponsiveContainer>
             )}
@@ -322,6 +364,65 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
         </Card>
       </Grid>
 
+      {/* Monthly Spending Trend */}
+      {forecastChartData.length > 0 && (
+        <Grid item xs={12} md={8}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" color="text.primary" mb={2}>6-Month Budget Projection</Typography>
+              <ResponsiveContainer width="100%" height={350}>
+                <LineChart data={forecastChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="period" />
+                  <YAxis />
+                  <ChartTooltip
+                    formatter={(value: any) => `$${value.toLocaleString()}`}
+                    labelStyle={{ color: '#000' }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="predicted_cost"
+                    stroke="#8884d8"
+                    strokeWidth={3}
+                    name="Projected Cost"
+                    dot={{ fill: '#8884d8', r: 5 }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="budget_allocated"
+                    stroke="#82ca9d"
+                    strokeWidth={3}
+                    name="Budget Allocated"
+                    strokeDasharray="5 5"
+                    dot={{ fill: '#82ca9d', r: 5 }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </Grid>
+      )}
+
+      {/* Budget Variance Chart */}
+      {forecastChartData.length > 0 && (
+        <Grid item xs={12} md={4}>
+          <Card>
+            <CardContent>
+              <Typography variant="h6" color="text.primary" mb={2}>Monthly Variance</Typography>
+              <ResponsiveContainer width="100%" height={350}>
+                <RechartsBarChart data={forecastChartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="period" tick={{ fontSize: 10 }} />
+                  <YAxis />
+                  <ChartTooltip formatter={(value: any) => `$${value.toLocaleString()}`} />
+                  <Bar dataKey="variance" fill="#00C49F" name="Budget Remaining" />
+                </RechartsBarChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </Grid>
+      )}
+
       {/* Top Spending Services */}
       {currentSpending?.top_spending_services && (
         <Grid item xs={12}>
@@ -348,13 +449,18 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
     <Box>
       <Box display="flex" justifyContent="space-between" alignItems="center" mb={3}>
         <Typography variant="h6" color="text.primary">Cost Forecasts</Typography>
-        <Button 
-          variant="contained" 
-          startIcon={<PlayArrow />}
-          onClick={() => setForecastDialog(true)}
-        >
-          Create Forecast
-        </Button>
+        <Tooltip title="Custom forecast creation coming soon! Use the Overview tab for current projections.">
+          <span>
+            <Button
+              variant="contained"
+              startIcon={<PlayArrow />}
+              onClick={() => setForecastDialog(true)}
+              disabled
+            >
+              Create Forecast
+            </Button>
+          </span>
+        </Tooltip>
       </Box>
 
       <Grid container spacing={3}>
@@ -363,29 +469,33 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
             <Card>
               <CardContent>
                 <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                  <Typography variant="h6" color="text.primary">{forecast.forecast_name}</Typography>
-                  <Chip 
-                    label={`${forecast.accuracy_score.toFixed(1)}% accurate`}
-                    color={forecast.accuracy_score >= 80 ? 'success' : 'warning'}
-                    size="small"
-                  />
+                  <Typography variant="h6" color="text.primary">{forecast.forecast_name || 'Unnamed Forecast'}</Typography>
+                  {forecast.accuracy_score && (
+                    <Chip
+                      label={`${forecast.accuracy_score.toFixed(1)}% accurate`}
+                      color={forecast.accuracy_score >= 80 ? 'success' : 'warning'}
+                      size="small"
+                    />
+                  )}
                 </Box>
-                
+
                 <Typography variant="body2" color="text.secondary" mb={2}>
-                  Period: {forecast.period} | Horizon: {forecast.forecast_horizon_months} months
+                  Period: {forecast.period || 'monthly'} | Horizon: {forecast.forecast_horizon_months || 12} months
                 </Typography>
-                
-                <Box mb={2}>
-                  <Typography variant="caption" color="text.secondary">
-                    Confidence Interval
-                  </Typography>
-                  <Typography variant="body2">
-                    ${forecast.confidence_interval.lower_bound.toLocaleString()} - 
-                    ${forecast.confidence_interval.upper_bound.toLocaleString()}
-                  </Typography>
-                </Box>
-                
-                {forecast.forecast_data.length > 0 && (
+
+                {forecast.confidence_interval && (
+                  <Box mb={2}>
+                    <Typography variant="caption" color="text.secondary">
+                      Confidence Interval
+                    </Typography>
+                    <Typography variant="body2">
+                      ${(forecast.confidence_interval.lower_bound || 0).toLocaleString()} -
+                      ${(forecast.confidence_interval.upper_bound || 0).toLocaleString()}
+                    </Typography>
+                  </Box>
+                )}
+
+                {forecast.forecast_data && forecast.forecast_data.length > 0 && (
                   <Box height={150}>
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={forecast.forecast_data.slice(0, 6)}>
@@ -399,9 +509,11 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
                 )}
                 
                 <Box display="flex" justifyContent="space-between" alignItems="center" mt={2}>
-                  <Typography variant="caption" color="text.secondary">
-                    Updated: {new Date(forecast.last_updated).toLocaleDateString()}
-                  </Typography>
+                  {forecast.last_updated && (
+                    <Typography variant="caption" color="text.secondary">
+                      Updated: {new Date(forecast.last_updated).toLocaleDateString()}
+                    </Typography>
+                  )}
                   <Box>
                     <Tooltip title="View Details">
                       <IconButton size="small">
@@ -420,9 +532,14 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
           </Grid>
         )) : (
           <Grid item xs={12}>
-            <Box textAlign="center" py={3}>
-              <Typography color="textSecondary">
-                No forecasts available
+            <Box textAlign="center" py={6}>
+              <Typography variant="h6" color="textSecondary" mb={2}>
+                No Custom Forecasts Created
+              </Typography>
+              <Typography variant="body2" color="textSecondary" mb={3}>
+                The Overview tab shows the default 6-month budget projection.
+                <br />
+                Custom forecasts with advanced scenarios are coming soon!
               </Typography>
             </Box>
           </Grid>
@@ -456,10 +573,10 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
                 <Grid container spacing={2} mb={2}>
                   <Grid item xs={6}>
                     <Typography variant="caption" color="text.secondary">
-                      Potential Savings
+                      Monthly Savings
                     </Typography>
                     <Typography variant="h6" color="success.main">
-                      ${opportunity.potential_savings.toLocaleString()}
+                      ${(opportunity.potential_savings || 0).toLocaleString()}
                     </Typography>
                   </Grid>
                   <Grid item xs={6}>
@@ -467,44 +584,40 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
                       Annual Savings
                     </Typography>
                     <Typography variant="h6" color="success.main">
-                      ${opportunity.annual_savings_potential.toLocaleString()}
+                      ${((opportunity.potential_savings || 0) * 12).toLocaleString()}
                     </Typography>
                   </Grid>
                 </Grid>
-                
-                <Box mb={2}>
-                  <Typography variant="body2" mb={1}>
-                    ROI Analysis
-                  </Typography>
-                  <Typography variant="caption">
-                    Payback: {opportunity.roi_analysis.payback_period_months} months | 
-                    NPV: ${opportunity.roi_analysis.net_present_value.toLocaleString()} | 
-                    IRR: {opportunity.roi_analysis.internal_rate_of_return.toFixed(1)}%
-                  </Typography>
-                </Box>
-                
-                <Box display="flex" justify="space-between" alignItems="center">
+
+                <Box display="flex" justifyContent="space-between" alignItems="center">
                   <Box>
-                    <Chip 
-                      label={opportunity.implementation_effort}
+                    <Chip
+                      label={`Impact: ${opportunity.impact || 'medium'}`}
                       size="small"
                       color={
-                        opportunity.implementation_effort === 'low' ? 'success' :
-                        opportunity.implementation_effort === 'medium' ? 'warning' : 'error'
+                        opportunity.impact === 'low' ? 'info' :
+                        opportunity.impact === 'medium' ? 'warning' : 'error'
                       }
+                      sx={{ mr: 1 }}
                     />
-                    <Chip 
-                      label={opportunity.risk_level}
+                    <Chip
+                      label={`Effort: ${opportunity.effort || 'medium'}`}
                       size="small"
                       color={
-                        opportunity.risk_level === 'low' ? 'success' :
-                        opportunity.risk_level === 'medium' ? 'warning' : 'error'
+                        opportunity.effort === 'low' ? 'success' :
+                        opportunity.effort === 'medium' ? 'warning' : 'error'
                       }
-                      sx={{ ml: 1 }}
                     />
                   </Box>
-                  <Button size="small" variant="outlined">
-                    Implement
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={() => {
+                      setSelectedOpportunity(opportunity);
+                      setOpportunityDetailsDialog(true);
+                    }}
+                  >
+                    View Details
                   </Button>
                 </Box>
               </CardContent>
@@ -579,17 +692,33 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
                 </TableCell>
                 <TableCell>
                   <Tooltip title="Train Model">
-                    <IconButton size="small">
+                    <IconButton
+                      size="small"
+                      onClick={() => {
+                        alert(`Training ${model.model_name}...\nThis would trigger model retraining in production.`);
+                      }}
+                    >
                       <PlayArrow />
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="View Performance">
-                    <IconButton size="small">
+                    <IconButton
+                      size="small"
+                      onClick={() => {
+                        setSelectedModel(model);
+                        setModelPerformanceDialog(true);
+                      }}
+                    >
                       <Analytics />
                     </IconButton>
                   </Tooltip>
                   <Tooltip title="Configure">
-                    <IconButton size="small">
+                    <IconButton
+                      size="small"
+                      onClick={() => {
+                        alert(`Configure ${model.model_name}\nHyperparameters and training settings would be adjustable here.`);
+                      }}
+                    >
                       <Settings />
                     </IconButton>
                   </Tooltip>
@@ -815,6 +944,155 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
             disabled={!newModelData.model_name}
           >
             Create Model
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Model Performance Dialog */}
+      <Dialog
+        open={modelPerformanceDialog}
+        onClose={() => setModelPerformanceDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          {selectedModel?.model_name} - Performance Metrics
+        </DialogTitle>
+        <DialogContent>
+          {selectedModel && (
+            <Grid container spacing={3} sx={{ mt: 1 }}>
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>Accuracy Metrics</Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={6} md={3}>
+                    <Card>
+                      <CardContent>
+                        <Typography color="textSecondary" variant="body2">Accuracy Score</Typography>
+                        <Typography variant="h5">{(selectedModel.accuracy_metrics.accuracy_score * 100).toFixed(1)}%</Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  <Grid item xs={6} md={3}>
+                    <Card>
+                      <CardContent>
+                        <Typography color="textSecondary" variant="body2">MAE</Typography>
+                        <Typography variant="h5">${selectedModel.accuracy_metrics.mae.toLocaleString()}</Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  <Grid item xs={6} md={3}>
+                    <Card>
+                      <CardContent>
+                        <Typography color="textSecondary" variant="body2">RMSE</Typography>
+                        <Typography variant="h5">${selectedModel.accuracy_metrics.rmse.toLocaleString()}</Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  <Grid item xs={6} md={3}>
+                    <Card>
+                      <CardContent>
+                        <Typography color="textSecondary" variant="body2">R²</Typography>
+                        <Typography variant="h5">{selectedModel.accuracy_metrics.r_squared.toFixed(3)}</Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                </Grid>
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>Feature Importance</Typography>
+                {selectedModel.feature_importance.map((feature, idx) => (
+                  <Box key={idx} mb={2}>
+                    <Box display="flex" justifyContent="space-between" mb={0.5}>
+                      <Typography variant="body2">{feature.feature}</Typography>
+                      <Typography variant="body2">{(feature.importance * 100).toFixed(0)}%</Typography>
+                    </Box>
+                    <LinearProgress variant="determinate" value={feature.importance * 100} />
+                  </Box>
+                ))}
+              </Grid>
+
+              <Grid item xs={12}>
+                <Typography variant="h6" gutterBottom>Hyperparameters</Typography>
+                <TableContainer component={Paper}>
+                  <Table size="small">
+                    <TableBody>
+                      {Object.entries(selectedModel.hyperparameters).map(([key, value]) => (
+                        <TableRow key={key}>
+                          <TableCell><strong>{key}</strong></TableCell>
+                          <TableCell>{String(value)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Grid>
+            </Grid>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setModelPerformanceDialog(false)}>Close</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Optimization Opportunity Details Dialog */}
+      <Dialog
+        open={opportunityDetailsDialog}
+        onClose={() => setOpportunityDetailsDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          {selectedOpportunity?.title}
+        </DialogTitle>
+        <DialogContent>
+          {selectedOpportunity && (
+            <Box sx={{ mt: 2 }}>
+              <Chip label={selectedOpportunity.category} color="primary" size="small" sx={{ mb: 2 }} />
+
+              <Typography variant="body1" paragraph>
+                {selectedOpportunity.description}
+              </Typography>
+
+              <Grid container spacing={2} sx={{ my: 2 }}>
+                <Grid item xs={6}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Typography color="textSecondary" variant="caption">Monthly Savings</Typography>
+                      <Typography variant="h6" color="success.main">
+                        ${(selectedOpportunity.potential_savings || 0).toLocaleString()}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+                <Grid item xs={6}>
+                  <Card variant="outlined">
+                    <CardContent>
+                      <Typography color="textSecondary" variant="caption">Annual Savings</Typography>
+                      <Typography variant="h6" color="success.main">
+                        ${((selectedOpportunity.potential_savings || 0) * 12).toLocaleString()}
+                      </Typography>
+                    </CardContent>
+                  </Card>
+                </Grid>
+              </Grid>
+
+              <Box sx={{ my: 2 }}>
+                <Typography variant="body2" gutterBottom><strong>Impact:</strong> {selectedOpportunity.impact}</Typography>
+                <Typography variant="body2" gutterBottom><strong>Effort:</strong> {selectedOpportunity.effort}</Typography>
+                <Typography variant="body2" gutterBottom><strong>Category:</strong> {selectedOpportunity.category}</Typography>
+              </Box>
+
+              <Alert severity="info" sx={{ mt: 2 }}>
+                <strong>Next Steps:</strong> Review the affected resources and create an implementation plan. Contact your infrastructure team to begin optimization.
+              </Alert>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpportunityDetailsDialog(false)}>Close</Button>
+          <Button variant="contained" color="primary">
+            Create Implementation Plan
           </Button>
         </DialogActions>
       </Dialog>

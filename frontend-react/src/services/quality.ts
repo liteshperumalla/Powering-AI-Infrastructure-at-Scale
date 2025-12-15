@@ -1,10 +1,11 @@
 /**
  * Quality Assurance API Service
- * 
+ *
  * Provides functions to interact with the quality metrics system
  */
 
 import React from 'react';
+import AuthStorage from '../utils/authStorage';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -306,12 +307,10 @@ export async function calculateQualityScore(
   };
 }
 
-// Helper function to get auth token
+// Helper function to get auth token - uses centralized AuthStorage
 function getAuthToken(): string {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('authToken') || '';
-  }
-  return '';
+  // Use AuthStorage to get token from any valid source
+  return AuthStorage.getTokenFromAnySource() || '';
 }
 
 // React hook for quality metrics

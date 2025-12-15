@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
 import ResponsiveLayout from '../../components/ResponsiveLayout';
@@ -31,11 +31,24 @@ import { apiClient } from '../../services/api';
 
 export default function QualityPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const currentAssessment = useSelector((state: RootState) => state.assessment.currentAssessment);
+  const assessments = useSelector((state: RootState) => state.assessment.assessments);
 
-  // Priority: URL param > Redux state
+  // Priority: URL param > Redux currentAssessment > First assessment in list
   const urlAssessmentId = searchParams?.get('assessment_id');
-  const assessmentId = urlAssessmentId || currentAssessment?.id;
+  const assessmentId = urlAssessmentId || currentAssessment?.id || (assessments.length > 0 ? assessments[0].id : null);
+
+  // Debug logging
+  React.useEffect(() => {
+    console.log('🔍 Quality Page Assessment Resolution:', {
+      urlAssessmentId,
+      currentAssessmentId: currentAssessment?.id,
+      assessmentsCount: assessments.length,
+      firstAssessmentId: assessments[0]?.id,
+      resolvedAssessmentId: assessmentId
+    });
+  }, [urlAssessmentId, currentAssessment, assessments, assessmentId]);
 
   const [qualityData, setQualityData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -44,11 +57,23 @@ export default function QualityPage() {
   // No redirect - just handle the case when there's no assessment
 
   const fetchData = useCallback(async () => {
-    if (!assessmentId) return;
+    if (!assessmentId) {
+      setError('No assessment ID provided. Please select an assessment first.');
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);
       const response = await apiClient.get<any>(`/features/assessment/${assessmentId}/quality`);
+      console.log('📊 Quality Data Received:', {
+        hasMetrics: !!response?.metrics,
+        hasRecommendationsQuality: !!response?.recommendations_quality,
+        hasAssessmentQuality: !!response?.assessment_quality,
+        hasIssueBreakdown: !!response?.issue_breakdown,
+        metricsType: typeof response?.metrics,
+        fullData: response
+      });
       setQualityData(response);
       setError(null);
     } catch (err: any) {
@@ -89,19 +114,41 @@ export default function QualityPage() {
         </Box>
 
         {error && (
-          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
+          <Alert severity={!assessmentId ? "warning" : "error"} sx={{ mb: 3 }} onClose={() => setError(null)}>
             {error}
+            {!assessmentId && (
+              <Box sx={{ mt: 2 }}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => router.push('/assessments')}
+                  sx={{ mt: 1 }}
+                >
+                  Go to Assessments
+                </Button>
+                <Typography variant="body2" sx={{ mt: 2 }}>
+                  Or follow these steps:
+                </Typography>
+                <ul style={{ marginTop: '8px', paddingLeft: '20px' }}>
+                  <li>Go to <strong>Assessments</strong> page</li>
+                  <li>Click on an assessment to select it</li>
+                  <li>Then return to this Quality Metrics page</li>
+                </ul>
+              </Box>
+            )}
           </Alert>
         )}
 
-        <Button
-          variant="outlined"
-          startIcon={<Refresh />}
-          onClick={fetchData}
-          sx={{ mb: 3 }}
-        >
-          Refresh
-        </Button>
+        {assessmentId && (
+          <Button
+            variant="outlined"
+            startIcon={<Refresh />}
+            onClick={fetchData}
+            sx={{ mb: 3 }}
+          >
+            Refresh
+          </Button>
+        )}
 
         {qualityData && (
           <>
@@ -174,28 +221,28 @@ export default function QualityPage() {
             </Grid>
 
             {/* Quality Metrics */}
-            {qualityData.metrics && Array.isArray(qualityData.metrics) && qualityData.metrics.length > 0 && (
+            {qualityData.metrics && (
               <Paper sx={{ p: 3, mb: 3 }}>
                 <Typography variant="h6" color="text.primary" gutterBottom>
                   Quality Metrics
                 </Typography>
                 <Stack spacing={2}>
-                  {qualityData.metrics.map((metric: any, index: number) => (
-                    <Box key={index}>
+                  {Object.entries(qualityData.metrics).map(([key, value]: [string, any]) => (
+                    <Box key={key}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
-                        <Typography variant="body1">
-                          {metric.name || metric.metric_name}
+                        <Typography variant="body1" sx={{ textTransform: 'capitalize' }}>
+                          {key}
                         </Typography>
                         <Typography variant="body1" fontWeight="bold">
-                          {metric.score || metric.value}%
+                          {typeof value === 'number' ? value.toFixed(1) : value}%
                         </Typography>
                       </Box>
                       <LinearProgress
                         variant="determinate"
-                        value={metric.score || metric.value || 0}
+                        value={typeof value === 'number' ? value : 0}
                         color={
-                          (metric.score || metric.value) >= 90 ? 'success' :
-                          (metric.score || metric.value) >= 70 ? 'warning' : 'error'
+                          value >= 90 ? 'success' :
+                          value >= 70 ? 'warning' : 'error'
                         }
                       />
                     </Box>
@@ -204,50 +251,82 @@ export default function QualityPage() {
               </Paper>
             )}
 
-            {/* Recommendations */}
-            {qualityData.recommendations && Array.isArray(qualityData.recommendations) && qualityData.recommendations.length > 0 && (
-              <Paper sx={{ p: 3 }}>
+            {/* Recommendations Quality */}
+            {qualityData.recommendations_quality && (
+              <Paper sx={{ p: 3, mb: 3 }}>
                 <Typography variant="h6" color="text.primary" gutterBottom>
-                  Quality Improvement Recommendations
+                  Recommendations Quality
+                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={4}>
+                    <Typography variant="body2" color="text.secondary">Total Recommendations</Typography>
+                    <Typography variant="h5" color="text.primary">{qualityData.recommendations_quality.total}</Typography>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <Typography variant="body2" color="text.secondary">High Confidence</Typography>
+                    <Typography variant="h5" color="text.primary">{qualityData.recommendations_quality.high_confidence}</Typography>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <Typography variant="body2" color="text.secondary">Average Confidence</Typography>
+                    <Typography variant="h5" color="text.primary">{qualityData.recommendations_quality.average_confidence}%</Typography>
+                  </Grid>
+                </Grid>
+              </Paper>
+            )}
+
+            {/* Issue Breakdown by Category */}
+            {qualityData.issue_breakdown && Array.isArray(qualityData.issue_breakdown) && (
+              <Paper sx={{ p: 3, mb: 3 }}>
+                <Typography variant="h6" color="text.primary" gutterBottom>
+                  Issues by Category
                 </Typography>
                 <Stack spacing={2}>
-                  {qualityData.recommendations.map((rec: any, index: number) => (
+                  {qualityData.issue_breakdown.map((category: any, index: number) => (
                     <Box key={index}>
-                      <Typography variant="subtitle2" gutterBottom>
-                        {rec.title || `Recommendation ${index + 1}`}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {rec.description || rec.recommendation}
-                      </Typography>
-                      {rec.priority && (
-                        <Chip
-                          label={rec.priority}
-                          size="small"
-                          color={
-                            rec.priority === 'high' ? 'error' :
-                            rec.priority === 'medium' ? 'warning' : 'info'
-                          }
-                          sx={{ mt: 1 }}
-                        />
-                      )}
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                        <Typography variant="subtitle1" fontWeight="bold">
+                          {category.category}
+                        </Typography>
+                        <Box sx={{ display: 'flex', gap: 2 }}>
+                          {category.critical > 0 && <Chip label={`${category.critical} Critical`} color="error" size="small" />}
+                          {category.high > 0 && <Chip label={`${category.high} High`} color="warning" size="small" />}
+                          {category.medium > 0 && <Chip label={`${category.medium} Medium`} color="info" size="small" />}
+                        </Box>
+                      </Box>
+                      {category.issues && category.issues.slice(0, 3).map((issue: any, idx: number) => (
+                        <Typography key={idx} variant="body2" color="text.secondary" sx={{ ml: 2 }}>
+                          • {issue.title}
+                        </Typography>
+                      ))}
                     </Box>
                   ))}
                 </Stack>
               </Paper>
             )}
 
-            {/* If no specific data structure, show raw data */}
-            {!qualityData.metrics && !qualityData.recommendations && (
-              <Paper sx={{ p: 3 }}>
+            {/* Assessment Quality Details */}
+            {qualityData.assessment_quality && (
+              <Paper sx={{ p: 3, mb: 3 }}>
                 <Typography variant="h6" color="text.primary" gutterBottom>
-                  Quality Data
+                  Assessment Quality
                 </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Assessment ID: {qualityData.assessment_id}
-                </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-                  {qualityData.description || 'Quality metrics for this assessment'}
-                </Typography>
+                <Grid container spacing={2}>
+                  <Grid item xs={12} md={4}>
+                    <Typography variant="body2" color="text.secondary">Completion Rate</Typography>
+                    <Typography variant="h5" color="text.primary">{qualityData.assessment_quality.completion_rate}%</Typography>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <Typography variant="body2" color="text.secondary">Data Coverage</Typography>
+                    <Typography variant="h5" color="text.primary">{qualityData.assessment_quality.data_coverage}%</Typography>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <Typography variant="body2" color="text.secondary">Validation</Typography>
+                    <Chip
+                      label={qualityData.assessment_quality.validation_passed ? "Passed" : "Failed"}
+                      color={qualityData.assessment_quality.validation_passed ? "success" : "error"}
+                    />
+                  </Grid>
+                </Grid>
               </Paper>
             )}
           </>

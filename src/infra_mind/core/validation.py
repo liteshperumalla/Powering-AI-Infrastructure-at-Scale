@@ -34,13 +34,16 @@ class ProductionDataValidator:
     """
     
     # Patterns that indicate mock/placeholder data
+    # Use word boundaries (\b) to avoid false positives with words like "testing", "contested", etc.
     MOCK_PATTERNS = [
-        r"mock|placeholder|test|debug|sample|dummy|fake|lorem ipsum",
-        r"TODO|FIXME|TBD|coming soon|under development",
-        r"report generation in progress|being generated",
-        r"unknown company|example|template|prototype",
-        r"\$\d+,?\d*\.?\d*\s*(placeholder|mock|test)",
-        r"(0+|1234|9999)\s*(cost|price|budget)"
+        r"\b(mock|placeholder|debug|dummy|fake)\b",  # Removed 'test' and 'sample' as they appear in legitimate contexts
+        r"\blorem\s+ipsum\b",
+        r"\b(TODO|FIXME|TBD)\b",
+        r"\bcoming\s+soon\b|\bunder\s+development\b",
+        r"report\s+generation\s+in\s+progress|being\s+generated",
+        r"\bunknown\s+company\b|\bexample\s+(company|org|organization)\b|\btemplate\b|\bprototype\b",
+        r"\$\d+,?\d*\.?\d*\s*(placeholder|mock)",  # Removed 'test' from cost patterns
+        r"\b(1234|9999)\b\s*(cost|price|budget)"  # Removed 0+ pattern as $0 is valid
     ]
     
     # Minimum content requirements
@@ -118,10 +121,17 @@ class ProductionDataValidator:
                 warnings.append("Report missing cost analysis")
                 quality_score -= 10
             
-            # Check generated_by field
-            if not report.generated_by or "mock" in str(report.generated_by).lower():
-                errors.append("Report has invalid generated_by field")
-                quality_score -= 15
+            # Check generated_by field (should be a list of agent names or a string)
+            if report.generated_by:
+                generated_by_str = str(report.generated_by).lower()
+                # Only flag if it explicitly contains mock-related terms
+                if "mock" in generated_by_str or "placeholder" in generated_by_str or "test" in generated_by_str:
+                    errors.append("Report has invalid generated_by field")
+                    quality_score -= 15
+            # Don't flag empty generated_by as error, just warning
+            elif not report.generated_by:
+                warnings.append("Report has no generated_by field")
+                quality_score -= 5
             
             # Ensure quality_score doesn't go below 0
             quality_score = max(0.0, quality_score)
@@ -232,17 +242,25 @@ class ProductionDataValidator:
         errors = []
         warnings = []
         quality_penalty = 0.0
-        
+
         for section in sections:
-            if self._contains_mock_content(section.title):
-                errors.append(f"Section title contains mock content: {section.title}")
+            # Handle both dict and ReportSection objects
+            if isinstance(section, dict):
+                title = section.get('title', '')
+                content = section.get('content', '')
+            else:
+                title = section.title if hasattr(section, 'title') else ''
+                content = section.content if hasattr(section, 'content') else ''
+
+            if self._contains_mock_content(title):
+                errors.append(f"Section title contains mock content: {title}")
                 quality_penalty += 10
-            
-            if not section.content or len(section.content) < self.MIN_SECTION_CONTENT_LENGTH:
-                errors.append(f"Section '{section.title}' content too short or missing")
+
+            if not content or len(content) < self.MIN_SECTION_CONTENT_LENGTH:
+                errors.append(f"Section '{title}' content too short or missing")
                 quality_penalty += 15
-            elif self._contains_mock_content(section.content):
-                errors.append(f"Section '{section.title}' contains mock content")
+            elif self._contains_mock_content(content):
+                errors.append(f"Section '{title}' contains mock content")
                 quality_penalty += 10
         
         return {
@@ -267,7 +285,8 @@ class ProductionDataValidator:
                 quality_penalty += 8
             
             cost = rec.get("estimated_cost", 0)
-            if cost in [75000, 1234, 9999, 0]:
+            # Only flag obviously mock values, not $0 (which is valid for free/no-cost recommendations)
+            if cost in [75000, 1234, 9999]:
                 errors.append(f"Recommendation {i+1} has mock cost value: ${cost}")
                 quality_penalty += 5
         
@@ -284,7 +303,8 @@ class ProductionDataValidator:
         quality_penalty = 0.0
         
         total_cost = cost_analysis.get("total_cost", 0)
-        if total_cost in [75000, 1234, 9999, 0]:
+        # Only flag obviously mock values, not $0
+        if total_cost in [75000, 1234, 9999]:
             errors.append(f"Cost analysis has mock total_cost value: ${total_cost}")
             quality_penalty += 15
         

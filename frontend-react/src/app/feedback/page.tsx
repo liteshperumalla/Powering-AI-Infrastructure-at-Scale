@@ -1,6 +1,8 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../store';
 import ResponsiveLayout from '../../components/ResponsiveLayout';
 import {
   Container,
@@ -77,6 +79,18 @@ function TabPanel(props: TabPanelProps) {
 }
 
 export default function FeedbackPage() {
+  const currentUser = useSelector((state: RootState) => state.auth.user);
+
+  // Admin check - for now, treat liteshperumalla@gmail.com as admin
+  // In production, this should use proper role-based access control
+  const isAdmin = currentUser?.email === 'liteshperumalla@gmail.com';
+
+  // Debug logging
+  useEffect(() => {
+    console.log('Current user:', currentUser);
+    console.log('Is admin:', isAdmin);
+  }, [currentUser, isAdmin]);
+
   const [tabValue, setTabValue] = useState(0);
   const [analytics, setAnalytics] = useState<FeedbackAnalytics | null>(null);
   const [recentFeedback, setRecentFeedback] = useState<UserFeedback[]>([]);
@@ -99,13 +113,20 @@ export default function FeedbackPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [analyticsData, feedbackData] = await Promise.all([
-        getFeedbackAnalytics().catch(() => null),
-        getFeedbackList({ limit: 10 }).catch(() => [])
-      ]);
-      
-      setAnalytics(analyticsData);
-      setRecentFeedback(feedbackData);
+
+      // Only load analytics if user is admin
+      if (isAdmin) {
+        const [analyticsData, feedbackData] = await Promise.all([
+          getFeedbackAnalytics().catch(() => null),
+          getFeedbackList({ limit: 10 }).catch(() => [])
+        ]);
+        setAnalytics(analyticsData);
+        setRecentFeedback(feedbackData);
+      } else {
+        // Regular users don't see analytics or recent feedback list
+        setAnalytics(null);
+        setRecentFeedback([]);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load data');
     } finally {
@@ -192,7 +213,7 @@ export default function FeedbackPage() {
                       Total Feedback
                     </Typography>
                     <Typography variant="h5" color="text.primary">
-                      {analytics.total_feedback.toLocaleString()}
+                      {analytics.overview?.total_feedback?.toLocaleString() || 0}
                     </Typography>
                   </Box>
                 </Box>
@@ -210,9 +231,9 @@ export default function FeedbackPage() {
                     </Typography>
                     <Box display="flex" alignItems="center">
                       <Typography variant="h5" color="text.primary" sx={{ mr: 1 }}>
-                        {analytics.average_rating.toFixed(1)}
+                        {analytics.overview?.avg_rating?.toFixed(1) || '0.0'}
                       </Typography>
-                      <Rating value={analytics.average_rating} readOnly size="small" />
+                      <Rating value={analytics.overview?.avg_rating || 0} readOnly size="small" />
                     </Box>
                   </Box>
                 </Box>
@@ -229,7 +250,7 @@ export default function FeedbackPage() {
                       Positive Sentiment
                     </Typography>
                     <Typography variant="h5" color="text.primary">
-                      {analytics.sentiment_breakdown.positive}%
+                      {analytics.sentiment_breakdown?.positive || 0}
                     </Typography>
                   </Box>
                 </Box>
@@ -246,7 +267,7 @@ export default function FeedbackPage() {
                       Response Rate
                     </Typography>
                     <Typography variant="h5" color="text.primary">
-                      {((analytics.total_feedback / 1000) * 100).toFixed(1)}%
+                      {((analytics.overview?.response_rate || 0) * 100).toFixed(1)}%
                     </Typography>
                   </Box>
                 </Box>
@@ -260,12 +281,12 @@ export default function FeedbackPage() {
       <Paper sx={{ mb: 3 }}>
         <Tabs value={tabValue} onChange={(_, newValue) => setTabValue(newValue)}>
           <Tab label="Submit Feedback" />
-          <Tab label="Recent Feedback" />
-          <Tab label="Analytics" />
+          {isAdmin && <Tab label="Recent Feedback" />}
+          {isAdmin && <Tab label="Analytics" />}
         </Tabs>
 
         <TabPanel value={tabValue} index={0}>
-          {/* Submit Feedback Form */}
+          {/* Submit Feedback Form - Available to all users */}
           <Box maxWidth="md">
             <Typography variant="h6" color="text.primary" gutterBottom>
               Share Your Feedback
@@ -341,9 +362,10 @@ export default function FeedbackPage() {
           </Box>
         </TabPanel>
 
-        <TabPanel value={tabValue} index={1}>
-          {/* Recent Feedback */}
-          <Typography variant="h6" color="text.primary" gutterBottom>Recent Feedback</Typography>
+        {isAdmin && (
+          <TabPanel value={tabValue} index={1}>
+            {/* Recent Feedback - Admin Only */}
+            <Typography variant="h6" color="text.primary" gutterBottom>Recent Feedback</Typography>
           
           <TableContainer>
             <Table>
@@ -402,11 +424,13 @@ export default function FeedbackPage() {
               </TableBody>
             </Table>
           </TableContainer>
-        </TabPanel>
+          </TabPanel>
+        )}
 
-        <TabPanel value={tabValue} index={2}>
-          {/* Analytics */}
-          <Typography variant="h6" color="text.primary" gutterBottom>Feedback Analytics</Typography>
+        {isAdmin && (
+          <TabPanel value={tabValue} index={2}>
+            {/* Analytics - Admin Only */}
+            <Typography variant="h6" color="text.primary" gutterBottom>Feedback Analytics</Typography>
           
           {analytics && (
             <Grid container spacing={3}>
@@ -416,23 +440,29 @@ export default function FeedbackPage() {
                     <Typography variant="h6" color="text.primary" gutterBottom>
                       Feedback by Type
                     </Typography>
-                    {Object.entries(analytics.by_type).map(([type, data]) => (
-                      <Box key={type} sx={{ mb: 2 }}>
-                        <Box display="flex" justifyContent="space-between" mb={1}>
-                          <Typography variant="body2">
-                            {type.replace('_', ' ')}
-                          </Typography>
-                          <Typography variant="body2" color="textSecondary">
-                            {data.count} ({data.average_rating.toFixed(1)} avg)
-                          </Typography>
+                    {analytics.category_scores && Object.entries(analytics.category_scores).length > 0 ? (
+                      Object.entries(analytics.category_scores).map(([type, avgRating]) => (
+                        <Box key={type} sx={{ mb: 2 }}>
+                          <Box display="flex" justifyContent="space-between" mb={1}>
+                            <Typography variant="body2">
+                              {type.replace('_', ' ')}
+                            </Typography>
+                            <Typography variant="body2" color="textSecondary">
+                              {avgRating} avg rating
+                            </Typography>
+                          </Box>
+                          <LinearProgress
+                            variant="determinate"
+                            value={(avgRating / 5) * 100}
+                            sx={{ height: 8, borderRadius: 4 }}
+                          />
                         </Box>
-                        <LinearProgress
-                          variant="determinate"
-                          value={(data.count / analytics.total_feedback) * 100}
-                          sx={{ height: 8, borderRadius: 4 }}
-                        />
-                      </Box>
-                    ))}
+                      ))
+                    ) : (
+                      <Typography variant="body2" color="textSecondary">
+                        No feedback by type yet
+                      </Typography>
+                    )}
                   </CardContent>
                 </Card>
               </Grid>
@@ -503,7 +533,8 @@ export default function FeedbackPage() {
               </Grid>
             </Grid>
           )}
-        </TabPanel>
+          </TabPanel>
+        )}
       </Paper>
     </Container>
     </ResponsiveLayout>

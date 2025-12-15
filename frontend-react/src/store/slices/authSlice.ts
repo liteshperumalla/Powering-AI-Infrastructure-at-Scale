@@ -67,6 +67,15 @@ export const logout = createAsyncThunk(
         } catch (error) {
             // Even if logout fails on server, clear local state
             console.warn('Logout request failed:', error);
+        } finally {
+            // Always clear localStorage on logout
+            if (typeof window !== 'undefined') {
+                localStorage.removeItem('auth_token');
+                localStorage.removeItem('token');
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('refresh_token');
+                localStorage.removeItem('user');
+            }
         }
     }
 );

@@ -1,5 +1,7 @@
 'use client';
 
+import AuthStorage from '../utils/authStorage';
+
 export interface CostForecast {
     id: string;
     forecast_name: string;
@@ -222,11 +224,14 @@ export interface BenchmarkData {
 
 class BudgetForecastingService {
     private baseUrl: string;
-    private token: string | null = null;
 
     constructor() {
         this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        this.token = typeof window !== 'undefined' ? typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null : null;
+    }
+
+    // Get token dynamically for each request to handle login/logout properly
+    private getToken(): string | null {
+        return AuthStorage.getTokenFromAnySource();
     }
 
     private async makeRequest(endpoint: string, options: RequestInit = {}, assessmentId?: string): Promise<any> {
@@ -238,12 +243,13 @@ class BudgetForecastingService {
             mappedEndpoint = `/api/v1/features/assessment/${assessmentId}/budget`;
         }
 
+        const token = this.getToken();
         try {
             const response = await fetch(`${this.baseUrl}${mappedEndpoint}`, {
                 ...options,
                 headers: {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.token}`,
+                    ...(token && { 'Authorization': `Bearer ${token}` }),
                     ...options.headers,
                 },
             });

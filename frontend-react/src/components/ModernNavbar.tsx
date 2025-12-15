@@ -61,6 +61,8 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import { RootState } from '../store';
+import { useAppDispatch } from '../store/hooks';
+import { logout } from '../store/slices/authSlice';
 import EnhancedNotificationSystem from './EnhancedNotificationSystem';
 import RoleBasedNavigation from './RoleBasedNavigation';
 
@@ -157,6 +159,7 @@ const ModernNavbar = React.memo(function ModernNavbar({
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
     const pathname = usePathname();
     const router = useRouter();
+    const dispatch = useAppDispatch();
     const currentAssessment = useSelector((state: RootState) => state.assessment.currentAssessment);
 
     // Close mobile drawer when route changes
@@ -546,11 +549,20 @@ const ModernNavbar = React.memo(function ModernNavbar({
                     <ListItemText primary="Settings" />
                 </MenuItem>
                 <Divider />
-                <MenuItem 
-                    onClick={() => {
+                <MenuItem
+                    onClick={async () => {
                         handleUserMenuClose();
-                        // Add sign out logic here
-                        router.push('/auth/login');
+                        try {
+                            await dispatch(logout()).unwrap();
+                        } catch (error) {
+                            console.error('Logout failed:', error);
+                        } finally {
+                            // Always redirect, even if logout fails
+                            router.push('/auth/login');
+                            setTimeout(() => {
+                                window.location.href = '/auth/login';
+                            }, 100);
+                        }
                     }}
                     role="menuitem"
                     aria-label="Sign out of account"

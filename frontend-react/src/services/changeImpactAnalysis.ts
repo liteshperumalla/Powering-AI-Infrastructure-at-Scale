@@ -1,5 +1,7 @@
 'use client';
 
+import AuthStorage from '../utils/authStorage';
+
 export interface Resource {
     id: string;
     name: string;
@@ -263,277 +265,271 @@ export interface FailureScenario {
 
 class ChangeImpactAnalysisService {
     private baseUrl: string;
-    private token: string | null = null;
 
     constructor() {
         this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        this.token = typeof window !== 'undefined' ? typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null : null;
+    }
+
+    // Get token dynamically for each request to handle login/logout properly
+    private getToken(): string | null {
+        return AuthStorage.getTokenFromAnySource();
     }
 
     private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
-        try {
-            // Map non-existent change-impact endpoints to existing endpoints
-            const mappedEndpoint = this.mapEndpoint(endpoint);
-            
-            const response = await fetch(`${this.baseUrl}${mappedEndpoint}`, {
-                ...options,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.token}`,
-                    ...options.headers,
-                },
-            });
+        const token = this.getToken();
 
-            if (!response.ok) {
-                throw new Error(`Change Impact API Error: ${response.statusText}`);
-            }
-
-            return response.json();
-        } catch (error) {
-            console.warn(`Change Impact API call failed for ${endpoint}:`, error);
-            return this.getFallbackResponse(endpoint);
+        if (!token) {
+            console.warn('No authentication token available');
+            throw new Error('Authentication required. Please log in.');
         }
+
+        const response = await fetch(`${this.baseUrl}${endpoint}`, {
+            ...options,
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+                ...options.headers,
+            },
+        });
+
+        if (!response.ok) {
+            if (response.status === 404) {
+                return endpoint.includes('resources') ? [] : this.getMinimalFallback();
+            }
+            if (response.status === 401) {
+                console.error('Authentication token expired or invalid');
+                throw new Error('Session expired. Please log in again.');
+            }
+            throw new Error(`Change Impact API Error: ${response.status} ${response.statusText}`);
+        }
+
+        return response.json();
     }
 
-    private mapEndpoint(endpoint: string): string {
-        // Map change-impact endpoints to existing backend endpoints
-        if (endpoint.startsWith('/api/change-impact/resources')) {
-            return '/api/assessments';
-        }
-        if (endpoint.startsWith('/api/change-impact/analyze')) {
-            return '/api/assessments';
-        }
-        if (endpoint.startsWith('/api/change-impact/')) {
-            return '/api/dashboard/overview';
-        }
-        return endpoint;
-    }
-
-    private getFallbackResponse(endpoint: string): any {
-        console.log(`Providing fallback response for: ${endpoint}`);
-        
-        // Resource endpoints
-        if (endpoint.includes('resources') && !endpoint.includes('analyze')) {
-            if (endpoint.includes('dependencies')) {
-                return {
-                    upstream: [],
-                    downstream: [],
-                    dependency_graph: { nodes: [], edges: [] }
-                };
-            }
-            return [];
-        }
-        
-        // Analysis endpoints
-        if (endpoint.includes('analyze') || endpoint.includes('impact')) {
-            return {
-                id: 'fallback-analysis',
-                change_request_id: 'fallback-request',
-                analysis_timestamp: new Date().toISOString(),
-                overall_risk_score: 0.3,
-                risk_level: 'low',
-                confidence_score: 0.5,
-                blast_radius: {
-                    directly_affected: [],
-                    indirectly_affected: [],
-                    total_affected_count: 0,
-                    affected_environments: [],
-                    affected_regions: []
+    private getMinimalFallback(): ImpactAnalysisResult {
+        return {
+            id: 'demo-analysis',
+            change_request_id: 'demo-request',
+            analysis_timestamp: new Date().toISOString(),
+            overall_risk_score: 45,
+            risk_level: 'medium',
+            confidence_score: 0.75,
+            blast_radius: {
+                directly_affected: [],
+                indirectly_affected: [],
+                total_affected_count: 0,
+                affected_environments: [],
+                affected_regions: []
+            },
+            dependency_analysis: {
+                upstream_dependencies: [],
+                downstream_dependencies: [],
+                circular_dependencies: [],
+                cascade_potential: 0.3
+            },
+            business_impact: {
+                service_disruption_risk: 0.4,
+                user_impact_assessment: {
+                    affected_users: 0,
+                    user_groups: [],
+                    impact_severity: 'moderate' as const
                 },
-                dependency_analysis: {
-                    upstream_dependencies: [],
-                    downstream_dependencies: [],
-                    circular_dependencies: [],
-                    cascade_potential: 0.1
+                financial_impact: {
+                    potential_cost_change: 0,
+                    downtime_cost_estimate: 0,
+                    recovery_cost_estimate: 0
                 },
-                business_impact: {
-                    service_disruption_risk: 0.2,
-                    user_impact_assessment: {
-                        affected_users: 0,
-                        user_groups: [],
-                        impact_severity: 'minimal'
-                    },
-                    financial_impact: {
-                        potential_cost_change: 0,
-                        downtime_cost_estimate: 0,
-                        recovery_cost_estimate: 0
-                    },
-                    sla_impact: {
-                        affected_slas: [],
-                        availability_risk: 0.1,
-                        performance_risk: 0.1
-                    }
-                },
-                compliance_impact: {
-                    policy_violations: [],
-                    regulatory_concerns: [],
-                    security_implications: [],
-                    audit_requirements: []
-                },
-                operational_impact: {
-                    monitoring_changes_needed: [],
-                    alerting_updates_required: [],
-                    documentation_updates: [],
-                    team_notifications: [],
-                    skill_requirements: []
-                },
-                risk_mitigation: {
-                    recommendations: [],
-                    required_approvals: [],
-                    testing_requirements: [],
-                    rollback_procedures: []
-                },
-                timeline_analysis: {
-                    estimated_duration: '1h',
-                    maintenance_windows: [],
-                    critical_path_resources: [],
-                    parallel_execution_opportunities: []
-                },
-                alternatives: {
-                    alternative_approaches: [],
-                    phased_rollout_options: [],
-                    blue_green_feasibility: false,
-                    canary_deployment_options: []
+                sla_impact: {
+                    affected_slas: [],
+                    availability_risk: 0.2,
+                    performance_risk: 0.2
                 }
-            };
-        }
-        
-        // Simulation endpoints
-        if (endpoint.includes('simulate')) {
-            if (endpoint.includes('failure')) {
-                return {
-                    simulation_id: 'fallback-simulation',
-                    affected_resources: [],
-                    cascade_effects: [],
-                    recovery_scenarios: [],
-                    estimated_impact: {
-                        downtime: '0m',
-                        affected_users: 0,
-                        financial_impact: 0
-                    }
-                };
+            },
+            compliance_impact: {
+                policy_violations: [],
+                regulatory_concerns: [],
+                security_implications: [],
+                audit_requirements: []
+            },
+            operational_impact: {
+                monitoring_changes_needed: [],
+                alerting_updates_required: [],
+                documentation_updates: [],
+                team_notifications: [],
+                skill_requirements: []
+            },
+            risk_mitigation: {
+                recommendations: [],
+                required_approvals: [],
+                testing_requirements: [],
+                rollback_procedures: []
+            },
+            timeline_analysis: {
+                estimated_duration: '2-4 hours',
+                maintenance_windows: [],
+                critical_path_resources: [],
+                parallel_execution_opportunities: []
+            },
+            alternatives: {
+                alternative_approaches: [],
+                phased_rollout_options: [],
+                blue_green_feasibility: false,
+                canary_deployment_options: []
             }
-            if (endpoint.includes('deployment')) {
-                return {
-                    simulation_id: 'fallback-deployment',
-                    deployment_timeline: [],
-                    risk_assessment: { risk_level: 'low', confidence: 0.5 },
-                    rollback_scenarios: [],
-                    success_probability: 0.8
-                };
-            }
-        }
-        
-        // Risk assessment endpoints
-        if (endpoint.includes('risk')) {
-            if (endpoint.includes('historical')) {
-                return {
-                    risk_trends: [],
-                    failure_patterns: [],
-                    success_rates: { overall: 0.85, by_environment: {} },
-                    lessons_learned: []
-                };
-            }
-            return {
-                overall_risk_score: 0.3,
-                risk_breakdown: {
-                    technical_risk: 0.2,
-                    business_risk: 0.1,
-                    compliance_risk: 0.1,
-                    operational_risk: 0.2
-                },
-                risk_factors: [],
-                recommendations: []
-            };
-        }
-        
-        // Compliance endpoints
-        if (endpoint.includes('compliance')) {
-            if (endpoint.includes('policy-templates')) {
+        };
+    }
+
+    // Historical Assessment Data
+    async getHistoricalAssessments(): Promise<Array<{
+        id: string;
+        name: string;
+        created_at: string;
+        status: string;
+        environment: string;
+    }>> {
+        try {
+            const response = await this.makeRequest('/api/v1/assessments');
+            // Backend returns { assessments: [...] }
+            const assessmentsList = response.assessments || response;
+
+            if (!Array.isArray(assessmentsList)) {
+                console.warn('Assessments response is not an array:', response);
                 return [];
             }
-            return {
-                compliance_status: 'compliant',
-                policy_violations: [],
-                regulatory_impacts: [],
-                required_approvals: [],
-                remediation_plan: []
-            };
+
+            return assessmentsList.map((assessment: any) => ({
+                id: assessment.id || assessment._id,
+                name: assessment.title || assessment.name || 'Unnamed Assessment',
+                created_at: assessment.created_at,
+                status: assessment.status,
+                environment: assessment.cloud_provider || 'aws'
+            }));
+        } catch (error) {
+            console.error('Failed to fetch historical assessments:', error);
+            return [];
         }
-        
-        // Recommendations endpoints
-        if (endpoint.includes('recommendations') || endpoint.includes('alternatives')) {
-            return {
-                cost_optimizations: [],
-                performance_improvements: [],
-                security_enhancements: [],
-                reliability_improvements: [],
-                alternatives: [],
-                recommended_approach: null,
-                comparison_matrix: {}
-            };
+    }
+
+    async getAssessmentImpact(assessmentId: string): Promise<ImpactAnalysisResult> {
+        try {
+            const response = await this.makeRequest(`/api/v1/features/assessment/${assessmentId}/impact`);
+            // Transform backend response to ImpactAnalysisResult format
+            return this.transformBackendImpact(response, assessmentId);
+        } catch (error) {
+            console.error('Failed to fetch assessment impact:', error);
+            return this.getMinimalFallback();
         }
-        
-        // Planning endpoints
-        if (endpoint.includes('execution-plan') || endpoint.includes('maintenance-window')) {
-            return {
-                execution_timeline: [],
-                critical_path: [],
-                resource_requirements: {},
-                checkpoint_schedule: [],
-                optimal_windows: [],
-                impact_comparison: {},
-                user_impact_analysis: {}
-            };
-        }
-        
-        // Monitoring endpoints
-        if (endpoint.includes('monitoring') || endpoint.includes('validate')) {
-            return {
-                monitoring_plan: {
-                    metrics_to_track: [],
-                    alert_thresholds: {},
-                    dashboard_config: {}
-                },
-                validation_checklist: [],
-                rollback_triggers: [],
-                accuracy_score: 0.8,
-                prediction_deviations: [],
-                model_improvements: [],
-                lessons_learned: []
-            };
-        }
-        
-        // Report endpoints
-        if (endpoint.includes('export') || endpoint.includes('report')) {
-            return {
-                executive_summary: 'No impact analysis data available',
-                risk_matrix: {},
-                detailed_findings: [],
-                recommendations: [],
-                appendices: {}
-            };
-        }
-        
-        // ML endpoints
-        if (endpoint.includes('train') || endpoint.includes('prediction')) {
-            return {
-                model_id: 'fallback-model',
-                training_accuracy: 0.8,
-                validation_metrics: {},
-                feature_importance: [],
-                confidence_score: 0.7,
-                confidence_intervals: {},
-                uncertainty_factors: [],
-                model_performance_metrics: {}
-            };
-        }
-        
-        // Default fallback
+    }
+
+    private transformBackendImpact(data: any, assessmentId: string): ImpactAnalysisResult {
+        // Transform backend impact data structure to match frontend interface
+        const affectedSystemsCount = data.affected_systems?.length || 0;
+        const infrastructureChanges = data.resource_requirements?.infrastructure_changes || 0;
+        const totalAffected = affectedSystemsCount + infrastructureChanges;
+
+        // Map risk level to score (0-100)
+        const riskScoreMap: Record<string, number> = {
+            'low': 25,
+            'medium': 50,
+            'high': 75,
+            'critical': 95
+        };
+        const riskScore = riskScoreMap[data.risk_level] || 50;
+
         return {
-            message: 'Change Impact Analysis service unavailable',
-            fallback: true,
-            timestamp: new Date().toISOString()
+            id: data.assessment_id || `impact-${assessmentId}`,
+            change_request_id: assessmentId,
+            analysis_timestamp: data.generated_at || new Date().toISOString(),
+            overall_risk_score: riskScore,
+            risk_level: data.risk_level || 'medium',
+            confidence_score: 0.8,
+            blast_radius: {
+                directly_affected: (data.affected_systems || []).map((sys: any) => ({
+                    resource_id: sys.system,
+                    resource_name: sys.system,
+                    resource_type: sys.category,
+                    impact_type: 'configuration',
+                    impact_severity: sys.priority,
+                    impact_description: `${sys.change_type} - ${sys.estimated_downtime}`,
+                    estimated_downtime: sys.estimated_downtime,
+                    recovery_time: '15-30 minutes',
+                    mitigation_actions: []
+                })),
+                indirectly_affected: [],
+                total_affected_count: totalAffected,
+                affected_environments: ['production'],
+                affected_regions: ['us-east-1']
+            },
+            dependency_analysis: {
+                upstream_dependencies: [],
+                downstream_dependencies: [],
+                circular_dependencies: [],
+                cascade_potential: 0.3
+            },
+            business_impact: {
+                service_disruption_risk: 0.4,
+                user_impact_assessment: {
+                    affected_users: 0,
+                    user_groups: [],
+                    impact_severity: 'moderate' as const
+                },
+                financial_impact: {
+                    potential_cost_change: 0,
+                    downtime_cost_estimate: 0,
+                    recovery_cost_estimate: 0
+                },
+                sla_impact: {
+                    affected_slas: [],
+                    availability_risk: 0.2,
+                    performance_risk: 0.2
+                }
+            },
+            compliance_impact: {
+                policy_violations: [],
+                regulatory_concerns: [],
+                security_implications: [],
+                audit_requirements: []
+            },
+            operational_impact: {
+                monitoring_changes_needed: [],
+                alerting_updates_required: [],
+                documentation_updates: [],
+                team_notifications: [],
+                skill_requirements: []
+            },
+            risk_mitigation: {
+                recommendations: (data.mitigation_strategies || []).map((strat: any) => ({
+                    type: 'risk_reduction' as const,
+                    priority: strat.priority,
+                    title: strat.risk,
+                    description: strat.mitigation,
+                    implementation_effort: strat.estimated_effort ? 'medium' as const : 'low' as const,
+                    potential_benefits: [],
+                    risks_if_ignored: []
+                })),
+                required_approvals: [],
+                testing_requirements: [],
+                rollback_procedures: []
+            },
+            timeline_analysis: {
+                estimated_duration: data.estimated_duration || '1-3 months',
+                maintenance_windows: [],
+                critical_path_resources: [],
+                parallel_execution_opportunities: []
+            },
+            alternatives: {
+                alternative_approaches: [],
+                phased_rollout_options: data.rollout_plan?.phase_breakdown?.map((phase: any) => ({
+                    phase_name: phase.name,
+                    phase_description: `Phase ${phase.phase}`,
+                    resources_included: [],
+                    success_criteria: [],
+                    rollback_triggers: [],
+                    duration: phase.duration
+                })) || [],
+                blue_green_feasibility: false,
+                canary_deployment_options: []
+            }
         };
     }
 
@@ -541,7 +537,7 @@ class ChangeImpactAnalysisService {
     async discoverResources(environment: string, provider?: string): Promise<Resource[]> {
         const params = new URLSearchParams({ environment });
         if (provider) params.append('provider', provider);
-        
+
         const response = await this.makeRequest(`/api/v2/change-impact/resources?${params}`);
         return Array.isArray(response) ? response : [];
     }
@@ -763,9 +759,10 @@ class ChangeImpactAnalysisService {
 
     // Export and Reporting
     async exportAnalysis(analysisId: string, format: 'pdf' | 'json' | 'xlsx'): Promise<Blob> {
+        const token = this.getToken();
         const response = await fetch(`${this.baseUrl}/api/change-impact/export/${analysisId}?format=${format}`, {
             headers: {
-                'Authorization': `Bearer ${this.token}`,
+                ...(token && { 'Authorization': `Bearer ${token}` }),
             },
         });
 

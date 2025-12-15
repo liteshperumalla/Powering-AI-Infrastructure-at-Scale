@@ -253,7 +253,21 @@ class Report(Document):
         default=None, ge=0.0, le=1.0,
         description="Overall confidence in report recommendations (0-1)"
     )
-    
+
+    # Business metrics
+    estimated_savings: Optional[int] = Field(
+        default=None,
+        description="Estimated annual cost savings in dollars"
+    )
+    compliance_score: Optional[float] = Field(
+        default=None, ge=0.0, le=100.0,
+        description="Compliance score (0-100)"
+    )
+    key_findings: List[str] = Field(
+        default_factory=list,
+        description="Key findings from the assessment"
+    )
+
     # Business context
     priority: Priority = Field(default=Priority.MEDIUM, description="Report priority")
     tags: List[str] = Field(default_factory=list, description="Report tags")

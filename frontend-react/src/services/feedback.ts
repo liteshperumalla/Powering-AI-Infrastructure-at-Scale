@@ -1,10 +1,11 @@
 /**
  * User Feedback API Service
- * 
+ *
  * Provides functions to interact with the feedback collection system
  */
 
 import React from 'react';
+import AuthStorage from '../utils/authStorage';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -24,18 +25,24 @@ export interface UserFeedback {
 }
 
 export interface FeedbackAnalytics {
-  total_feedback: number;
-  average_rating: number;
+  overview: {
+    total_feedback: number;
+    processed_feedback: number;
+    avg_rating: number;
+    response_rate: number;
+    sentiment_score: number;
+  };
   sentiment_breakdown: {
     positive: number;
     neutral: number;
     negative: number;
   };
-  by_type: Record<FeedbackType, {
+  channel_performance: Record<string, {
     count: number;
-    average_rating: number;
+    avg_rating: number;
   }>;
-  by_channel: Record<string, number>;
+  category_scores: Record<string, number>;
+  generated_at: string;
 }
 
 export interface FeedbackSummary {
@@ -191,12 +198,10 @@ export async function submitAssessmentFeedback(
   });
 }
 
-// Helper function to get auth token
+// Helper function to get auth token - uses centralized AuthStorage
 function getAuthToken(): string {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('auth_token') || '';
-  }
-  return '';
+  // Use AuthStorage to get token from any valid source
+  return AuthStorage.getTokenFromAnySource() || '';
 }
 
 // React hook for feedback submission

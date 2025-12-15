@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useSelector } from 'react-redux';
 import { RootState } from '../../store';
 import ResponsiveLayout from '../../components/ResponsiveLayout';
@@ -77,6 +77,7 @@ function TabPanel(props: TabPanelProps) {
 
 export default function ExperimentsPage() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const currentAssessment = useSelector((state: RootState) => state.assessment.currentAssessment);
 
   // Priority: URL param > Redux state
@@ -89,6 +90,7 @@ export default function ExperimentsPage() {
   const [error, setError] = useState<string | null>(null);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [tabValue, setTabValue] = useState(0);
+  const [latestAssessmentId, setLatestAssessmentId] = useState<string | null>(null);
   const theme = useTheme();
 
   // New experiment form state
@@ -96,29 +98,31 @@ export default function ExperimentsPage() {
     name: '',
     description: '',
     feature_flag: '',
-    target_metric: 'conversion_rate',
+    target_metric: '',
   });
 
-  // Load data when assessment is available
+  // Load data on mount
   useEffect(() => {
-    if (assessmentId) {
-      loadData();
-    }
-  }, [assessmentId]);
+    loadData();
+  }, []);
 
   const loadData = async () => {
-    if (!assessmentId) return;
-
     try {
       setLoading(true);
-      const experimentsData = await apiClient.get<any>(`/features/assessment/${assessmentId}/experiments`);
+      setError(null);
 
-      // Map the API response
-      setExperiments(experimentsData.experiments || experimentsData.active_experiments || []);
-      setDashboardData(experimentsData.dashboard || experimentsData);
+      // Load experiments list
+      const experimentsResponse = await getExperiments();
+      setExperiments(experimentsResponse || []);
+
+      // Load dashboard data
+      const dashboardResponse = await getExperimentDashboard();
+      setDashboardData(dashboardResponse || {});
+
       setError(null);
     } catch (err: any) {
-      setError(err.message || 'Failed to load experiments data');
+      console.error('Failed to load experiments:', err);
+      setError(err.message || 'Failed to load experiments data. Please try again.');
       setExperiments([]);
       setDashboardData(null);
     } finally {
@@ -126,22 +130,31 @@ export default function ExperimentsPage() {
     }
   };
 
+  const handleViewDetails = (experimentId: string) => {
+    // Navigate to experiment details page
+    router.push(`/experiments/${experimentId}`);
+  };
+
   const handleCreateExperiment = async () => {
     try {
       const created = await createExperiment({
         ...newExperiment,
+        assessment_id: assessmentId || undefined, // Optional assessment link
         variants: ['control', 'treatment'], // Default variants
         status: 'draft',
       });
-      
+
       setExperiments(prev => [...prev, created]);
       setCreateDialogOpen(false);
       setNewExperiment({
         name: '',
         description: '',
         feature_flag: '',
-        target_metric: 'conversion_rate',
+        target_metric: '',
       });
+
+      // Reload data to get fresh experiments from backend
+      await loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create experiment');
     }
@@ -236,7 +249,7 @@ export default function ExperimentsPage() {
                       Conversion Rate
                     </Typography>
                     <Typography variant="h5" color="text.primary">
-                      {dashboardData.overall_conversion_rate || '12.5'}%
+                      {dashboardData.overall_conversion_rate || 0}%
                     </Typography>
                   </Box>
                 </Box>
@@ -253,7 +266,7 @@ export default function ExperimentsPage() {
                       Total Users
                     </Typography>
                     <Typography variant="h5" color="text.primary">
-                      {dashboardData.total_users || '1,234'}
+                      {dashboardData.total_users?.toLocaleString() || 0}
                     </Typography>
                   </Box>
                 </Box>
@@ -270,7 +283,7 @@ export default function ExperimentsPage() {
                       Avg. Test Duration
                     </Typography>
                     <Typography variant="h5" color="text.primary">
-                      {dashboardData.avg_duration || '14'} days
+                      {dashboardData.avg_duration || 0} days
                     </Typography>
                   </Box>
                 </Box>
@@ -323,11 +336,12 @@ export default function ExperimentsPage() {
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        <code style={{ 
-                          background: theme.palette.grey[100], 
-                          padding: '2px 8px', 
+                        <code style={{
+                          background: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.08)' : theme.palette.grey[100],
+                          padding: '2px 8px',
                           borderRadius: 4,
-                          fontSize: '0.875rem'
+                          fontSize: '0.875rem',
+                          color: theme.palette.text.primary
                         }}>
                           {experiment.feature_flag}
                         </code>
@@ -345,7 +359,11 @@ export default function ExperimentsPage() {
                         {new Date(experiment.created_at).toLocaleDateString()}
                       </TableCell>
                       <TableCell>
-                        <Button size="small" variant="outlined">
+                        <Button
+                          size="small"
+                          variant="outlined"
+                          onClick={() => handleViewDetails(experiment.id)}
+                        >
                           View Details
                         </Button>
                       </TableCell>
@@ -365,10 +383,90 @@ export default function ExperimentsPage() {
         </TabPanel>
 
         <TabPanel value={tabValue} index={2}>
-          <Typography variant="h6" color="text.primary" gutterBottom>Experiment Results</Typography>
-          <Typography color="textSecondary">
-            View detailed results and statistical significance
+          <Typography variant="h6" color="text.primary" gutterBottom sx={{ mb: 3 }}>
+            Experiment Results
           </Typography>
+
+          {experiments.filter(e => e.status === 'completed').length === 0 ? (
+            <Box sx={{ textAlign: 'center', py: 6 }}>
+              <Typography color="textSecondary" variant="body1">
+                No completed experiments yet
+              </Typography>
+              <Typography color="textSecondary" variant="body2" sx={{ mt: 1 }}>
+                Start an experiment to see detailed results and analytics
+              </Typography>
+            </Box>
+          ) : (
+            <Box>
+              {experiments
+                .filter(e => e.status === 'completed')
+                .map((experiment) => (
+                  <Card key={experiment.id} sx={{ mb: 3 }}>
+                    <CardContent>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 2 }}>
+                        <Box>
+                          <Typography variant="h6" color="text.primary" gutterBottom>
+                            {experiment.name}
+                          </Typography>
+                          <Typography variant="body2" color="textSecondary">
+                            {experiment.description}
+                          </Typography>
+                        </Box>
+                        <Chip
+                          label="COMPLETED"
+                          color="success"
+                          size="small"
+                        />
+                      </Box>
+
+                      <Box sx={{ mt: 3 }}>
+                        <Typography variant="subtitle2" color="text.primary" gutterBottom>
+                          Target Metric: {experiment.target_metric}
+                        </Typography>
+
+                        <Grid container spacing={2} sx={{ mt: 2 }}>
+                          {experiment.variants && experiment.variants.map((variant: any, idx: number) => (
+                            <Grid item xs={12} md={6} key={variant.id}>
+                              <Paper sx={{ p: 2, backgroundColor: theme.palette.mode === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.02)' }}>
+                                <Typography variant="subtitle2" color="text.primary" gutterBottom>
+                                  {variant.name}
+                                </Typography>
+                                <Typography variant="caption" color="textSecondary">
+                                  Type: {variant.type} • Traffic: {variant.traffic_percentage}%
+                                </Typography>
+
+                                <Box sx={{ mt: 2 }}>
+                                  <Typography variant="body2" color="textSecondary">
+                                    Configuration:
+                                  </Typography>
+                                  <Box component="pre" sx={{
+                                    mt: 1,
+                                    p: 1.5,
+                                    backgroundColor: theme.palette.mode === 'dark' ? 'rgba(0, 0, 0, 0.2)' : 'rgba(0, 0, 0, 0.05)',
+                                    borderRadius: 1,
+                                    fontSize: '0.75rem',
+                                    overflow: 'auto'
+                                  }}>
+                                    {JSON.stringify(variant.configuration, null, 2)}
+                                  </Box>
+                                </Box>
+                              </Paper>
+                            </Grid>
+                          ))}
+                        </Grid>
+
+                        <Box sx={{ mt: 3, p: 2, backgroundColor: theme.palette.mode === 'dark' ? 'rgba(33, 150, 243, 0.1)' : 'rgba(33, 150, 243, 0.05)', borderRadius: 1 }}>
+                          <Typography variant="body2" color="primary">
+                            💡 To view detailed statistical analysis (P50, P95, P99 latencies, confidence intervals, etc.),
+                            click "View Details" on the experiment row in the "All Experiments" tab.
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </CardContent>
+                  </Card>
+                ))}
+            </Box>
+          )}
         </TabPanel>
       </Paper>
 
@@ -409,20 +507,14 @@ export default function ExperimentsPage() {
               helperText="Use lowercase with hyphens"
             />
             
-            <FormControl fullWidth>
-              <InputLabel>Target Metric</InputLabel>
-              <Select
-                value={newExperiment.target_metric}
-                onChange={(e) => setNewExperiment(prev => ({ ...prev, target_metric: e.target.value }))}
-                label="Target Metric"
-              >
-                <MenuItem value="conversion_rate">Conversion Rate</MenuItem>
-                <MenuItem value="click_through_rate">Click Through Rate</MenuItem>
-                <MenuItem value="user_engagement">User Engagement</MenuItem>
-                <MenuItem value="performance_improvement">Performance Improvement</MenuItem>
-                <MenuItem value="cost_reduction">Cost Reduction</MenuItem>
-              </Select>
-            </FormControl>
+            <TextField
+              fullWidth
+              label="Target Metric"
+              value={newExperiment.target_metric}
+              onChange={(e) => setNewExperiment(prev => ({ ...prev, target_metric: e.target.value }))}
+              placeholder="e.g., p95_latency_ms, conversion_rate, click_through_rate"
+              helperText="The primary metric you want to optimize (e.g., p95_latency_ms, conversion_rate)"
+            />
           </Box>
         </DialogContent>
         <DialogActions>

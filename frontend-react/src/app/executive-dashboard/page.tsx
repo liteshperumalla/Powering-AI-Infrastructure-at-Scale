@@ -33,10 +33,11 @@ import { apiClient } from '../../services/api';
 export default function ExecutiveDashboardPage() {
   const searchParams = useSearchParams();
   const currentAssessment = useSelector((state: RootState) => state.assessment.currentAssessment);
+  const assessments = useSelector((state: RootState) => state.assessment.assessments);
 
-  // Priority: URL param > Redux state
+  // Priority: URL param > Redux currentAssessment > First assessment in list
   const urlAssessmentId = searchParams?.get('assessment_id');
-  const assessmentId = urlAssessmentId || currentAssessment?.id;
+  const assessmentId = urlAssessmentId || currentAssessment?.id || (assessments.length > 0 ? assessments[0].id : null);
 
   const [executiveData, setExecutiveData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -45,7 +46,11 @@ export default function ExecutiveDashboardPage() {
   // No redirect - just handle the case when there's no assessment
 
   const fetchData = useCallback(async () => {
-    if (!assessmentId) return;
+    if (!assessmentId) {
+      setError('No assessment ID provided. Please select an assessment first.');
+      setLoading(false);
+      return;
+    }
 
     try {
       setLoading(true);
@@ -128,10 +133,13 @@ export default function ExecutiveDashboardPage() {
                     <CardContent>
                       <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                         <AttachMoney color="success" sx={{ mr: 1 }} />
-                        <Typography variant="h6" color="text.primary">Potential Savings</Typography>
+                        <Typography variant="h6" color="text.primary">Annual Savings</Typography>
                       </Box>
                       <Typography variant="h3" color="success.main">
-                        ${(executiveData.key_metrics.total_cost_savings || 0).toLocaleString()}
+                        ${(executiveData.financial_overview?.annual_savings || 0).toLocaleString()}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        ${(executiveData.financial_overview?.monthly_savings || 0).toLocaleString()}/month
                       </Typography>
                     </CardContent>
                   </Card>
@@ -145,8 +153,8 @@ export default function ExecutiveDashboardPage() {
                         <Typography variant="h6" color="text.primary">Avg Confidence</Typography>
                       </Box>
                       <Typography variant="h3" color="secondary.main">
-                        {executiveData.key_metrics.avg_confidence_score
-                          ? `${Math.round(executiveData.key_metrics.avg_confidence_score * 100)}%`
+                        {executiveData.executive_summary?.average_confidence
+                          ? `${Math.round(executiveData.executive_summary.average_confidence)}%`
                           : 'N/A'}
                       </Typography>
                     </CardContent>
@@ -160,8 +168,8 @@ export default function ExecutiveDashboardPage() {
                         <TrendingUp color="info" sx={{ mr: 1 }} />
                         <Typography variant="h6" color="text.primary">Timeline</Typography>
                       </Box>
-                      <Typography variant="h3" color="info.main">
-                        {executiveData.key_metrics.implementation_timeline || 'N/A'}
+                      <Typography variant="h3" color="info.main" sx={{ fontSize: '1.75rem' }}>
+                        {executiveData.executive_summary?.estimated_timeline || 'N/A'}
                       </Typography>
                     </CardContent>
                   </Card>
@@ -185,32 +193,119 @@ export default function ExecutiveDashboardPage() {
               </Paper>
             )}
 
-            {/* Strategic Initiatives */}
-            {executiveData.strategic_initiatives && Array.isArray(executiveData.strategic_initiatives) && executiveData.strategic_initiatives.length > 0 && (
+            {/* Financial Overview */}
+            {executiveData.financial_overview && (
               <Paper sx={{ p: 3, mb: 3 }}>
                 <Typography variant="h6" color="text.primary" gutterBottom>
-                  Strategic Initiatives
+                  Financial Impact
                 </Typography>
                 <Grid container spacing={2}>
-                  {executiveData.strategic_initiatives.map((initiative: any, index: number) => (
+                  <Grid item xs={12} md={4}>
+                    <Card variant="outlined">
+                      <CardContent>
+                        <Typography variant="body2" color="text.secondary">Current Annual Cost</Typography>
+                        <Typography variant="h4" color="error.main">
+                          ${executiveData.financial_overview.current_annual_cost?.toLocaleString()}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          ${executiveData.financial_overview.current_monthly_cost?.toLocaleString()}/month
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <Card variant="outlined">
+                      <CardContent>
+                        <Typography variant="body2" color="text.secondary">Optimized Annual Cost</Typography>
+                        <Typography variant="h4" color="success.main">
+                          ${executiveData.financial_overview.optimized_annual_cost?.toLocaleString()}
+                        </Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          ${executiveData.financial_overview.optimized_monthly_cost?.toLocaleString()}/month
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  <Grid item xs={12} md={4}>
+                    <Card variant="outlined" sx={{ bgcolor: 'success.main' }}>
+                      <CardContent>
+                        <Typography variant="body2" sx={{ color: 'white', opacity: 0.9 }}>Total Savings</Typography>
+                        <Typography variant="h4" sx={{ color: 'white' }} fontWeight="bold">
+                          ${executiveData.financial_overview.annual_savings?.toLocaleString()}
+                        </Typography>
+                        <Chip
+                          label={`${executiveData.financial_overview.savings_percentage}% reduction`}
+                          size="small"
+                          sx={{
+                            mt: 1,
+                            bgcolor: 'rgba(255, 255, 255, 0.3)',
+                            color: 'white',
+                            fontWeight: 'bold'
+                          }}
+                        />
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Card variant="outlined">
+                      <CardContent>
+                        <Typography variant="body2" color="text.secondary">12-Month ROI</Typography>
+                        <Typography variant="h4" color="primary.main">
+                          {executiveData.financial_overview.projected_roi_12m}%
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Card variant="outlined">
+                      <CardContent>
+                        <Typography variant="body2" color="text.secondary">Payback Period</Typography>
+                        <Typography variant="h4" color="primary.main">
+                          {executiveData.financial_overview.payback_period}
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                </Grid>
+              </Paper>
+            )}
+
+            {/* Strategic Priorities */}
+            {executiveData.strategic_priorities && Array.isArray(executiveData.strategic_priorities) && executiveData.strategic_priorities.length > 0 && (
+              <Paper sx={{ p: 3, mb: 3 }}>
+                <Typography variant="h6" color="text.primary" gutterBottom>
+                  Strategic Priorities
+                </Typography>
+                <Grid container spacing={2}>
+                  {executiveData.strategic_priorities.map((priority: any, index: number) => (
                     <Grid item xs={12} md={6} key={index}>
                       <Card variant="outlined">
                         <CardContent>
-                          <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                            {initiative.name || initiative.title}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary" paragraph>
-                            {initiative.description}
-                          </Typography>
-                          {initiative.priority && (
+                          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', mb: 1 }}>
+                            <Typography variant="subtitle1" fontWeight="bold">
+                              {priority.title}
+                            </Typography>
                             <Chip
-                              label={`Priority: ${initiative.priority}`}
+                              label={priority.priority}
                               size="small"
                               color={
-                                initiative.priority === 'high' ? 'error' :
-                                initiative.priority === 'medium' ? 'warning' : 'default'
+                                priority.priority === 'high' ? 'error' :
+                                priority.priority === 'medium' ? 'warning' : 'default'
                               }
                             />
+                          </Box>
+                          <Typography variant="body2" color="text.secondary" paragraph>
+                            {priority.description}
+                          </Typography>
+                          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                            {priority.impact && <Chip label={`Impact: ${priority.impact}`} size="small" variant="outlined" />}
+                            {priority.effort && <Chip label={`Effort: ${priority.effort}`} size="small" variant="outlined" />}
+                            {priority.timeline && <Chip label={priority.timeline} size="small" variant="outlined" />}
+                          </Box>
+                          {priority.savings && (
+                            <Typography variant="body2" color="success.main" sx={{ mt: 1, fontWeight: 'bold' }}>
+                              💰 Saves: {priority.savings}
+                            </Typography>
                           )}
                         </CardContent>
                       </Card>

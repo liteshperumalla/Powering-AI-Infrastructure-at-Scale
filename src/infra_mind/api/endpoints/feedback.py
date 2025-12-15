@@ -260,45 +260,45 @@ async def get_feedback_analytics(
     """Get comprehensive feedback analytics dashboard (admin only)."""
     try:
         # Get basic counts
-        total_feedback = await UserFeedback.count()
-        processed_feedback = await UserFeedback.count(UserFeedback.processed == True)
-        
+        total_feedback = await UserFeedback.find().count()
+        processed_feedback = await UserFeedback.find(UserFeedback.processed == True).count()
+
         # Get average rating
         all_feedback = await UserFeedback.find(UserFeedback.rating != None).to_list()
         avg_rating = sum(fb.rating for fb in all_feedback if fb.rating) / len(all_feedback) if all_feedback else 0
-        
+
         # Sentiment breakdown
-        positive_count = await UserFeedback.count(UserFeedback.sentiment == SentimentScore.POSITIVE)
-        neutral_count = await UserFeedback.count(UserFeedback.sentiment == SentimentScore.NEUTRAL)
-        negative_count = await UserFeedback.count(UserFeedback.sentiment == SentimentScore.NEGATIVE)
+        positive_count = await UserFeedback.find(UserFeedback.sentiment == SentimentScore.POSITIVE).count()
+        neutral_count = await UserFeedback.find(UserFeedback.sentiment == SentimentScore.NEUTRAL).count()
+        negative_count = await UserFeedback.find(UserFeedback.sentiment == SentimentScore.NEGATIVE).count()
         
         # Channel performance
         channel_stats = {}
         for channel in FeedbackChannel:
-            count = await UserFeedback.count(UserFeedback.channel == channel)
+            count = await UserFeedback.find(UserFeedback.channel == channel).count()
             if count > 0:
                 channel_feedback = await UserFeedback.find(
                     UserFeedback.channel == channel,
                     UserFeedback.rating != None
                 ).to_list()
                 avg_channel_rating = sum(fb.rating for fb in channel_feedback if fb.rating) / len(channel_feedback) if channel_feedback else 0
-                
+
                 channel_stats[channel.value] = {
                     "count": count,
                     "avg_rating": round(avg_channel_rating, 2)
                 }
-        
+
         # Category scores
         category_stats = {}
         for fb_type in FeedbackType:
-            count = await UserFeedback.count(UserFeedback.feedback_type == fb_type)
+            count = await UserFeedback.find(UserFeedback.feedback_type == fb_type).count()
             if count > 0:
                 type_feedback = await UserFeedback.find(
                     UserFeedback.feedback_type == fb_type,
                     UserFeedback.rating != None
                 ).to_list()
                 avg_type_rating = sum(fb.rating for fb in type_feedback if fb.rating) / len(type_feedback) if type_feedback else 0
-                
+
                 category_stats[fb_type.value] = round(avg_type_rating, 2)
         
         # Calculate response rate (simplified - assume 100 total possible responses)

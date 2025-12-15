@@ -37,12 +37,13 @@ class ExperimentVariant(Document):
 
 class Experiment(Document):
     """A/B test experiment model."""
-    
+
     # Basic info
     name: str = Field(description="Experiment name")
     description: str = Field(description="Experiment description")
     feature_flag: str = Field(description="Feature flag identifier")
-    
+    assessment_id: Optional[str] = Field(default=None, description="Associated assessment ID")
+
     # Status and timing
     status: ExperimentStatus = Field(default=ExperimentStatus.DRAFT)
     created_at: datetime = Field(default_factory=datetime.utcnow)
@@ -76,8 +77,10 @@ class Experiment(Document):
             "feature_flag",
             "status",
             "created_by",
+            "assessment_id",
             [("status", 1), ("created_at", -1)],
             [("feature_flag", 1), ("status", 1)],
+            [("assessment_id", 1), ("status", 1)],
         ]
 
 

@@ -160,10 +160,28 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
       const vendorData = await apiClient.get<any>(`/features/assessment/${assessmentId}/vendor-lockin`);
 
       // Map the API response to component state
-      setAssessments(vendorData.assessments || []);
+      // Backend returns a single assessment object, wrap it in array for component compatibility
+      const assessmentObj = {
+        id: vendorData.assessment_id,
+        assessment_name: `Vendor Lock-in Analysis - ${vendorData.primary_provider || 'Cloud'}`,
+        current_provider: vendorData.primary_provider?.toLowerCase() || 'aws',
+        assessment_date: vendorData.generated_at || new Date().toISOString(),
+        overall_risk_score: vendorData.lock_in_score || vendorData.overall_risk_score || 0,
+        risk_level: vendorData.risk_level || vendorData.overall_risk || 'medium',
+        provider_distribution: vendorData.provider_distribution || {},
+        services_analyzed: vendorData.services_analyzed || [],
+        migration_scenarios: vendorData.migration_scenarios || [],
+        mitigation_strategies: vendorData.mitigation_strategies || [],
+        recommendations: vendorData.recommendations || [],
+        portability_assessment: vendorData.portability_assessment || {},
+        business_impact: vendorData.business_impact || {},
+        dependencies: vendorData.dependencies || []
+      };
+
+      setAssessments([assessmentObj]);
       setServiceAnalyses(vendorData.services_analyzed || []);
-      setMigrationScenarios(vendorData.migration_scenarios || vendorData.mitigation_strategies || []);
-      setMultiCloudStrategies(vendorData.strategies || []);
+      setMigrationScenarios(vendorData.migration_scenarios || []);
+      setMultiCloudStrategies(vendorData.mitigation_strategies || []);
       setContractAnalyses(vendorData.contracts || []);
 
     } catch (error) {
@@ -267,24 +285,23 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
         <Card>
           <CardContent>
             <Typography variant="h6" color="text.primary" mb={2}>Provider Distribution</Typography>
-            {assessments.length > 0 && (
+            {assessments.length > 0 && assessments[0].provider_distribution && (
               <ResponsiveContainer width="100%" height={200}>
                 <PieChart>
                   <Pie
-                    data={[
-                      { name: 'AWS', value: 45, provider: 'aws' },
-                      { name: 'Azure', value: 30, provider: 'azure' },
-                      { name: 'GCP', value: 15, provider: 'gcp' },
-                      { name: 'Other', value: 10, provider: 'other' },
-                    ]}
+                    data={Object.entries(assessments[0].provider_distribution).map(([name, data]: [string, any]) => ({
+                      name: name.toUpperCase(),
+                      value: data.percentage || data.count || 0,
+                      provider: name
+                    }))}
                     cx="50%"
                     cy="50%"
                     outerRadius={80}
                     dataKey="value"
                     label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
                   >
-                    {COLORS.map((color, index) => (
-                      <Cell key={`cell-${index}`} fill={color} />
+                    {Object.keys(assessments[0].provider_distribution).map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
                   </Pie>
                   <ChartTooltip />

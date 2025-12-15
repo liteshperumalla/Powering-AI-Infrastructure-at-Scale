@@ -42,10 +42,16 @@ export default function UserProfile({ open, onClose }: UserProfileProps) {
     const handleLogout = async () => {
         try {
             await dispatch(logout()).unwrap();
-            onClose();
-            router.push('/auth/login');
         } catch (error) {
             console.error('Logout failed:', error);
+        } finally {
+            // Always close and redirect, even if logout API call fails
+            onClose();
+            router.push('/auth/login');
+            // Force reload to clear any cached state
+            setTimeout(() => {
+                window.location.href = '/auth/login';
+            }, 100);
         }
     };
 
