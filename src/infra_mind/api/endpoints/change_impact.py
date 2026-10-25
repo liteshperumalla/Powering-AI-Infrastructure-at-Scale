@@ -13,6 +13,11 @@ from pydantic import BaseModel, Field
 import uuid
 from enum import Enum
 
+from .auth import get_current_user
+from ...core.dependencies import DatabaseDep
+from ...models.user import User
+from ...services.change_impact_service import analyze_change, build_inventory, dependency_view
+
 router = APIRouter()
 security = HTTPBearer()
 
@@ -607,3 +612,99 @@ async def get_change_impact_analytics(timeframe: str = "30d") -> Dict[str, Any]:
             {"strategy": "maintenance_window", "usage_count": 18, "success_rate": 94.4}
         ]
     }
+
+
+# ==================== RESOURCES (derived from the user's assessments) ====================
+
+ENVIRONMENT_PATTERN = "^(dev|staging|prod)$"
+
+
+async def _load_user_inventory(db, user: User, provider: Optional[str] = None):
+    """The user's assessments and the resource inventory derived from their recommendations."""
+    assessments = await db.assessments.find({"user_id": str(user.id)}).to_list(length=None)
+    if not assessments:
+        return {}, []
+    ids = [str(a["_id"]) for a in assessments]
+    recommendations = await db.recommendations.find({"assessment_id": {"$in": ids}}).to_list(length=None)
+    return {str(a["_id"]): a for a in assessments}, build_inventory(assessments, recommendations, provider)
+
+
+@router.get("/resources")
+async def list_resources(
+    db: DatabaseDep,
+    environment: str = Query("dev", pattern=ENVIRONMENT_PATTERN),
+    provider: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+) -> List[Dict[str, Any]]:
+    """Resources from the services recommended in the user's assessments."""
+    _, inventory = await _load_user_inventory(db, current_user, provider)
+    return [r.to_api(environment) for r in inventory]
+
+
+@router.get("/resources/{resource_id}")
+async def get_resource(
+    resource_id: str,
+    db: DatabaseDep,
+    environment: str = Query("dev", pattern=ENVIRONMENT_PATTERN),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    _, inventory = await _load_user_inventory(db, current_user)
+    for resource in inventory:
+        if resource.id == resource_id:
+            return resource.to_api(environment)
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
+
+
+@router.get("/resources/{resource_id}/dependencies")
+async def get_resource_dependencies(
+    resource_id: str,
+    db: DatabaseDep,
+    depth: int = Query(2, ge=1, le=5),
+    environment: str = Query("dev", pattern=ENVIRONMENT_PATTERN),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    _, inventory = await _load_user_inventory(db, current_user)
+    if not any(r.id == resource_id for r in inventory):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Resource not found")
+    return dependency_view(resource_id, inventory, depth, environment)
+
+
+async def _analyze(db, user: User, change_request: Dict[str, Any]) -> Dict[str, Any]:
+    requested = [c.get("resource_id") for c in change_request.get("resources") or [] if isinstance(c, dict)]
+    if not requested:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Select at least one resource")
+    if str(change_request.get("target_environment") or "dev") not in ("dev", "staging", "prod"):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="target_environment must be dev, staging or prod")
+    assessments, inventory = await _load_user_inventory(db, user)
+    known = {r.id for r in inventory}
+    unknown = [r for r in requested if r not in known]
+    if unknown:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Unknown resource(s): {', '.join(unknown)}")
+    return analyze_change(change_request, inventory, assessments)
+
+
+@router.post("/analyze")
+async def analyze_change_request(
+    change_request: Dict[str, Any],
+    db: DatabaseDep,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Impact analysis for a change to one or more of the user's resources."""
+    return await _analyze(db, current_user, change_request)
+
+
+@router.post("/resources/{resource_id}/analyze")
+async def analyze_resource_change(
+    resource_id: str,
+    change: Dict[str, Any],
+    db: DatabaseDep,
+    environment: str = Query("dev", pattern=ENVIRONMENT_PATTERN),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Impact analysis for a single-resource change."""
+    return await _analyze(db, current_user, {
+        "change_type": change.get("action", "update"),
+        "target_environment": environment,
+        "resources": [{"resource_id": resource_id}],
+    })
+

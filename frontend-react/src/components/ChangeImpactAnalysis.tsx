@@ -268,11 +268,17 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
     const generateRiskBreakdown = () => {
         if (!analysisResult) return [];
         
+        // Derived from the analysis (0-100); these were previously fixed placeholder values
+        const { compliance_impact: compliance, business_impact: business, dependency_analysis: deps } = analysisResult;
+        const complianceItems = compliance.audit_requirements.length
+            + compliance.policy_violations.length
+            + compliance.regulatory_concerns.length;
+        const pct = (value: number) => Math.max(0, Math.min(100, Math.round(value)));
         return [
-            { name: 'Technical Risk', value: 70, category: 'risk' },
-            { name: 'Business Risk', value: 45, category: 'risk' },
-            { name: 'Compliance Risk', value: 30, category: 'risk' },
-            { name: 'Operational Risk', value: 60, category: 'risk' },
+            { name: 'Technical Risk', value: pct(analysisResult.overall_risk_score), category: 'risk' },
+            { name: 'Business Risk', value: pct(business.service_disruption_risk * 100), category: 'risk' },
+            { name: 'Compliance Risk', value: pct(complianceItems * 30), category: 'risk' },
+            { name: 'Operational Risk', value: pct(deps.cascade_potential * 100), category: 'risk' },
         ];
     };
 

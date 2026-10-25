@@ -543,7 +543,7 @@ class ChangeImpactAnalysisService {
     }
 
     async getResource(resourceId: string): Promise<Resource> {
-        return this.makeRequest(`/api/change-impact/resources/${resourceId}`);
+        return this.makeRequest(`/api/v2/change-impact/resources/${resourceId}`);
     }
 
     async getResourceDependencies(resourceId: string, depth: number = 2): Promise<{
@@ -551,12 +551,12 @@ class ChangeImpactAnalysisService {
         downstream: Resource[];
         dependency_graph: any;
     }> {
-        return this.makeRequest(`/api/change-impact/resources/${resourceId}/dependencies?depth=${depth}`);
+        return this.makeRequest(`/api/v2/change-impact/resources/${resourceId}/dependencies?depth=${depth}`);
     }
 
     // Change Impact Analysis
     async analyzeChange(changeRequest: ChangeRequest): Promise<ImpactAnalysisResult> {
-        return this.makeRequest('/api/change-impact/analyze', {
+        return this.makeRequest('/api/v2/change-impact/analyze', {
             method: 'POST',
             body: JSON.stringify(changeRequest),
         });
@@ -571,7 +571,7 @@ class ChangeImpactAnalysisService {
             change_attributes: string[];
         }
     ): Promise<ImpactAnalysisResult> {
-        return this.makeRequest(`/api/change-impact/resources/${resourceId}/analyze`, {
+        return this.makeRequest(`/api/v2/change-impact/resources/${resourceId}/analyze`, {
             method: 'POST',
             body: JSON.stringify(changeDetails),
         });
