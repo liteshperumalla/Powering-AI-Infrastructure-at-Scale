@@ -30,10 +30,6 @@ import certifi
 from .config import settings
 from .database_optimization import optimize_database_for_production
 
-# Provide deterministic attributes for tests that rely on AsyncIOMotorDatabase collections
-if not hasattr(AsyncIOMotorDatabase, "assessments"):  # pragma: no cover - testing aid
-    AsyncIOMotorDatabase.assessments = None  # type: ignore[attr-defined]
-
 
 class ProductionDatabase:
     """
