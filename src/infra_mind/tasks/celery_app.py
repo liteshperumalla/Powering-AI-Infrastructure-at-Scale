@@ -20,8 +20,16 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from beanie import init_beanie
 from loguru import logger
 
-# Get Redis URL from environment
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+# Connection settings. The API reads INFRA_MIND_*; older compose files set the bare
+# names for workers. REDIS_URL wins for Redis because the dev compose worker sets it
+# explicitly while also inheriting INFRA_MIND_REDIS_URL=localhost from .env.
+REDIS_URL = os.getenv("REDIS_URL") or os.getenv("INFRA_MIND_REDIS_URL") or "redis://localhost:6379/0"
+MONGODB_URL = (
+    os.getenv("INFRA_MIND_MONGODB_URL")
+    or os.getenv("MONGODB_URL")
+    or "mongodb://admin:password@mongodb:27017/infra_mind?authSource=admin"
+)
+MONGODB_DATABASE = os.getenv("INFRA_MIND_MONGODB_DATABASE", "infra_mind")
 
 # Create Celery application
 celery_app = Celery(
@@ -112,11 +120,7 @@ def init_worker_process(**kwargs):
     logger.info("🔧 Initializing Beanie in Celery worker process")
 
     try:
-        # Get MongoDB connection string from environment
-        mongodb_url = os.getenv(
-            "MONGODB_URL",
-            "mongodb://admin:password@mongodb:27017/infra_mind?authSource=admin"
-        )
+        mongodb_url = MONGODB_URL
 
         # Create event loop for this worker process
         loop = asyncio.new_event_loop()
@@ -137,7 +141,10 @@ def init_worker_process(**kwargs):
         # Initialize Beanie with all models
         loop.run_until_complete(
             init_beanie(
-                database=client.infra_mind,
+                database=client[MONGODB_DATABASE],
+                # The API creates indexes at startup; re-creating model indexes here
+                # conflicts with its named ones and aborts init part-way
+                skip_indexes=True,
                 document_models=[
                     Assessment,
                     Recommendation,
