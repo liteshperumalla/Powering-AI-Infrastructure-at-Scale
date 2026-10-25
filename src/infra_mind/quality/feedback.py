@@ -384,7 +384,7 @@ class FeedbackCollector:
         
         return QualityScore(
             recommendation_id=recommendation_id,
-            agent_name=feedback_list[0]smart_get("agent_name"),
+            agent_name=feedback_list[0].get("agent_name"),
             overall_score=overall_score,
             accuracy_score=accuracy_score,
             usefulness_score=usefulness_score,

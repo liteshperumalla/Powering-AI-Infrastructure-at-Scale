@@ -277,7 +277,7 @@ class ABTestingFramework:
                     )
                     
                     if variant:
-                        strategy_name = variant["configuration"]smart_get("strategy_name")
+                        strategy_name = variant["configuration"].get("strategy_name")
                         self.logger.info(f"Using strategy {strategy_name} for user {user_id}")
                         return strategy_name
                 else:
@@ -295,7 +295,7 @@ class ABTestingFramework:
                         )
                         
                         if variant:
-                            strategy_name = variant["configuration"]smart_get("strategy_name")
+                            strategy_name = variant["configuration"].get("strategy_name")
                             return strategy_name
             
             # Default strategy if no experiments apply
@@ -488,7 +488,7 @@ class ABTestingFramework:
         """Assign user to variant based on traffic allocation."""
         # Use consistent hashing for stable assignments
         hash_input = f"{user_id}_variant_assignment"
-        hash_value = int(hashlib.md5(hash_input.encode()).hexdigest(), 16)
+        hash_value = int(hashlib.md5(hash_input.encode(), usedforsecurity=False).hexdigest(), 16)
         random_value = (hash_value % 10000) / 10000.0  # 0.0 to 1.0
         
         cumulative_allocation = 0.0
