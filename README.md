@@ -2,7 +2,7 @@
 
 An enterprise-grade AI platform that empowers organizations to strategically plan, optimize, and scale their AI infrastructure across multi-cloud environments.
 
-[![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Latest-green)](https://fastapi.tiangolo.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)](https://www.typescriptlang.org/)
 [![Docker](https://img.shields.io/badge/Docker-Containerized-blue)](https://www.docker.com/)
@@ -30,10 +30,10 @@ A multi-agent AI system featuring specialized AI agents that collaboratively:
 
 ## Technical Stack
 
-### Frontend (Next.js 14 + TypeScript)
-- **Framework**: Next.js 14 with App Router
+### Frontend (Next.js 15 + TypeScript)
+- **Framework**: Next.js 15 with App Router, React 19
 - **Language**: TypeScript 5.0+
-- **UI Library**: Material-UI (MUI) v5
+- **UI Library**: Material-UI (MUI) v6
 - **State Management**: Redux Toolkit
 - **Styling**: Emotion + Material-UI theming
 - **Charts**: Recharts, D3.js integration
