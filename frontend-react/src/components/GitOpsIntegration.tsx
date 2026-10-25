@@ -343,7 +343,14 @@ const GitOpsIntegration: React.FC = () => {
                                                                 <IconButton
                                                                     size="small"
                                                                     color="error"
-                                                                    onClick={() => gitOpsService.disconnectRepository(repo.id)}
+                                                                    onClick={async () => {
+                                                                        try {
+                                                                            await gitOpsService.disconnectRepository(repo.id);
+                                                                            setRepositories(prev => prev.filter(r => r.id !== repo.id));
+                                                                        } catch (error) {
+                                                                            console.error('Failed to disconnect repository:', error);
+                                                                        }
+                                                                    }}
                                                                 >
                                                                     <DeleteIcon />
                                                                 </IconButton>
