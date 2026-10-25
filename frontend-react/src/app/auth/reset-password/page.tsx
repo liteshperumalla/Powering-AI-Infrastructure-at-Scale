@@ -26,6 +26,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import ResponsiveLayout from '@/components/ResponsiveLayout';
 
 function ResetPasswordContent() {
+    const theme = useTheme();
     const router = useRouter();
     const searchParams = useSearchParams();
     const token = searchParams.get('token');
@@ -454,7 +455,6 @@ function ResetPasswordContent() {
 }
 
 export default function ResetPasswordPage() {
-    const theme = useTheme();
     return (
         <Suspense fallback={<div>Loading...</div>}>
             <ResetPasswordContent />

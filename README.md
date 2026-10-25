@@ -2,7 +2,7 @@
 
 An enterprise-grade AI platform that empowers organizations to strategically plan, optimize, and scale their AI infrastructure across multi-cloud environments.
 
-[![Next.js](https://img.shields.io/badge/Next.js-14-black)](https://nextjs.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-15-black)](https://nextjs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-Latest-green)](https://fastapi.tiangolo.com/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)](https://www.typescriptlang.org/)
 [![Docker](https://img.shields.io/badge/Docker-Containerized-blue)](https://www.docker.com/)
@@ -30,10 +30,10 @@ A multi-agent AI system featuring specialized AI agents that collaboratively:
 
 ## Technical Stack
 
-### Frontend (Next.js 14 + TypeScript)
-- **Framework**: Next.js 14 with App Router
+### Frontend (Next.js 15 + TypeScript)
+- **Framework**: Next.js 15 with App Router, React 19
 - **Language**: TypeScript 5.0+
-- **UI Library**: Material-UI (MUI) v5
+- **UI Library**: Material-UI (MUI) v6
 - **State Management**: Redux Toolkit
 - **Styling**: Emotion + Material-UI theming
 - **Charts**: Recharts, D3.js integration
@@ -166,24 +166,35 @@ npm run test:coverage
 
 ### Backend Development
 ```bash
-cd src
-
-# Create virtual environment
+# From the repository root (pyproject.toml lives here)
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # Install dependencies
-pip install -r requirements.txt
+pip install -e ".[dev]"
 
 # Run FastAPI development server
-uvicorn infra_mind.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn src.infra_mind.main:app --reload --host 0.0.0.0 --port 8000
 
 # Run tests
-python -m pytest
+python -m pytest tests/
 
 # Type checking
-mypy .
+mypy src/infra_mind
 ```
+
+### Running Locally Without Docker
+You need MongoDB 7 on `localhost:27017` and Redis on `localhost:6379`. Set
+`INFRA_MIND_MONGODB_URL`, `INFRA_MIND_REDIS_URL`, `INFRA_MIND_SECRET_KEY` and `JWT_SECRET_KEY`
+(see `.env.example`). Then start the API as above and the frontend with `npm run dev`.
+
+Assessment analysis runs either:
+- **with a Celery worker** (as in Docker Compose):
+  `PYTHONPATH=src celery -A infra_mind.tasks.celery_app worker --loglevel=info`
+- **or in the API process**: set `INFRA_MIND_USE_CELERY_FOR_ASSESSMENTS=false` and skip the worker.
+
+LLM keys are optional for trying it out. Without them the analysis still completes, and the
+agents return fallback recommendations marked "[LLM Analysis Unavailable]".
 
 ### Database Operations
 ```bash

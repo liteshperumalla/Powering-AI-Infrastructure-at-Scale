@@ -17,7 +17,7 @@ class TestFoundation:
         """Test that settings load correctly."""
         assert settings.app_name == "Infra Mind"
         assert settings.app_version == "0.1.0"
-        assert settings.environment in ["development", "staging", "production"]
+        assert settings.environment in ["development", "testing", "staging", "production"]
     
     def test_app_creation(self):
         """Test that the FastAPI app is created correctly."""

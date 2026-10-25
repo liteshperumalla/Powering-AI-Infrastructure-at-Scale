@@ -514,8 +514,8 @@ export default function ChatPage() {
                 console.error('❌ Simple chat fallback also failed:', fallbackError);
                 console.error('❌ Full error details:', {
                     error: fallbackError,
-                    message: fallbackError?.message,
-                    stack: fallbackError?.stack
+                    message: fallbackError instanceof Error ? fallbackError.message : undefined,
+                    stack: fallbackError instanceof Error ? fallbackError.stack : undefined
                 });
                 setError('I apologize, but I\'m experiencing technical difficulties. Please try again in a moment, or contact our support team if you need immediate assistance.');
                 
@@ -1058,6 +1058,7 @@ export default function ChatPage() {
                                             disabled={currentConversation.status === 'resolved'}
                                             sx={{ minWidth: 'auto', px: 1 }}
                                         >
+                                            ✨
                                         </TooltipButton>
                                         <Button
                                             variant="outlined"
@@ -1083,7 +1084,6 @@ export default function ChatPage() {
                         >
                             {error && (
                                 <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
-                                    {console.log('🚨 Displaying error message:', error)}
                                     {error}
                                 </Alert>
                             )}

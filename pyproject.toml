@@ -29,10 +29,10 @@ dependencies = [
     
     # Database
     "motor>=3.3.0",  # Async MongoDB driver
-    "beanie>=1.23.0",  # Async ODM for MongoDB
+    "beanie>=1.28,<2",  # Async ODM for MongoDB; 2.x dropped Motor support (used here), 1.28 adds skip_indexes
     
     # Caching and Sessions
-    "redis>=5.0.0",
+    "redis>=5.0.1",  # Redis.aclose()
     "aioredis>=2.0.0",
     
     # AI and Agents
@@ -89,7 +89,7 @@ dependencies = [
     # Authentication
     "python-jose[cryptography]>=3.3.0",
     "passlib[bcrypt]>=1.7.4",
-    "bcrypt>=4.0.0",
+    "bcrypt>=4.0.0,<5",  # bcrypt 5 breaks passlib 1.7.4 (raises on its 72-byte self-test)
     "python-multipart>=0.0.6",
     
     # Email Services

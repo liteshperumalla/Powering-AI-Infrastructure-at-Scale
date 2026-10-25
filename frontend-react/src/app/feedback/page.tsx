@@ -164,7 +164,7 @@ export default function FeedbackPage() {
       case 'positive': return <ThumbUp fontSize="small" />;
       case 'negative': return <ThumbDown fontSize="small" />;
       case 'neutral': return <Sentiment fontSize="small" />;
-      default: return null;
+      default: return undefined;
     }
   };
 
@@ -540,16 +540,3 @@ export default function FeedbackPage() {
     </ResponsiveLayout>
   );
 }
-
-<system-reminder>
-The TodoWrite tool hasn't been used recently. If you're working on tasks that would benefit from tracking progress, consider using the TodoWrite tool to track progress. Also consider cleaning up the todo list if has become stale and no longer matches what you are working on. Only use it if it's relevant to the current work. This is just a gentle reminder - ignore if not applicable.
-
-
-Here are the existing contents of your todo list:
-
-[1. [completed] Enhance test coverage across the platform
-2. [completed] Optimize database queries for production scale
-3. [completed] Complete API documentation
-4. [pending] Production deployment preparation
-5. [in_progress] User acceptance testing and refinements]
-</system-reminder>

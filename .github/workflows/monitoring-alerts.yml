@@ -22,6 +22,14 @@ on:
         default: '5'
         type: string
 
+# Both jobs are opt-in: set the repository variable MONITORING_ENABLED=true once the
+# KUBE_CONFIG_* secrets and the PRODUCTION_API_URL / STAGING_API_URL variables are set. Skipped jobs
+# don't start a runner, so the 15-minute schedule costs nothing until then.
+# (Secrets can't be used in a job-level `if:`, which is why a variable gates this.)
+
+permissions:
+  contents: read
+
 env:
   ALERT_THRESHOLD: ${{ github.event.inputs.alert_threshold || '5' }}
   ENVIRONMENT: ${{ github.event.inputs.environment || 'production' }}
@@ -31,7 +39,12 @@ jobs:
     name: Health Monitoring
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    if: secrets.KUBE_CONFIG_PRODUCTION != '' || secrets.KUBE_CONFIG_STAGING != ''
+    if: vars.MONITORING_ENABLED == 'true'
+    permissions:
+      contents: read
+      issues: write  # critical-alert issues
+    env:
+      SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_ALERTS }}
     
     steps:
     - name: Checkout code
@@ -174,13 +187,13 @@ jobs:
         cat monitoring-report.md
     
     - name: Upload monitoring report
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: monitoring-report-${{ env.ENVIRONMENT }}-${{ github.run_number }}
         path: monitoring-report.md
     
     - name: Send alert if health score is low
-      if: steps.health-check.outputs.health_score < env.ALERT_THRESHOLD && secrets.SLACK_WEBHOOK_ALERTS != ''
+      if: steps.health-check.outputs.health_score < env.ALERT_THRESHOLD && env.SLACK_WEBHOOK_URL != ''
       uses: 8398a7/action-slack@v3
       with:
         status: failure
@@ -196,13 +209,11 @@ jobs:
           • Frontend Status: ${{ steps.health-check.outputs.frontend_ready }}/${{ steps.health-check.outputs.frontend_desired }}
           
           **Action Required:** Please investigate immediately
-        webhook_url: ${{ secrets.SLACK_WEBHOOK_ALERTS }}
-      env:
-        SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+      # action-slack reads the webhook from SLACK_WEBHOOK_URL (set at job level)
     
     - name: Create GitHub issue for critical alerts
       if: steps.health-check.outputs.health_score < 3
-      uses: actions/github-script@v6
+      uses: actions/github-script@v7
       with:
         script: |
           const title = `🚨 Critical System Alert - ${{ env.ENVIRONMENT }} (Health Score: ${{ steps.health-check.outputs.health_score }}/10)`;
@@ -243,6 +254,7 @@ jobs:
     name: Performance Monitoring
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    if: vars.MONITORING_ENABLED == 'true'
     
     steps:
     - name: Checkout code
@@ -274,7 +286,7 @@ jobs:
           },
         };
         
-        const BASE_URL = '${{ env.ENVIRONMENT == 'production' && 'https://api.infra-mind.com' || 'https://api-staging.infra-mind.com' }}';
+        const BASE_URL = '${{ env.ENVIRONMENT == 'production' && vars.PRODUCTION_API_URL || vars.STAGING_API_URL }}';
         
         export default function() {
           let response = http.get(`${BASE_URL}/health`);
@@ -286,15 +298,15 @@ jobs:
         EOF
         
         # Run performance test
-        k6 run --out json=performance-results.json performance-test.js || true
+        k6 run --summary-export=performance-results.json performance-test.js || true
     
     - name: Analyze performance results
       run: |
         if [ -f performance-results.json ]; then
           # Extract key metrics
-          AVG_RESPONSE_TIME=$(jq -r '.metrics.http_req_duration.values.avg' performance-results.json || echo "0")
-          P95_RESPONSE_TIME=$(jq -r '.metrics.http_req_duration.values["p(95)"]' performance-results.json || echo "0")
-          ERROR_RATE=$(jq -r '.metrics.http_req_failed.values.rate' performance-results.json || echo "0")
+          AVG_RESPONSE_TIME=$(jq -r '.metrics.http_req_duration.avg' performance-results.json || echo "0")
+          P95_RESPONSE_TIME=$(jq -r '.metrics.http_req_duration["p(95)"]' performance-results.json || echo "0")
+          ERROR_RATE=$(jq -r '.metrics.http_req_failed.value' performance-results.json || echo "0")
           
           echo "Average Response Time: ${AVG_RESPONSE_TIME}ms"
           echo "95th Percentile Response Time: ${P95_RESPONSE_TIME}ms"
@@ -311,7 +323,7 @@ jobs:
         fi
     
     - name: Upload performance results
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: performance-results-${{ env.ENVIRONMENT }}
         path: performance-results.json

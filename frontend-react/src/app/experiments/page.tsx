@@ -137,12 +137,15 @@ export default function ExperimentsPage() {
 
   const handleCreateExperiment = async () => {
     try {
-      const created = await createExperiment({
+      // `assessment_id` is accepted by the backend but not declared on the
+      // Experiment type in services/experiments.ts.
+      const payload: Partial<Experiment> & { assessment_id?: string } = {
         ...newExperiment,
         assessment_id: assessmentId || undefined, // Optional assessment link
         variants: ['control', 'treatment'], // Default variants
         status: 'draft',
-      });
+      };
+      const created = await createExperiment(payload);
 
       setExperiments(prev => [...prev, created]);
       setCreateDialogOpen(false);
@@ -175,7 +178,7 @@ export default function ExperimentsPage() {
       case 'running': return <PlayArrow fontSize="small" />;
       case 'paused': return <Pause fontSize="small" />;
       case 'completed': return <Stop fontSize="small" />;
-      default: return null;
+      default: return undefined;
     }
   };
 

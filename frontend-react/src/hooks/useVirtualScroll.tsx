@@ -96,7 +96,7 @@ export interface UseVirtualScrollReturn {
     /**
      * Ref to attach to the scrollable container
      */
-    containerRef: React.RefObject<HTMLDivElement>;
+    containerRef: React.RefObject<HTMLDivElement | null>;
 
     /**
      * Function to scroll to a specific item

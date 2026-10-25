@@ -476,7 +476,7 @@ export default function ApprovalsPage() {
                         return status === filterStatus;
                       }).length})
                     </Typography>
-                    <Tabs value={filterStatus} onChange={(e, v) => setFilterStatus(v)} size="small">
+                    <Tabs value={filterStatus} onChange={(e, v) => setFilterStatus(v)}>
                       <Tab label="All" value="all" />
                       <Tab label="Pending" value="pending" />
                       <Tab label="Approved" value="approved" />

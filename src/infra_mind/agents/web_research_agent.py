@@ -1329,7 +1329,7 @@ class WebResearchAgent(BaseAgent):
             
         try:
             # Check cache first
-            cache_key = f"web_scrape:{hashlib.md5(url.encode()).hexdigest()}"
+            cache_key = f"web_scrape:{hashlib.md5(url.encode(), usedforsecurity=False).hexdigest()}"
             cached_data = await self.cache_manager.get(cache_key)
             if cached_data:
                 logger.debug(f"Using cached data for {url}")
@@ -1352,7 +1352,7 @@ class WebResearchAgent(BaseAgent):
                         
                         if extracted_data:
                             # Create content hash for deduplication
-                            content_hash = hashlib.md5(content.encode()).hexdigest()
+                            content_hash = hashlib.md5(content.encode(), usedforsecurity=False).hexdigest()
                             
                             data = {
                                 "source_url": url,

@@ -89,8 +89,18 @@ interface ComplianceStatus {
     score: number;
 }
 
+// Returned instead of per-framework statuses when no audit data exists
+interface ComplianceNote {
+    note: string;
+    available_frameworks?: string[];
+    assessment_required?: boolean;
+}
+
+const isComplianceNote = (value: ComplianceNote | Record<string, ComplianceStatus>): value is ComplianceNote =>
+    typeof (value as ComplianceNote).note === 'string';
+
 interface ThreatLandscape {
-    security_score?: number;
+    security_score?: number | null; // null until vulnerability scanning is configured
     high_priority_issues?: number;
     total_vulnerabilities?: number;
 }
@@ -98,7 +108,7 @@ interface ThreatLandscape {
 interface SecurityAnalytics {
     global_security: {
         threat_landscape?: ThreatLandscape;
-        compliance_status?: Record<string, ComplianceStatus>;
+        compliance_status?: ComplianceNote | Record<string, ComplianceStatus>;
     };
     assessment_security: Record<string, unknown>[];
 }
@@ -194,7 +204,7 @@ const EMPTY_PREDICTIVE_INSIGHTS: PredictiveInsights = {
 };
 
 const normalizeAnalyticsData = (data: AnalyticsApiResponse, fallbackTimeframe: string): AnalyticsData => {
-    const analytics = data.analytics ?? {};
+    const analytics: Partial<AnalyticsData['analytics']> = data.analytics ?? {};
 
     return {
         timestamp: data.timestamp ?? new Date().toISOString(),
@@ -266,7 +276,9 @@ export default function AnalyticsPage() {
                 }
             }
             
-            const data = await apiClient.getAdvancedAnalyticsDashboard(timeframe);
+            // The backend also returns an optional `message` (e.g. when no assessments
+            // are complete), which the api.ts return type does not declare.
+            const data: AnalyticsApiResponse = await apiClient.getAdvancedAnalyticsDashboard(timeframe);
             
             console.log('📊 Analytics data received:', {
                 timestamp: data.timestamp,
@@ -610,14 +622,14 @@ export default function AnalyticsPage() {
                                                 <Box sx={{ mb: 3 }}>
                                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
                                                         <Typography variant="h4" color="text.primary">
-                                                            {analyticsData.analytics.security_analytics.global_security.threat_landscape.security_score}
+                                                            {analyticsData.analytics.security_analytics.global_security.threat_landscape.security_score ?? 'N/A'}
                                                         </Typography>
                                                         <Typography variant="body2" color="text.secondary">/100</Typography>
                                                     </Box>
                                                     <LinearProgress 
                                                         variant="determinate" 
-                                                        value={analyticsData.analytics.security_analytics.global_security.threat_landscape.security_score}
-                                                        color={analyticsData.analytics.security_analytics.global_security.threat_landscape.security_score > 80 ? 'success' : 'warning'}
+                                                        value={analyticsData.analytics.security_analytics.global_security.threat_landscape.security_score ?? 0}
+                                                        color={(analyticsData.analytics.security_analytics.global_security.threat_landscape.security_score ?? 0) > 80 ? 'success' : 'warning'}
                                                     />
                                                     <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
                                                         Security Score
@@ -633,7 +645,7 @@ export default function AnalyticsPage() {
                                                     </Typography>
                                                 </Box>
 
-                                                {complianceStatus && complianceStatus.note ? (
+                                                {complianceStatus && isComplianceNote(complianceStatus) ? (
                                                     <Accordion>
                                                         <AccordionSummary expandIcon={<ExpandMore />}>
                                                             <Typography variant="subtitle2">Compliance Status</Typography>
@@ -661,7 +673,7 @@ export default function AnalyticsPage() {
                                                             )}
                                                         </AccordionDetails>
                                                     </Accordion>
-                                                ) : complianceStatus && typeof complianceStatus === 'object' && !complianceStatus.note ? (
+                                                ) : complianceStatus && typeof complianceStatus === 'object' ? (
                                                     <Accordion>
                                                         <AccordionSummary expandIcon={<ExpandMore />}>
                                                             <Typography variant="subtitle2">Compliance Status</Typography>
@@ -841,7 +853,7 @@ export default function AnalyticsPage() {
                                             </Box>
                                             
                                             <Grid container spacing={2}>
-                                                {analyticsData.predictive_insights.cost_predictions && (
+                                                {analyticsData.predictive_insights.cost_predictions?.annual_cost_forecast != null && (
                                                     <Grid item xs={12} md={4}>
                                                         <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'background.paper', borderRadius: 1 }}>
                                                             <Typography variant="h5" color="text.primary">
@@ -850,9 +862,11 @@ export default function AnalyticsPage() {
                                                             <Typography variant="body2" color="text.secondary">
                                                                 Annual Cost Forecast
                                                             </Typography>
-                                                            <Typography variant="caption">
-                                                                {(analyticsData.predictive_insights.cost_predictions.confidence_level * 100).toFixed(0)}% confidence
-                                                            </Typography>
+                                                            {analyticsData.predictive_insights.cost_predictions.confidence_level != null && (
+                                                                <Typography variant="caption">
+                                                                    {(analyticsData.predictive_insights.cost_predictions.confidence_level * 100).toFixed(0)}% confidence
+                                                                </Typography>
+                                                            )}
                                                         </Box>
                                                     </Grid>
                                                 )}

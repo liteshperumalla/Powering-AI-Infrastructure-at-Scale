@@ -252,7 +252,7 @@ class ApiClient {
     }
 
     // HTTP request helper with enhanced error handling and loading states
-    private async request<T>(
+    async request<T>(
         endpoint: string,
         options: RequestInit & { useFullUrl?: boolean } = {}
     ): Promise<T> {
@@ -339,7 +339,7 @@ class ApiClient {
                         // For delete operations, 404 might be expected (already deleted)
                         if (config.method === 'DELETE') {
                             console.log('✅ Resource already deleted (404)');
-                            return null; // Return null for successful deletion of non-existent resource
+                            return null as T; // Return null for successful deletion of non-existent resource
                         }
                         throw new Error('Resource not found.');
                     case 429:
@@ -459,64 +459,6 @@ class ApiClient {
         });
 
         return shouldLogout;
-    }
-
-    // Debug connection method
-    async debugConnection(): Promise<any> {
-        console.log('🔍 Starting connection debug...');
-
-        const testUrls = [
-            'http://localhost:8000',
-            'http://127.0.0.1:8000',
-            'http://api:8000'
-        ];
-
-        const debugInfo = {
-            currentConfig: {
-                baseURL: this.baseURL,
-                environment: typeof window !== 'undefined' ? 'client' : 'server',
-                envVars: {
-                    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL,
-                    API_URL: process.env.API_URL,
-                    NODE_ENV: process.env.NODE_ENV
-                }
-            },
-            testResults: {} as any
-        };
-
-        // Test each URL
-        for (const testUrl of testUrls) {
-            try {
-                console.log(`🧪 Testing ${testUrl}/health...`);
-                const response = await fetch(`${testUrl}/health`, {
-                    method: 'GET',
-                    headers: { 'Accept': 'application/json' },
-                    signal: AbortSignal.timeout(5000)
-                });
-
-                debugInfo.testResults[testUrl] = {
-                    success: true,
-                    status: response.status,
-                    statusText: response.statusText,
-                    headers: Object.fromEntries(response.headers.entries())
-                };
-
-                if (response.ok) {
-                    console.log(`✅ ${testUrl} - SUCCESS (${response.status})`);
-                } else {
-                    console.log(`⚠️ ${testUrl} - HTTP Error (${response.status})`);
-                }
-            } catch (error) {
-                console.log(`❌ ${testUrl} - FAILED: ${error instanceof Error ? error.message : 'Unknown error'}`);
-                debugInfo.testResults[testUrl] = {
-                    success: false,
-                    error: error instanceof Error ? error.message : 'Unknown error'
-                };
-            }
-        }
-
-        console.log('🔍 Connection debug complete:', debugInfo);
-        return debugInfo;
     }
 
     // Generic HTTP methods
@@ -660,12 +602,6 @@ class ApiClient {
         return this.request<Assessment>(`/assessments/${id}`, {
             method: 'PUT',
             body: JSON.stringify(updates),
-        });
-    }
-
-    async deleteAssessment(id: string): Promise<void> {
-        return this.request<void>(`/assessments/${id}`, {
-            method: 'DELETE',
         });
     }
 
@@ -1231,6 +1167,7 @@ class ApiClient {
         services?: Record<string, string>;
         system?: any;
         performance?: any;
+        error?: string;
     }> {
         try {
             // Use the base URL directly for health endpoint (no API prefix needed)
@@ -1744,7 +1681,7 @@ class ApiClient {
         source: string;
     }[]> {
         try {
-            const response = await this.request('/forms/smart-defaults', {
+            const response = await this.request<{ defaults?: any[] }>('/forms/smart-defaults', {
                 method: 'POST',
                 body: JSON.stringify({ field_name: fieldName, context })
             });
@@ -1763,7 +1700,7 @@ class ApiClient {
         confidence: number;
     }[]> {
         try {
-            const response = await this.request('/forms/suggestions', {
+            const response = await this.request<{ suggestions?: any[] }>('/forms/suggestions', {
                 method: 'POST',
                 body: JSON.stringify({ field_name: fieldName, query, context })
             });

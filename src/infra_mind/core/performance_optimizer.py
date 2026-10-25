@@ -88,7 +88,7 @@ class DatabaseQueryOptimizer:
             "operation": operation,
             "query": query
         }, sort_keys=True, default=str)
-        return hashlib.md5(query_str.encode()).hexdigest()[:12]
+        return hashlib.md5(query_str.encode(), usedforsecurity=False).hexdigest()[:12]
     
     @asynccontextmanager
     async def profile_query(self, collection: str, operation: str, 
@@ -368,7 +368,7 @@ class AdvancedCacheManager:
         """Intelligent cache get with tier management and prefetching."""
         cache_key = f"{provider}:{service}:{region}"
         if params:
-            cache_key += f":{hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()[:8]}"
+            cache_key += f":{hashlib.md5(json.dumps(params, sort_keys=True).encode(), usedforsecurity=False).hexdigest()[:8]}"
         
         async with self.track_cache_operation(cache_key, "get"):
             # Try to get from cache
@@ -386,7 +386,7 @@ class AdvancedCacheManager:
         """Intelligent cache set with tier-based TTL."""
         cache_key = f"{provider}:{service}:{region}"
         if params:
-            cache_key += f":{hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()[:8]}"
+            cache_key += f":{hashlib.md5(json.dumps(params, sort_keys=True).encode(), usedforsecurity=False).hexdigest()[:8]}"
         
         # Determine appropriate cache tier
         tier = self._determine_cache_tier(cache_key)
@@ -616,7 +616,7 @@ class LLMPromptOptimizer:
         cost_savings_percent = compression_ratio
         
         # Generate prompt hash for tracking
-        prompt_hash = hashlib.md5(original_prompt.encode()).hexdigest()[:12]
+        prompt_hash = hashlib.md5(original_prompt.encode(), usedforsecurity=False).hexdigest()[:12]
         
         # Record metrics
         metrics = LLMOptimizationMetrics(

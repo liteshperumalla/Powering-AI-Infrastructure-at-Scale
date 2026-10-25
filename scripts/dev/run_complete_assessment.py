@@ -16,7 +16,11 @@ import asyncio
 import logging
 import json
 from datetime import datetime, timezone
+import sys
 from pathlib import Path
+
+# Make the repo root importable so `src.infra_mind` resolves from scripts/dev/
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 # Core system imports
 from src.infra_mind.workflows.assessment_workflow import AssessmentWorkflow

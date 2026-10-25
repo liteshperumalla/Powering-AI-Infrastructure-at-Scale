@@ -119,7 +119,9 @@ const ComplianceDashboard: React.FC = () => {
     );
 
     // Extract data from API responses
-    const consentSummary = consentData?.consent_summary || consentData || {};
+    // The consent endpoint may return either { consent_summary: {...} } or the summary map itself
+    const consentSummary: ConsentSummary =
+        consentData?.consent_summary || (consentData as unknown as ConsentSummary | null) || {};
     const retentionPolicies = policiesData?.policies || {};
     const auditEvents = auditData?.audit_summary?.recent_events || [];
     const loading = consentLoading || policiesLoading || auditLoading;

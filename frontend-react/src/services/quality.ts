@@ -428,10 +428,11 @@ export async function generateQualityReport(targetType: string, targetId: string
   // Mock implementation - replace with actual API call when available
   return {
     id: `report-${Date.now()}`,
-    target_type: targetType as any,
+    report_type: 'summary',
+    target_type: targetType as QualityReport['target_type'],
     target_id: targetId,
-    report_data: {},
     generated_at: new Date().toISOString(),
-    quality_score: 85
+    overall_score: 85,
+    findings: []
   };
 }

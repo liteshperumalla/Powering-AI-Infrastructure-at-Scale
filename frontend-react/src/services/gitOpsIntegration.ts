@@ -1,5 +1,7 @@
 'use client';
 
+import AuthStorage from '../utils/authStorage';
+
 export interface GitRepository {
     id: string;
     name: string;
@@ -89,58 +91,45 @@ export interface DeploymentPlan {
 
 class GitOpsIntegrationService {
     private baseUrl: string;
-    private token: string | null = null;
 
     constructor() {
         this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        this.token = typeof window !== 'undefined' ? typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null : null;
     }
 
     private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
         // Map to real backend endpoints
         const mappedEndpoint = this.mapEndpoint(endpoint);
+        const token = AuthStorage.getTokenFromAnySource();
 
         const response = await fetch(`${this.baseUrl}${mappedEndpoint}`, {
             ...options,
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.token}`,
+                // Read per request: the service is created at import time, often before login
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
                 ...options.headers,
             },
         });
 
         if (!response.ok) {
-            // Return empty arrays for list endpoints that don't exist yet
-            if (response.status === 404) {
-                if (endpoint.includes('templates') || endpoint.includes('pull-requests')) {
-                    return [];
-                }
-            }
-            throw new Error(`GitOps API Error: ${response.status} ${response.statusText}`);
+            // Prefer the backend's explanation (FastAPI `detail`: a string, or a list of validation errors)
+            const body = await response.json().catch(() => null);
+            const detail = Array.isArray(body?.detail)
+                ? body.detail.map((d: { msg?: string }) => d.msg?.replace(/^Value error, /, '')).filter(Boolean).join('; ')
+                : body?.detail;
+            throw new Error(detail || `GitOps API Error: ${response.status} ${response.statusText}`);
         }
 
-        return response.json();
+        // DELETE endpoints answer 204 with no body
+        return response.status === 204 ? null : response.json();
     }
 
     private mapEndpoint(endpoint: string): string {
-        // Map gitops endpoints to real backend endpoints
-        if (endpoint.startsWith('/api/gitops/repositories')) {
-            return '/api/v1/gitops/repositories';
-        }
-        if (endpoint.startsWith('/api/gitops/templates')) {
-            return '/api/v1/gitops/templates';
-        }
-        if (endpoint.startsWith('/api/gitops/deployment-plans')) {
-            return '/api/v1/gitops/deployments';
-        }
-        if (endpoint.startsWith('/api/gitops/deployment')) {
-            return '/api/v1/gitops/deployments';
-        }
-        if (endpoint.startsWith('/api/gitops/')) {
-            // Keep the same path but ensure it uses v1
-            return endpoint.replace('/api/gitops/', '/api/v1/gitops/');
-        }
-        return endpoint;
+        // Version the path, keeping any resource ID / sub-path (the old per-resource
+        // rules returned fixed paths, dropping e.g. the ID from DELETE /repositories/{id})
+        return endpoint.startsWith('/api/gitops/')
+            ? endpoint.replace('/api/gitops/', '/api/v1/gitops/')
+            : endpoint;
     }
 
     // Removed getFallbackResponse - all data now comes from backend only
@@ -169,8 +158,8 @@ class GitOpsIntegrationService {
             return repos.map((repo: any) => ({
                 id: repo?.id || '',
                 name: repo?.name || 'Unknown',
-                full_name: repo?.name || 'Unknown', // Backend doesn't have full_name, use name
-                provider: 'github' as const, // Default to github
+                full_name: repo?.full_name || repo?.name || 'Unknown',
+                provider: (['github', 'gitlab', 'bitbucket'].includes(repo?.provider) ? repo.provider : 'github') as GitRepository['provider'],
                 url: repo?.url || '',
                 default_branch: repo?.branch || 'main',
                 private: false, // Backend doesn't specify, default to false
@@ -197,13 +186,6 @@ class GitOpsIntegrationService {
     }
 
     // Branch Management moved below
-
-    async executeDeployment(planId: string, environment: string): Promise<{ deployment_id: string }> {
-        return this.makeRequest(`/api/gitops/deployment-plans/${planId}/deploy`, {
-            method: 'POST',
-            body: JSON.stringify({ environment }),
-        });
-    }
 
     // Branch Management
     async getBranches(repoId: string): Promise<GitBranch[]> {
@@ -356,52 +338,13 @@ class GitOpsIntegrationService {
 
     async getDeploymentPlans(): Promise<DeploymentPlan[]> {
         try {
-            const deployments = await this.makeRequest('/api/gitops/deployment-plans');
-            // Backend returns deployment history, not deployment plans
-            // Transform to DeploymentPlan format for display
-            if (!Array.isArray(deployments)) {
-                console.warn('Deployments response is not an array:', deployments);
+            const plans = await this.makeRequest('/api/gitops/deployment-plans');
+            if (!Array.isArray(plans)) {
+                console.warn('Deployment plans response is not an array:', plans);
                 return [];
             }
-
-            return deployments.map((deployment: any) => ({
-                id: deployment?.id || '',
-                name: deployment?.commit_message || `Deployment ${deployment?.revision}` || 'Unknown Deployment',
-                repository: {
-                    id: deployment?.application_id || '',
-                    name: deployment?.application_id || 'Unknown',
-                    full_name: deployment?.application_id || 'Unknown',
-                    provider: 'github' as const,
-                    url: '',
-                    default_branch: 'main',
-                    private: false,
-                    permissions: { admin: true, push: true, pull: true }
-                },
-                branch: deployment?.commit_sha || 'main',
-                template: {
-                    id: '',
-                    name: deployment?.revision || 'Unknown',
-                    description: '',
-                    provider: 'terraform' as const,
-                    language: 'hcl',
-                    template: '',
-                    variables: {},
-                    outputs: {},
-                    tags: [],
-                    version: deployment?.revision || '1.0.0'
-                },
-                environment: 'prod' as const, // Backend doesn't specify
-                variables: {},
-                approval_required: false,
-                auto_deploy: deployment?.status === 'in_progress',
-                rollback_enabled: deployment?.rollback_available || false,
-                notification_settings: {
-                    channels: [],
-                    on_success: true,
-                    on_failure: true,
-                    on_approval_needed: false
-                }
-            }));
+            // repository/template are null if they were removed after the plan was created
+            return plans.filter((plan: any) => plan?.repository && plan?.template);
         } catch (error) {
             console.error('Failed to get deployment plans:', error);
             return [];

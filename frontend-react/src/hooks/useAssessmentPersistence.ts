@@ -3,6 +3,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useAppSelector } from '@/store/hooks';
 import { apiClient } from '@/services/api';
+import type { Assessment } from '@/store/slices/assessmentSlice';
+
+// Draft fields the backend returns (schemas/assessment.py) but that the
+// shared Assessment type does not declare yet.
+type AssessmentWithDraft = Assessment & {
+    draft_data?: Record<string, unknown> | null;
+    current_step?: number | null;
+};
 
 interface AssessmentDraft {
     formData: Record<string, unknown>;
@@ -99,8 +107,8 @@ export function useAssessmentPersistence() {
 
             // Then, try to load from API for the most recent version
             try {
-                const assessments = await apiClient.getAssessments();
-                const draftAssessment = assessments.find(a => a.status === 'draft');
+                const { assessments } = await apiClient.getAssessments();
+                const draftAssessment: AssessmentWithDraft | undefined = assessments.find(a => a.status === 'draft');
                 
                 if (draftAssessment && draftAssessment.draft_data) {
                     const apiDraft: AssessmentDraft = {

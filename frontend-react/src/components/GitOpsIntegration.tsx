@@ -88,6 +88,9 @@ const GitOpsIntegration: React.FC = () => {
     const [createTemplateDialog, setCreateTemplateDialog] = useState(false);
     const [deployDialog, setDeployDialog] = useState(false);
     const [previewDialog, setPreviewDialog] = useState(false);
+    const [prDialog, setPrDialog] = useState(false);
+    const [prForm, setPrForm] = useState({ title: '', description: '', source_branch: '', target_branch: 'main' });
+    const [prError, setPrError] = useState<string | null>(null);
     
     // Form states
     const [repoForm, setRepoForm] = useState({
@@ -117,6 +120,20 @@ const GitOpsIntegration: React.FC = () => {
         loadData();
     }, []);
 
+    // Pull requests belong to a repository: load them when one is selected
+    useEffect(() => {
+        if (!selectedRepo) {
+            setPullRequests([]);
+            return;
+        }
+        gitOpsService.getPullRequests(selectedRepo.id)
+            .then(prs => setPullRequests(Array.isArray(prs) ? prs : []))
+            .catch(error => {
+                console.error('Failed to load pull requests:', error);
+                setPullRequests([]);
+            });
+    }, [selectedRepo?.id]);
+
     const loadData = async () => {
         setLoading(true);
         try {
@@ -131,16 +148,6 @@ const GitOpsIntegration: React.FC = () => {
             setTemplates(Array.isArray(templates) ? templates : []);
             setDeploymentPlans(Array.isArray(plans) ? plans : []);
             
-            const repoArray = Array.isArray(repos) ? repos : [];
-            if (repoArray.length > 0 && selectedRepo) {
-                try {
-                    const prs = await gitOpsService.getPullRequests(selectedRepo.id);
-                    setPullRequests(Array.isArray(prs) ? prs : []);
-                } catch (prError) {
-                    console.error('Failed to load pull requests:', prError);
-                    setPullRequests([]);
-                }
-            }
         } catch (error) {
             console.error('Failed to load GitOps data:', error);
             // Set empty arrays as fallback
@@ -165,6 +172,20 @@ const GitOpsIntegration: React.FC = () => {
             setRepoForm({ provider: 'github', url: '', accessToken: '' });
         } catch (error) {
             console.error('Failed to connect repository:', error);
+        }
+    };
+
+    const handleCreatePullRequest = async () => {
+        if (!selectedRepo) return;
+        try {
+            const pr = await gitOpsService.createPullRequest(
+                selectedRepo.id, prForm.title, prForm.description, prForm.source_branch, prForm.target_branch
+            );
+            setPullRequests(prev => [pr, ...prev]);
+            setPrDialog(false);
+            setPrForm({ title: '', description: '', source_branch: '', target_branch: 'main' });
+        } catch (error) {
+            setPrError(error instanceof Error ? error.message : 'Failed to create pull request');
         }
     };
 
@@ -343,7 +364,14 @@ const GitOpsIntegration: React.FC = () => {
                                                                 <IconButton
                                                                     size="small"
                                                                     color="error"
-                                                                    onClick={() => gitOpsService.disconnectRepository(repo.id)}
+                                                                    onClick={async () => {
+                                                                        try {
+                                                                            await gitOpsService.disconnectRepository(repo.id);
+                                                                            setRepositories(prev => prev.filter(r => r.id !== repo.id));
+                                                                        } catch (error) {
+                                                                            console.error('Failed to disconnect repository:', error);
+                                                                        }
+                                                                    }}
                                                                 >
                                                                     <DeleteIcon />
                                                                 </IconButton>
@@ -401,7 +429,8 @@ const GitOpsIntegration: React.FC = () => {
                                 <Button
                                     startIcon={<AddIcon />}
                                     onClick={() => {
-                                        // Create new PR logic
+                                        setPrError(null);
+                                        setPrDialog(true);
                                     }}
                                 >
                                     New Pull Request
@@ -748,6 +777,55 @@ const GitOpsIntegration: React.FC = () => {
                     <Button onClick={() => setConnectRepoDialog(false)}>Cancel</Button>
                     <Button variant="contained" onClick={handleConnectRepository}>
                         Connect
+                    </Button>
+                </DialogActions>
+            </Dialog>
+
+            {/* Create Pull Request Dialog */}
+            <Dialog open={prDialog} onClose={() => setPrDialog(false)} maxWidth="sm" fullWidth>
+                <DialogTitle>New Pull Request{selectedRepo ? ` - ${selectedRepo.name}` : ''}</DialogTitle>
+                <DialogContent>
+                    <Stack spacing={2} sx={{ mt: 1 }}>
+                        {prError && <Alert severity="error">{prError}</Alert>}
+                        <TextField
+                            fullWidth
+                            label="Title"
+                            value={prForm.title}
+                            onChange={(e) => setPrForm(prev => ({ ...prev, title: e.target.value }))}
+                        />
+                        <TextField
+                            fullWidth
+                            multiline
+                            rows={3}
+                            label="Description"
+                            value={prForm.description}
+                            onChange={(e) => setPrForm(prev => ({ ...prev, description: e.target.value }))}
+                        />
+                        <Stack direction="row" spacing={2}>
+                            <TextField
+                                fullWidth
+                                label="Source Branch"
+                                placeholder="feature/my-change"
+                                value={prForm.source_branch}
+                                onChange={(e) => setPrForm(prev => ({ ...prev, source_branch: e.target.value }))}
+                            />
+                            <TextField
+                                fullWidth
+                                label="Target Branch"
+                                value={prForm.target_branch}
+                                onChange={(e) => setPrForm(prev => ({ ...prev, target_branch: e.target.value }))}
+                            />
+                        </Stack>
+                    </Stack>
+                </DialogContent>
+                <DialogActions>
+                    <Button onClick={() => setPrDialog(false)}>Cancel</Button>
+                    <Button
+                        variant="contained"
+                        onClick={handleCreatePullRequest}
+                        disabled={!prForm.title.trim() || !prForm.source_branch.trim()}
+                    >
+                        Create Pull Request
                     </Button>
                 </DialogActions>
             </Dialog>

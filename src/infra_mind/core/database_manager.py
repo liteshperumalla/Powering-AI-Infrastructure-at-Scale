@@ -1,7 +1,7 @@
 """
 Legacy-compatible database manager shim.
 
-`run_complete_assessment.py` and other development utilities historically
+`scripts/dev/run_complete_assessment.py` and other development utilities historically
 depended on a small `DatabaseManager` helper. During the production hardening
 work the implementation moved to `src/infra_mind/core/database.py`, but the
 compatibility shim was never re-introduced which caused imports to fail.

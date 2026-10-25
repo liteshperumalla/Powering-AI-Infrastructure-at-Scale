@@ -626,7 +626,7 @@ class FactChecker:
         """Verify a specific claim against authoritative sources."""
         try:
             # Generate cache key for claim
-            claim_hash = hashlib.md5(claim.encode()).hexdigest()
+            claim_hash = hashlib.md5(claim.encode(), usedforsecurity=False).hexdigest()
             cache_key = f"fact_check_{claim_hash}"
             
             # Check cache first

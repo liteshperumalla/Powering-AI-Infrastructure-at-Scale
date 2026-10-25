@@ -117,8 +117,11 @@ async def test_database_injection(app, client):
     mock_db.list_collection_names.return_value = [
         "assessments", "users", "recommendations"
     ]
-    mock_db.assessments.count_documents.return_value = 5
-    mock_db.assessments.find.return_value.limit.return_value.to_list.return_value = []
+    # Collections are dynamic attributes on Motor databases, so the spec doesn't include them.
+    # Like Motor: find() is synchronous and returns a cursor; count_documents/to_list are awaitable.
+    mock_db.assessments = MagicMock()
+    mock_db.assessments.count_documents = AsyncMock(return_value=5)
+    mock_db.assessments.find.return_value.limit.return_value.to_list = AsyncMock(return_value=[])
 
     # Override dependency
     app.dependency_overrides[get_database] = lambda: mock_db

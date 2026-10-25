@@ -1473,23 +1473,31 @@ async def create_assessment(
                 }
                 await assessment.save()
 
-                # Dispatch Celery task for workflow execution
-                try:
-                    from ...tasks.assessment_tasks import process_assessment
-                    # Explicitly send to 'assessments' queue to match worker configuration
-                    celery_task = process_assessment.apply_async(
-                        args=[str(assessment.id)],
-                        queue='assessments',
-                        routing_key='assessment'
-                    )
-                    celery_task_id = celery_task.id
-                    logger.info(f"✅ Assessment {assessment.id} queued via Celery to 'assessments' queue. Task ID: {celery_task_id}")
-                except Exception as celery_error:
-                    logger.error(f"Failed to queue Celery task for assessment {assessment.id}: {celery_error}")
-                    # Fall back to draft state if Celery fails
-                    assessment.status = AssessmentStatus.DRAFT
-                    await assessment.save()
-                    raise
+                # Queue the workflow: via Celery when enabled, otherwise (or if dispatch
+                # fails) run it in-process, the same as start_assessment_analysis
+                celery_task_id = None
+                if settings.use_celery_for_assessments:
+                    try:
+                        from ...tasks.assessment_tasks import process_assessment
+                        # Explicitly send to 'assessments' queue to match worker configuration
+                        celery_task = process_assessment.apply_async(
+                            args=[str(assessment.id)],
+                            queue='assessments',
+                            routing_key='assessment'
+                        )
+                        celery_task_id = celery_task.id
+                        logger.info(f"✅ Assessment {assessment.id} queued via Celery to 'assessments' queue. Task ID: {celery_task_id}")
+                    except Exception as celery_error:
+                        logger.warning(
+                            f"Celery unavailable for assessment {assessment.id}: {celery_error}. "
+                            "Running workflow in-process."
+                        )
+                if celery_task_id is None:
+                    asyncio.create_task(start_assessment_workflow(
+                        assessment,
+                        getattr(request.app, 'state', None),
+                        db
+                    ))
 
                 # Broadcast dashboard update for workflow start
                 try:
@@ -1559,7 +1567,10 @@ async def create_assessment(
             "started_at": assessment.started_at,
             "completed_at": assessment.completed_at
         }
-        
+
+    except HTTPException:
+        # Validation errors raised above (e.g. 400) must reach the client as-is, not as 500s
+        raise
     except Exception as e:
         logger.error(f"Failed to create assessment: {e}")
         import traceback

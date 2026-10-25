@@ -37,6 +37,9 @@ export default function D3InteractiveChart({
     onZoom,
 }: D3InteractiveChartProps) {
     const svgRef = useRef<SVGSVGElement>(null);
+    // The zoom behavior attached to the SVG; the toolbar buttons must drive this
+    // same instance so its 'zoom' handler redraws the chart.
+    const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
     const [selectedCategory, setSelectedCategory] = useState<string>('all');
     const [zoomLevel, setZoomLevel] = useState(1);
     const [hoveredPoint, setHoveredPoint] = useState<DataPoint | null>(null);
@@ -116,11 +119,11 @@ export default function D3InteractiveChart({
                 const newYScale = transform.rescaleY(yScale);
 
                 // Update axes
-                g.select('.x-axis').call(xAxis.scale(newXScale));
-                g.select('.y-axis').call(yAxis.scale(newYScale));
+                g.select<SVGGElement>('.x-axis').call(xAxis.scale(newXScale));
+                g.select<SVGGElement>('.y-axis').call(yAxis.scale(newYScale));
 
                 // Update points
-                g.selectAll('.data-point')
+                g.selectAll<SVGCircleElement, DataPoint>('.data-point')
                     .attr('cx', (d: DataPoint) => newXScale(d.x))
                     .attr('cy', (d: DataPoint) => newYScale(d.y));
 
@@ -130,6 +133,7 @@ export default function D3InteractiveChart({
             });
 
         svg.call(zoom);
+        zoomRef.current = zoom;
 
         // Add data points
         const points = g.selectAll('.data-point')
@@ -149,7 +153,7 @@ export default function D3InteractiveChart({
         // Add interactions
         points
             .on('mouseover', function (event, d) {
-                d3.select(this)
+                d3.select<SVGCircleElement, DataPoint>(this)
                     .transition()
                     .duration(200)
                     .attr('r', (d: DataPoint) => (chartType === 'bubble' ? sizeScale(d.value) : 6) * 1.5)
@@ -158,7 +162,7 @@ export default function D3InteractiveChart({
                 setHoveredPoint(d);
             })
             .on('mouseout', function (event, d) {
-                d3.select(this)
+                d3.select<SVGCircleElement, DataPoint>(this)
                     .transition()
                     .duration(200)
                     .attr('r', (d: DataPoint) => chartType === 'bubble' ? sizeScale(d.value) : 6)
@@ -183,27 +187,19 @@ export default function D3InteractiveChart({
     }, [filteredData, innerWidth, innerHeight, chartType, colorScheme, onPointClick, onZoom]);
 
     const handleZoomIn = () => {
-        const svg = d3.select(svgRef.current);
-        svg.transition().call(
-            (d3.zoom<SVGSVGElement, unknown>().scaleBy as (transition: d3.Transition<SVGSVGElement, unknown, null, undefined>, k: number) => void),
-            1.5
-        );
+        if (!svgRef.current || !zoomRef.current) return;
+        d3.select(svgRef.current).transition().call(zoomRef.current.scaleBy, 1.5);
     };
 
     const handleZoomOut = () => {
-        const svg = d3.select(svgRef.current);
-        svg.transition().call(
-            (d3.zoom<SVGSVGElement, unknown>().scaleBy as (transition: d3.Transition<SVGSVGElement, unknown, null, undefined>, k: number) => void),
-            1 / 1.5
-        );
+        if (!svgRef.current || !zoomRef.current) return;
+        d3.select(svgRef.current).transition().call(zoomRef.current.scaleBy, 1 / 1.5);
     };
 
     const handleReset = () => {
-        const svg = d3.select(svgRef.current);
-        svg.transition().call(
-            (d3.zoom<SVGSVGElement, unknown>().transform as (transition: d3.Transition<SVGSVGElement, unknown, null, undefined>, transform: d3.ZoomTransform) => void),
-            d3.zoomIdentity
-        );
+        if (svgRef.current && zoomRef.current) {
+            d3.select(svgRef.current).transition().call(zoomRef.current.transform, d3.zoomIdentity);
+        }
         setZoomLevel(1);
     };
 

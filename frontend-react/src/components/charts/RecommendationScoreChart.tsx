@@ -20,12 +20,13 @@ import { Card, CardContent, Typography, Box, ToggleButton, ToggleButtonGroup } f
 
 interface ScoreData {
     service: string;
-    costEfficiency: number;
-    performance: number;
-    scalability: number;
-    security: number;
-    compliance: number;
-    businessAlignment: number;
+    // Dimensions without a score are simply omitted from the chart
+    costEfficiency?: number;
+    performance?: number;
+    scalability?: number;
+    security?: number;
+    compliance?: number;
+    businessAlignment?: number;
     provider: string;
     color: string;
 }

@@ -7,7 +7,8 @@ export interface Deployment {
     name: string;
     version: string;
     environment: 'dev' | 'staging' | 'prod';
-    status: 'pending' | 'running' | 'completed' | 'failed' | 'rolled_back';
+    // 'active' is returned by the assessment features endpoint for live deployments
+    status: 'pending' | 'running' | 'active' | 'completed' | 'failed' | 'rolled_back';
     deployed_at: string;
     deployed_by: {
         id: string;
@@ -126,8 +127,49 @@ export interface RollbackPlan {
     rollback_procedures: RollbackProcedure[];
     data_recovery_plan?: DataRecoveryPlan;
     communication_plan: CommunicationPlan;
+    target_version?: string;
     created_at: string;
     updated_at: string;
+}
+
+/**
+ * Payload accepted by createRollbackPlan. The UI creates lightweight plans
+ * (name/strategy/description) and the backend fills in the rest.
+ */
+export interface CreateRollbackPlanRequest {
+    name: string;
+    deployment_id: string;
+    description: string;
+    rollback_strategy: string;
+    automated?: boolean;
+    target_version?: string;
+    validation_steps?: ValidationCheck[];
+    health_checks?: HealthCheck[];
+    notification_settings?: {
+        channels: ('email' | 'slack' | 'sms' | 'webhook')[];
+        recipients: string[];
+        on_start: boolean;
+        on_complete: boolean;
+        on_failure: boolean;
+    };
+}
+
+export interface RollbackExecutionStep {
+    step_name: string;
+    status: 'pending' | 'in_progress' | 'completed' | 'failed' | string;
+    duration_seconds?: number | null;
+    error_message?: string | null;
+}
+
+export interface ExecuteRollbackOptions {
+    force_rollback: boolean;
+    skip_health_checks: boolean;
+    notification_channels: ('email' | 'slack' | 'sms' | 'webhook')[];
+    deployment_id?: string;
+    current_version?: string;
+    target_version?: string;
+    rollback_strategy?: string;
+    reason?: string;
 }
 
 export interface RollbackTrigger {
@@ -192,6 +234,10 @@ export interface RollbackExecution {
         user_impact_assessment: string;
     };
     post_rollback_actions: string[];
+    // Fields provided by the assessment features endpoint / execution API
+    progress_percentage?: number;
+    error_message?: string | null;
+    execution_steps?: RollbackExecutionStep[];
 }
 
 export interface RollbackLogEntry {
@@ -239,6 +285,11 @@ class RollbackAutomationService {
     // Get token dynamically for each request to handle login/logout properly
     private getToken(): string | null {
         return AuthStorage.getTokenFromAnySource();
+    }
+
+    private authHeader(): Record<string, string> {
+        const token = this.getToken();
+        return token ? { Authorization: `Bearer ${token}` } : {};
     }
 
     private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
@@ -320,7 +371,7 @@ class RollbackAutomationService {
     }
 
     // Rollback Plan Management
-    async createRollbackPlan(plan: Omit<RollbackPlan, 'id' | 'created_at' | 'updated_at'>): Promise<RollbackPlan> {
+    async createRollbackPlan(plan: Omit<RollbackPlan, 'id' | 'created_at' | 'updated_at'> | CreateRollbackPlanRequest): Promise<RollbackPlan> {
         return this.makeRequest('/api/rollback/plans', {
             method: 'POST',
             body: JSON.stringify(plan),
@@ -386,6 +437,79 @@ class RollbackAutomationService {
                 ...options,
             }),
         });
+    }
+
+    /**
+     * Execute a rollback plan via the backend rollback automation API
+     * (POST /api/v2/rollback/executions, see infra_mind/api/endpoints/rollback.py).
+     * The backend response is normalized into the frontend RollbackExecution shape.
+     */
+    async executeRollback(planId: string, options: ExecuteRollbackOptions): Promise<RollbackExecution> {
+        const reason = options.reason || 'Manual rollback';
+        const response = await fetch(`${this.baseUrl}/api/v2/rollback/executions`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...this.authHeader(),
+            },
+            body: JSON.stringify({
+                rollback_plan_id: planId,
+                deployment_id: options.deployment_id,
+                current_version: options.current_version || 'current',
+                target_version: options.target_version || 'previous',
+                rollback_strategy: options.rollback_strategy,
+                reason,
+                force_rollback: options.force_rollback,
+                skip_health_checks: options.skip_health_checks,
+                notification_channels: options.notification_channels,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`Rollback execution failed: ${response.statusText}`);
+        }
+
+        const data: any = await response.json();
+        const steps: any[] = Array.isArray(data?.rollback_steps) ? data.rollback_steps : [];
+        const statusMap: Record<string, RollbackExecution['status']> = {
+            pending: 'pending',
+            in_progress: 'running',
+            completed: 'completed',
+            failed: 'failed',
+            cancelled: 'cancelled',
+        };
+
+        return {
+            id: data?.id ?? `exec-${Date.now()}`,
+            rollback_plan_id: planId,
+            deployment_id: data?.deployment_id ?? options.deployment_id ?? '',
+            triggered_by: {
+                type: 'manual',
+                user_id: data?.initiated_by,
+                reason: data?.reason ?? reason,
+            },
+            status: statusMap[data?.status] ?? 'pending',
+            started_at: data?.initiated_at ?? new Date().toISOString(),
+            completed_at: data?.completed_at ?? undefined,
+            total_steps: steps.length,
+            execution_log: [],
+            validation_results: [],
+            rollback_verification: {
+                health_checks_passed: false,
+                data_integrity_verified: false,
+                performance_metrics_normal: false,
+                user_impact_assessment: '',
+            },
+            post_rollback_actions: [],
+            progress_percentage: data?.status === 'completed' ? 100 : 0,
+            error_message: null,
+            execution_steps: steps.map((step: any) => ({
+                step_name: String(step.step ?? step.step_name ?? ''),
+                status: step.status ?? 'pending',
+                duration_seconds: step.duration ?? null,
+                error_message: step.error ?? null,
+            })),
+        };
     }
 
     async getRollbackExecution(executionId: string): Promise<RollbackExecution> {
@@ -619,7 +743,7 @@ class RollbackAutomationService {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.token}`,
+                ...this.authHeader(),
             },
             body: JSON.stringify(params),
         });
@@ -637,11 +761,9 @@ class RollbackAutomationService {
         data: any;
         timestamp: string;
     }) => void): () => void {
-        const eventSource = new EventSource(`${this.baseUrl}/api/rollback/events/stream`, {
-            headers: {
-                'Authorization': `Bearer ${this.token}`,
-            } as any,
-        });
+        // Note: the browser EventSource API cannot send custom headers (an
+        // Authorization header passed here was always silently ignored).
+        const eventSource = new EventSource(`${this.baseUrl}/api/rollback/events/stream`);
 
         eventSource.onmessage = (event) => {
             try {
@@ -717,16 +839,30 @@ export type DRPlan = DataRecoveryPlan;
 export type HealthMetric = DeploymentMetrics;
 
 export interface RollbackMetrics {
-    total_plans: number;
-    active_deployments: number;
-    success_rate: number;
-    avg_rollback_time: string;
+    total_plans?: number;
+    active_deployments?: number;
+    success_rate?: number;
+    avg_rollback_time?: string;
+    average_duration?: string;
     total_rollbacks?: number;
+    total_executions?: number;
+    failed_executions?: number;
     rollbacks_by_environment?: Record<string, number>;
     trend_data?: Array<{
         date: string;
         rollback_count: number;
         success_count: number;
+    }>;
+    execution_trends?: Array<{
+        date: string;
+        successful: number;
+        failed: number;
+        total: number;
+    }>;
+    strategy_distribution?: Array<{
+        name: string;
+        count: number;
+        value: number;
     }>;
 }
 

@@ -35,34 +35,37 @@ import { apiClient } from '../../services/api';
 import { useRecommendationsData } from '../../hooks/useFreshData';
 import RecommendationInsightsPanel from '../../components/RecommendationInsightsPanel';
 
+// Shape read by this page. The backend RecommendationResponse supplies the
+// required fields; the optional ones are legacy/agent-specific and may be absent.
 interface Recommendation {
   _id?: string;
   id?: string;
   recommendation_id?: string;
   agent_name: string;
-  agent_type: string;
+  agent_type?: string;
   category: string;
   title: string;
-  description: string;
+  summary?: string;
+  description?: string;
   confidence_score: number;
   priority: string;
-  implementation_effort: string;
-  estimated_cost_savings: number;
-  estimated_implementation_time: string;
-  benefits: string[];
+  implementation_effort?: string;
+  estimated_cost_savings?: number;
+  estimated_implementation_time?: string;
+  benefits?: string[];
   implementation_steps: string[];
-  dependencies: string[];
-  risks: string[];
-  cloud_provider: string;
-  service_recommendations: any[];
-  technical_details: any;
-  business_impact: any;
+  dependencies?: string[];
+  risks?: string[];
+  cloud_provider?: string;
+  service_recommendations?: any[];
+  technical_details?: any;
+  business_impact?: any;
   created_at: string;
   updated_at: string;
 }
 
 interface AssessmentData {
-  _id: string;
+  _id?: string; // legacy Mongo id; API responses use `id`
   title: string;
   company_name?: string;
   status: string;
@@ -437,9 +440,8 @@ Generated: ${new Date().toLocaleString()}
       console.log('💡 Recommendations data:', recommendationsData);
 
       setAssessment(assessmentData);
-      // Handle different API response formats
-      const recs = recommendationsData?.recommendations || recommendationsData || [];
-      setRecommendations(Array.isArray(recs) ? recs : []);
+      // apiClient.getRecommendations already unwraps `{ recommendations: [...] }`
+      setRecommendations(Array.isArray(recommendationsData) ? recommendationsData : []);
     } catch (err: any) {
       console.error('❌ Error fetching data:', err);
       setError(err.message || 'Failed to load recommendations');
@@ -627,7 +629,7 @@ Generated: ${new Date().toLocaleString()}
       {recommendations.length > 0 && (
         <Box sx={{ mb: 4 }}>
           <RecommendationInsightsPanel
-            recommendations={recommendations}
+            recommendations={recommendations.map(rec => ({ ...rec, _id: rec._id ?? '' }))}
             assessment={assessment}
             onActionClick={handleInsightAction}
           />
@@ -727,7 +729,7 @@ Generated: ${new Date().toLocaleString()}
                   {/* Key Metrics */}
                   <Grid container spacing={2} sx={{ mb: 3 }}>
                     {[
-                      ...(rec.estimated_cost_savings > 0 ? [{
+                      ...(rec.estimated_cost_savings && rec.estimated_cost_savings > 0 ? [{
                         key: `cost-savings-${recKey}`,
                         content: (
                           <Paper sx={{ p: 2, textAlign: 'center', bgcolor: 'success.light', color: 'success.contrastText' }}>

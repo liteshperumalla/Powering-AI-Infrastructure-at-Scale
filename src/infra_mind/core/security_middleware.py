@@ -476,7 +476,7 @@ class SecurityMiddleware(BaseHTTPMiddleware):
         
         # Add custom headers
         response.headers["X-Request-ID"] = hashlib.md5(
-            f"{time.time()}{secrets.token_hex(8)}".encode()
+            f"{time.time()}{secrets.token_hex(8)}".encode(), usedforsecurity=False
         ).hexdigest()[:16]
         
         return response

@@ -351,7 +351,14 @@ export interface CorrectiveActionPlan {
 
 export interface ComplianceDashboard {
     overall_compliance_score: number;
-    framework_scores: Array<{
+    total_frameworks?: number;
+    frameworks_by_status?: {
+        compliant: number;
+        partially_compliant: number;
+        non_compliant: number;
+        pending_assessment: number;
+    };
+    framework_scores?: Array<{
         framework: string;
         score: number;
         trend: 'improving' | 'declining' | 'stable';
@@ -365,6 +372,7 @@ export interface ComplianceDashboard {
     remediation_progress: {
         total_actions: number;
         completed_actions: number;
+        in_progress_actions?: number;
         overdue_actions: number;
         progress_percentage: number;
     };
@@ -375,17 +383,21 @@ export interface ComplianceDashboard {
         priority: string;
     }>;
     automated_monitoring: {
-        active_checks: number;
+        active_checks?: number;
+        total_checks?: number;
         passing_checks: number;
         failing_checks: number;
-        last_execution: string;
+        last_execution?: string;
+        last_run?: string;
     };
-    key_metrics: Array<{
+    key_metrics?: Array<{
         metric_name: string;
         current_value: number;
         target_value: number;
         trend: any[];
     }>;
+    recent_audits?: any[];
+    compliance_trends?: any[];
 }
 
 class ComplianceAutomationService {
@@ -402,6 +414,11 @@ class ComplianceAutomationService {
     // Get token dynamically for each request to handle login/logout properly
     private getToken(): string | null {
         return AuthStorage.getTokenFromAnySource();
+    }
+
+    private authHeader(): Record<string, string> {
+        const token = this.getToken();
+        return token ? { Authorization: `Bearer ${token}` } : {};
     }
 
     setAssessmentId(assessmentId: string) {
@@ -480,7 +497,7 @@ class ComplianceAutomationService {
             upcoming_deadlines: [],
             recent_audits: [],
             compliance_trends: [],
-        } as ComplianceDashboard;
+        };
     }
 
     async getComplianceOverview(timeframe: string = '30d'): Promise<{
@@ -627,7 +644,7 @@ class ComplianceAutomationService {
         const response = await fetch(`${this.baseUrl}/api/compliance/evidence/collect`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${this.token}`,
+                ...this.authHeader(),
             },
             body: formData,
         });
@@ -772,7 +789,7 @@ class ComplianceAutomationService {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.token}`,
+                ...this.authHeader(),
             },
             body: JSON.stringify(reportConfig),
         });
@@ -851,7 +868,7 @@ class ComplianceAutomationService {
         const result = await fetch(`${this.baseUrl}/api/compliance/audits/evidence-requests/${requestId}/respond`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${this.token}`,
+                ...this.authHeader(),
             },
             body: formData,
         });

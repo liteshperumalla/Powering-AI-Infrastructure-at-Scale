@@ -270,7 +270,6 @@ const ModernNavbar = React.memo(function ModernNavbar({
                 position="sticky"
                 elevation={1}
                 sx={{
-                    backgroundColor: theme.palette.background.paper,
                     borderBottom: 1,
                     borderColor: 'divider',
                     backdropFilter: 'blur(8px)',

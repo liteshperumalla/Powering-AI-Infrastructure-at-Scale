@@ -1,12 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   // Enable standalone output for Docker deployment
   output: 'standalone',
 
@@ -86,7 +80,6 @@ const nextConfig: NextConfig = {
 
   // Experimental features for performance
   experimental: {
-    optimizeCss: true,
     scrollRestoration: true,
   },
 };

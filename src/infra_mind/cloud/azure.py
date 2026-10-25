@@ -18,11 +18,13 @@ from functools import wraps
 from azure.identity import DefaultAzureCredential, ClientSecretCredential
 from azure.mgmt.compute import ComputeManagementClient
 from azure.mgmt.sql import SqlManagementClient
-from azure.mgmt.resource import ResourceManagementClient
+try:
+    from azure.mgmt.resource import ResourceManagementClient
+except ImportError:  # azure-mgmt-resource >= 26 moved it into a subpackage
+    from azure.mgmt.resource.resources import ResourceManagementClient
 from azure.mgmt.monitor import MonitorManagementClient
 from azure.mgmt.costmanagement import CostManagementClient
 from azure.mgmt.containerservice import ContainerServiceClient
-from azure.mgmt.machinelearningservices import AzureMachineLearningWorkspaces
 from azure.mgmt.recoveryservices import RecoveryServicesClient
 from azure.core.exceptions import (
     HttpResponseError, 

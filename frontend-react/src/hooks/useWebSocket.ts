@@ -45,8 +45,8 @@ export const useWebSocket = (config: WebSocketConfig) => {
         onMessage
     } = config;
 
-    const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
-    const heartbeatTimeoutRef = useRef<NodeJS.Timeout>();
+    const reconnectTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
+    const heartbeatTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
     const shouldReconnectRef = useRef(true);
     const connectionAttemptedRef = useRef(false);
 

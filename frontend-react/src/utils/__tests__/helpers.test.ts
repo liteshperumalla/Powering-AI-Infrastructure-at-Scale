@@ -96,7 +96,7 @@ describe('Utility Helper Functions', () => {
             let timeout: NodeJS.Timeout;
             return (...args: Parameters<T>) => {
                 clearTimeout(timeout);
-                timeout = setTimeout(() => func.apply(this, args), wait);
+                timeout = setTimeout(() => func(...args), wait);
             };
         }
     });

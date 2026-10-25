@@ -164,7 +164,7 @@ class RecommendationFeatureStore:
 
         # 2. Industry hash (for embeddings)
         industry = biz_req.get('industry', 'technology')
-        industry_hash = int(hashlib.md5(industry.encode()).hexdigest(), 16) % 100
+        industry_hash = int(hashlib.md5(industry.encode(), usedforsecurity=False).hexdigest(), 16) % 100
         features.append(industry_hash / 100.0)
 
         # 3. Technical maturity (0-1)

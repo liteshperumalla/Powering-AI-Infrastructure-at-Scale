@@ -9,7 +9,14 @@ const createMockHeaders = (overrides: Record<string, string> = {}) => ({
     }),
 });
 
-const createMockResponse = (overrides: Partial<Response> & { body?: any } = {}) => {
+// `body` is the parsed JSON payload returned by `json()`, not a ReadableStream,
+// and `headers` may be the lightweight mock above rather than a real Headers.
+type MockResponseOverrides = Omit<Partial<Response>, 'body' | 'headers'> & {
+    body?: unknown;
+    headers?: Headers | ReturnType<typeof createMockHeaders>;
+};
+
+const createMockResponse = (overrides: MockResponseOverrides = {}) => {
     const { body, headers, ...rest } = overrides;
     return {
         ok: true,
@@ -88,7 +95,7 @@ describe('API Client', () => {
             const result = await apiClient.getAssessments();
             
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('http://localhost:8000/api/v1/assessments'),
+                expect.stringContaining('http://localhost:8000/api/v2/assessments'),
                 expect.objectContaining({
                     headers: expect.objectContaining({
                         'Content-Type': 'application/json'

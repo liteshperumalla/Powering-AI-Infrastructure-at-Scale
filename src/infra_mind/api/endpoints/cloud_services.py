@@ -16,6 +16,16 @@ from ...cloud.base import CloudProvider as BaseCloudProvider, ServiceCategory as
 
 logger = logging.getLogger(__name__)
 
+
+def _gcp_service_account_path() -> Optional[str]:
+    """Mounted GCP credentials file, if any (compose/k8s mount it at runtime).
+
+    Docker creates an empty directory when a bind-mounted host file is missing,
+    so require a non-empty regular file rather than just an existing path.
+    """
+    path = os.getenv('INFRA_MIND_GCP_SERVICE_ACCOUNT_PATH') or '/app/gcp-service-account.json'
+    return path if os.path.isfile(path) and os.path.getsize(path) > 0 else None
+
 router = APIRouter()
 
 
@@ -120,7 +130,7 @@ def _get_unified_client() -> UnifiedCloudClient:
             azure_client_secret=os.getenv('INFRA_MIND_AZURE_CLIENT_SECRET'),
             gcp_region=os.getenv('INFRA_MIND_GCP_REGION', 'us-central1'),
             gcp_project_id=os.getenv('INFRA_MIND_GCP_PROJECT_ID'),
-            gcp_service_account_path='/app/gcp-service-account.json' if os.path.exists('/app/gcp-service-account.json') else None,
+            gcp_service_account_path=_gcp_service_account_path(),
             alibaba_region=os.getenv('INFRA_MIND_ALIBABA_REGION', 'us-west-1'),
             alibaba_access_key_id=os.getenv('INFRA_MIND_ALIBABA_ACCESS_KEY_ID'),
             alibaba_access_key_secret=os.getenv('INFRA_MIND_ALIBABA_ACCESS_KEY_SECRET'),

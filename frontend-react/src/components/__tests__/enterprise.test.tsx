@@ -272,7 +272,7 @@ describe('Enterprise Features Integration', () => {
         }
       };
 
-      const MockQualityScore = ({ score }: { score: any }) => (
+      const MockQualityScore = ({ score }: { score: { overall_score: number; metrics: Record<string, number> } }) => (
         <div data-testid="assessment-quality-score">
           <h4>Assessment Quality Score</h4>
           <div data-testid="overall-score" className="text-2xl font-bold">

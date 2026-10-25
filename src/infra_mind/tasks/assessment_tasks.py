@@ -35,9 +35,30 @@ class AssessmentTask(Task):
     """
 
     def on_failure(self, exc, task_id, args, kwargs, einfo):
-        """Handle task failure."""
+        """Handle task failure (called once retries are exhausted)."""
         logger.error(f"Assessment task {task_id} failed: {exc}")
-        # Could send notifications, update database, etc.
+        # Mark the assessment failed; otherwise it stays in_progress forever and
+        # /start refuses to re-run it ("already in progress").
+        assessment_id = args[0] if args else kwargs.get("assessment_id")
+        if not assessment_id:
+            return
+        try:
+            from bson import ObjectId
+            from pymongo import MongoClient
+            from .celery_app import MONGODB_URL, MONGODB_DATABASE
+
+            with MongoClient(MONGODB_URL, serverSelectionTimeoutMS=5000) as client:
+                client[MONGODB_DATABASE].assessments.update_one(
+                    {"_id": ObjectId(assessment_id), "status": {"$ne": "completed"}},
+                    {"$set": {
+                        "status": "failed",
+                        "progress.current_step": "failed",
+                        "progress.error": str(exc)[:500],
+                        "updated_at": datetime.utcnow(),
+                    }},
+                )
+        except Exception as db_error:
+            logger.error(f"Could not mark assessment {assessment_id} as failed: {db_error}")
 
     def on_success(self, retval, task_id, args, kwargs):
         """Handle task success."""
@@ -121,10 +142,7 @@ async def _execute_assessment_workflow(
         from beanie import init_beanie
         import os
 
-        mongodb_url = os.getenv(
-            "MONGODB_URL",
-            "mongodb://admin:password@mongodb:27017/infra_mind?authSource=admin"
-        )
+        from .celery_app import MONGODB_URL as mongodb_url, MONGODB_DATABASE
 
         client = AsyncIOMotorClient(mongodb_url)
 
@@ -136,7 +154,10 @@ async def _execute_assessment_workflow(
 
         # Initialize Beanie
         await init_beanie(
-            database=client.infra_mind,
+            database=client[MONGODB_DATABASE],
+                # The API creates indexes at startup; re-creating model indexes here
+                # conflicts with its named ones and aborts init part-way
+                skip_indexes=True,
             document_models=[
                 Assessment,
                 Recommendation,

@@ -216,7 +216,7 @@ const AssessmentsPage: React.FC = () => {
             const csvData = selectedData.map(assessment => [
                 assessment.title,
                 assessment.status || 'Unknown',
-                `${assessment.completion_percentage || 0}%`,
+                `${assessment.progress_percentage || 0}%`,
                 formatDate(assessment.created_at),
                 formatDate(assessment.updated_at)
             ]);

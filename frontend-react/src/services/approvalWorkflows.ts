@@ -100,6 +100,12 @@ export interface ApprovalRequest {
     expires_at: string;
     comments: ApprovalComment[];
     attachments: ApprovalAttachment[];
+    // Flat (legacy) fields some API responses return instead of `workflow`
+    status?: ApprovalRequest['workflow']['status'];
+    current_level?: number;
+    approval_progress?: ApprovalProgress[];
+    approved_by?: string[];
+    required_approvers?: string[];
 }
 
 export interface ApprovalProgress {
@@ -194,6 +200,11 @@ class ApprovalWorkflowService {
     // Get token dynamically for each request to handle login/logout properly
     private getToken(): string | null {
         return AuthStorage.getTokenFromAnySource();
+    }
+
+    private authHeader(): Record<string, string> {
+        const token = this.getToken();
+        return token ? { Authorization: `Bearer ${token}` } : {};
     }
 
     private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
@@ -359,7 +370,7 @@ class ApprovalWorkflowService {
         const response = await fetch(`${this.baseUrl}/api/approval-workflows/requests/${requestId}/attachments`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${this.token}`,
+                ...this.authHeader(),
             },
             body: formData,
         });

@@ -83,7 +83,7 @@ describe('Data Visualization Components', () => {
             costEstimate: 67.32,
             confidenceScore: 92,
             businessAlignment: 88,
-            implementationComplexity: 'Low' as const,
+            implementationComplexity: 'low' as const,
             pros: ['High availability', 'Auto-scaling capabilities'],
             cons: ['Higher cost than alternatives'],
             status: 'recommended' as const

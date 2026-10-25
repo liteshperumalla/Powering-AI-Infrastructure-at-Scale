@@ -115,7 +115,7 @@ const VendorLockInAnalysis: React.FC<VendorLockInAnalysisProps> = ({ assessmentI
     refreshInterval: 60000, // 60 seconds
     onRefresh: () => {
       console.log('🔄 Auto-refreshing vendor lock-in analysis data...');
-      loadVendorLockInData();
+      loadLockInData();
     }
   });
 

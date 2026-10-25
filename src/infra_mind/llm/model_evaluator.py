@@ -269,7 +269,7 @@ class ModelEvaluator:
 
         logger.debug(
             f"Recorded metric for {model_name}: "
-            f"quality={quality_score:.3f if quality_score else 'N/A'}, "
+            f"quality={f'{quality_score:.3f}' if quality_score is not None else 'N/A'}, "
             f"latency={response_time:.2f}s, cost=${cost:.4f}"
         )
 

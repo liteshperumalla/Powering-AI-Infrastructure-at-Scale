@@ -20,6 +20,7 @@ import {
   DialogActions,
   List,
   ListItem,
+  ListItemButton,
   ListItemText,
   ListItemIcon,
   Table,
@@ -374,7 +375,7 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ assessmentId })
 
             <List dense>
               {riskFactors.slice(0, 3).map((risk) => (
-                <ListItem key={risk.id} button onClick={() => {
+                <ListItemButton key={risk.id} onClick={() => {
                   setSelectedRisk(risk);
                   setRiskDialog(true);
                 }}>
@@ -394,7 +395,7 @@ const ExecutiveDashboard: React.FC<ExecutiveDashboardProps> = ({ assessmentId })
                     primary={risk.title}
                     secondary={`${risk.category} - ${risk.status}`}
                   />
-                </ListItem>
+                </ListItemButton>
               ))}
             </List>
           </CardContent>
