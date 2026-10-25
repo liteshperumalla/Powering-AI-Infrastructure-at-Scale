@@ -3,8 +3,8 @@ name: Performance Testing
 # The load and stress jobs hit a deployed API. They only run when the repository
 # variable for the selected environment is set (Settings → Secrets and variables →
 # Actions → Variables):
-#   PERF_STAGING_URL     e.g. https://api.staging.example.com
-#   PERF_PRODUCTION_URL  e.g. https://api.example.com
+#   STAGING_API_URL        e.g. https://api.staging.example.com
+#   PRODUCTION_API_URL     e.g. https://api.example.com
 # Optional secrets PERF_USER_EMAIL / PERF_USER_PASSWORD let the load test call
 # authenticated read endpoints; without them it only exercises /health.
 # The database benchmark is self-contained and always runs.
@@ -32,13 +32,13 @@ permissions:
   contents: read
 
 env:
-  TARGET_URL: ${{ github.event.inputs.environment == 'production' && vars.PERF_PRODUCTION_URL || vars.PERF_STAGING_URL }}
+  TARGET_URL: ${{ github.event.inputs.environment == 'production' && vars.PRODUCTION_API_URL || vars.STAGING_API_URL }}
 
 jobs:
   load-test:
     name: Load Testing
     runs-on: ubuntu-latest
-    if: (github.event.inputs.environment == 'production' && vars.PERF_PRODUCTION_URL != '') || (github.event.inputs.environment != 'production' && vars.PERF_STAGING_URL != '')
+    if: (github.event.inputs.environment == 'production' && vars.PRODUCTION_API_URL != '') || (github.event.inputs.environment != 'production' && vars.STAGING_API_URL != '')
 
     steps:
     - name: Checkout code
@@ -115,7 +115,7 @@ jobs:
   stress-test:
     name: Stress Testing
     runs-on: ubuntu-latest
-    if: (github.event.inputs.environment == 'production' && vars.PERF_PRODUCTION_URL != '') || (github.event.inputs.environment != 'production' && vars.PERF_STAGING_URL != '')
+    if: (github.event.inputs.environment == 'production' && vars.PRODUCTION_API_URL != '') || (github.event.inputs.environment != 'production' && vars.STAGING_API_URL != '')
 
     steps:
     - name: Checkout code

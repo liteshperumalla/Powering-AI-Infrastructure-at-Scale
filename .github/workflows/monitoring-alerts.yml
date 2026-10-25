@@ -23,7 +23,7 @@ on:
         type: string
 
 # Both jobs are opt-in: set the repository variable MONITORING_ENABLED=true once the
-# KUBE_CONFIG_* secrets and the API URLs below point at your own deployment. Skipped jobs
+# KUBE_CONFIG_* secrets and the PRODUCTION_API_URL / STAGING_API_URL variables are set. Skipped jobs
 # don't start a runner, so the 15-minute schedule costs nothing until then.
 # (Secrets can't be used in a job-level `if:`, which is why a variable gates this.)
 
@@ -286,7 +286,7 @@ jobs:
           },
         };
         
-        const BASE_URL = '${{ env.ENVIRONMENT == 'production' && 'https://api.infra-mind.com' || 'https://api-staging.infra-mind.com' }}';
+        const BASE_URL = '${{ env.ENVIRONMENT == 'production' && vars.PRODUCTION_API_URL || vars.STAGING_API_URL }}';
         
         export default function() {
           let response = http.get(`${BASE_URL}/health`);
