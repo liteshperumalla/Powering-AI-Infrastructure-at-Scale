@@ -112,11 +112,12 @@ class GitOpsIntegrationService {
         });
 
         if (!response.ok) {
-            // Pull requests have no backend yet; show an empty list rather than an error
-            if (response.status === 404 && endpoint.includes('pull-requests')) {
-                return [];
-            }
-            throw new Error(`GitOps API Error: ${response.status} ${response.statusText}`);
+            // Prefer the backend's explanation (FastAPI `detail`: a string, or a list of validation errors)
+            const body = await response.json().catch(() => null);
+            const detail = Array.isArray(body?.detail)
+                ? body.detail.map((d: { msg?: string }) => d.msg?.replace(/^Value error, /, '')).filter(Boolean).join('; ')
+                : body?.detail;
+            throw new Error(detail || `GitOps API Error: ${response.status} ${response.statusText}`);
         }
 
         // DELETE endpoints answer 204 with no body

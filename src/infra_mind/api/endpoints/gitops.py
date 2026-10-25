@@ -9,7 +9,8 @@ from fastapi.security import HTTPBearer
 from typing import List, Optional, Dict, Any
 from loguru import logger
 from datetime import datetime, timedelta
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, field_validator
+import re
 import uuid
 from enum import Enum
 from typing import Literal
@@ -215,7 +216,7 @@ async def remove_gitops_repository(
     db: DatabaseDep,
     current_user: User = Depends(get_current_user),
 ) -> None:
-    """Disconnect a repository. Refused while applications still use it."""
+    """Disconnect a repository (and its pull requests). Refused while applications still use it."""
     await _get_owned(db.gitops_repositories, current_user, repository_id, "Repository")
     apps = await db.gitops_applications.find(_owned(current_user, repository_id=repository_id)).to_list(length=None)
     if apps:
@@ -224,6 +225,7 @@ async def remove_gitops_repository(
             detail=f"Repository is used by applications: {', '.join(a['name'] for a in apps)}",
         )
     await db.gitops_repositories.delete_one(_owned(current_user, _id=repository_id))
+    await db.gitops_pull_requests.delete_many(_owned(current_user, repository_id=repository_id))
 
 
 # ==================== APPLICATIONS ====================
@@ -526,6 +528,192 @@ async def get_gitops_health(
         "pending_requests": len(pending),
         "checked_at": _now(),
     }
+
+
+# ==================== PULL REQUESTS ====================
+#
+# Change reviews tracked inside Infra Mind for a connected repository. They are
+# not pull requests on the Git host: approving or merging one records the
+# decision but does not touch the repository.
+
+PR_NOTE = "Tracked in Infra Mind; not a pull request on the Git host, and merging does not change the repository."
+# Python re, not Field(pattern=...): pydantic's Rust regex engine has no look-around
+BRANCH_RE = re.compile(r"^(?!/)(?!.*\.\.)(?!.*//)[A-Za-z0-9._/-]{1,200}(?<!/)(?<!\.lock)$")
+
+
+class PullRequestCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=300)
+    description: str = Field(default="", max_length=20000)
+    source_branch: str
+    target_branch: str = "main"
+
+    @field_validator("source_branch", "target_branch")
+    @classmethod
+    def _valid_branch(cls, value: str) -> str:
+        if not BRANCH_RE.match(value):
+            raise ValueError("not a valid branch name")
+        return value
+
+
+class ReviewRequest(BaseModel):
+    comment: Optional[str] = Field(default=None, max_length=5000)
+
+
+class RejectRequest(BaseModel):
+    comment: str = Field(min_length=1, max_length=5000)
+
+
+class MergeRequest(BaseModel):
+    merge_method: Literal["merge", "squash", "rebase"] = "merge"
+
+
+def _compare_url(repo: Dict[str, Any], source: str, target: str) -> str:
+    """The Git host's compare view for the two branches, where the host supports one."""
+    base = repo["url"].removesuffix(".git")
+    if base.startswith("http") and repo.get("provider") == "github":
+        return f"{base}/compare/{target}...{source}"
+    if base.startswith("http") and repo.get("provider") == "gitlab":
+        return f"{base}/-/compare/{target}...{source}"
+    return base
+
+
+def _pr_out(doc: Dict[str, Any]) -> Dict[str, Any]:
+    out = _out(doc)
+    out["uuid"], out["id"] = out["id"], doc["number"]  # the frontend addresses PRs by number
+    return out
+
+
+async def _get_pr(db, user: User, repository_id: str, number: int) -> Dict[str, Any]:
+    pr = await db.gitops_pull_requests.find_one(_owned(user, repository_id=repository_id, number=number))
+    if not pr:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pull request not found")
+    return pr
+
+
+def _require_open(pr: Dict[str, Any]) -> None:
+    if pr["state"] != "open":
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Pull request is {pr['state']}")
+
+
+@router.get("/repositories/{repository_id}/pull-requests")
+async def list_pull_requests(
+    repository_id: str,
+    db: DatabaseDep,
+    state: Literal["open", "closed", "merged", "all"] = "all",
+    current_user: User = Depends(get_current_user),
+) -> List[Dict[str, Any]]:
+    await _get_owned(db.gitops_repositories, current_user, repository_id, "Repository")
+    query = _owned(current_user, repository_id=repository_id)
+    if state != "all":
+        query["state"] = state
+    docs = await db.gitops_pull_requests.find(query).sort("number", -1).to_list(length=None)
+    return [_pr_out(d) for d in docs]
+
+
+@router.post("/repositories/{repository_id}/pull-requests", status_code=status.HTTP_201_CREATED)
+async def create_pull_request(
+    repository_id: str,
+    pr: PullRequestCreate,
+    db: DatabaseDep,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    repo = await _get_owned(db.gitops_repositories, current_user, repository_id, "Repository")
+    if pr.source_branch == pr.target_branch:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Source and target branch must differ")
+    existing = await db.gitops_pull_requests.find(_owned(current_user, repository_id=repository_id)).to_list(length=None)
+    if any(e["state"] == "open" and e["source_branch"] == pr.source_branch and e["target_branch"] == pr.target_branch
+           for e in existing):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail="An open pull request already exists for these branches")
+    now = _now()
+    doc = {
+        "_id": str(uuid.uuid4()),
+        "user_id": str(current_user.id),
+        "repository_id": repository_id,
+        "number": max((e["number"] for e in existing), default=0) + 1,
+        **pr.model_dump(),
+        "state": "open",
+        "author": current_user.email,
+        "url": _compare_url(repo, pr.source_branch, pr.target_branch),
+        "checks_status": "pending",  # no CI integration reports checks
+        "approvals": [],
+        "files_changed": [],
+        "created_at": now,
+        "updated_at": now,
+        "merged_at": None,
+        "merge_method": None,
+        "note": PR_NOTE,
+    }
+    await db.gitops_pull_requests.insert_one(doc)
+    return _pr_out(doc)
+
+
+@router.get("/repositories/{repository_id}/pull-requests/{number}")
+async def get_pull_request(
+    repository_id: str,
+    number: int,
+    db: DatabaseDep,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    return _pr_out(await _get_pr(db, current_user, repository_id, number))
+
+
+async def _review(db, user: User, pr: Dict[str, Any], decision: str, comment: Optional[str]) -> Dict[str, Any]:
+    _require_open(pr)
+    # One current review per reviewer: a new decision replaces their earlier one
+    approvals = [a for a in pr["approvals"] if a["user"] != user.email]
+    approvals.append({"user": user.email, "status": decision, "comment": comment, "timestamp": _now()})
+    return await db.gitops_pull_requests.find_one_and_update(
+        {"_id": pr["_id"]}, {"$set": {"approvals": approvals, "updated_at": _now()}}, return_document=True,
+    )
+
+
+@router.post("/repositories/{repository_id}/pull-requests/{number}/approve")
+async def approve_pull_request(
+    repository_id: str,
+    number: int,
+    db: DatabaseDep,
+    review: ReviewRequest = ReviewRequest(),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    pr = await _get_pr(db, current_user, repository_id, number)
+    return _pr_out(await _review(db, current_user, pr, "approved", review.comment))
+
+
+@router.post("/repositories/{repository_id}/pull-requests/{number}/reject")
+async def reject_pull_request(
+    repository_id: str,
+    number: int,
+    review: RejectRequest,
+    db: DatabaseDep,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    pr = await _get_pr(db, current_user, repository_id, number)
+    return _pr_out(await _review(db, current_user, pr, "rejected", review.comment))
+
+
+@router.post("/repositories/{repository_id}/pull-requests/{number}/merge")
+async def merge_pull_request(
+    repository_id: str,
+    number: int,
+    db: DatabaseDep,
+    merge: MergeRequest = MergeRequest(),
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Record a pull request as merged. Refused while any reviewer has requested changes."""
+    pr = await _get_pr(db, current_user, repository_id, number)
+    _require_open(pr)
+    rejected_by = [a["user"] for a in pr["approvals"] if a["status"] == "rejected"]
+    if rejected_by:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT,
+                            detail=f"Changes requested by {', '.join(rejected_by)}")
+    now = _now()
+    merged = await db.gitops_pull_requests.find_one_and_update(
+        {"_id": pr["_id"]},
+        {"$set": {"state": "merged", "merged_at": now, "merge_method": merge.merge_method, "updated_at": now}},
+        return_document=True,
+    )
+    return _pr_out(merged)
 
 
 # ==================== IaC TEMPLATES (persisted per user) ====================
