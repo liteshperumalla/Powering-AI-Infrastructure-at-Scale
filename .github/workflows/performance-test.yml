@@ -222,9 +222,8 @@ jobs:
     
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install pymongo motor pytest pytest-benchmark
-        pip install -e .
+        python -m pip install --upgrade pip uv
+        uv pip install --system pymongo motor pytest pytest-benchmark -e .
     
     - name: Create database performance test
       run: |
