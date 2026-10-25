@@ -53,8 +53,78 @@ import { addNotification } from '@/store/slices/uiSlice';
 import ProgressSaver from '@/components/ProgressSaver';
 import ResponsiveLayout from '@/components/ResponsiveLayout';
 import ProtectedRoute from '@/components/ProtectedRoute';
-import { apiClient } from '@/services/api';
+import { apiClient, type CreateAssessmentRequest } from '@/services/api';
+import type {
+    Assessment,
+    BusinessRequirements,
+    TechnicalRequirements,
+    GrowthProjection,
+    BudgetConstraints,
+} from '@/store/slices/assessmentSlice';
 import { useAssessmentPersistence } from '@/hooks/useAssessmentPersistence';
+
+// Drafts saved through createDraftAssessment/updateDraftAssessment carry these extra
+// fields, which the shared Assessment type does not declare.
+type DraftAssessment = Assessment & {
+    draft_data?: Record<string, unknown>;
+    current_step?: number;
+};
+
+// Shape of the payload this form actually submits. The backend schema (extra="allow")
+// accepts it, but it diverges from the frontend BusinessRequirements/TechnicalRequirements
+// types: free-form option strings instead of narrow unions, monthly_budget_limit instead of
+// preferred_budget, string revenue figures, and an extra multi_cloud_acceptable flag.
+type SubmittedBusinessRequirements = Omit<
+    BusinessRequirements,
+    'company_size' | 'customer_base_size' | 'revenue_model' | 'growth_stage' | 'growth_projection' | 'budget_constraints'
+> & {
+    company_size: string;
+    customer_base_size: string;
+    revenue_model: string;
+    growth_stage: string;
+    growth_projection: Omit<GrowthProjection, 'current_revenue' | 'projected_revenue_12m'> & {
+        current_revenue: string;
+        projected_revenue_12m: string;
+    };
+    budget_constraints: Omit<BudgetConstraints, 'preferred_budget' | 'budget_flexibility' | 'cost_optimization_priority'> & {
+        monthly_budget_limit: number;
+        budget_flexibility: string;
+        cost_optimization_priority: string;
+    };
+    multi_cloud_acceptable: boolean;
+};
+
+type SubmittedTechnicalRequirements = Omit<
+    TechnicalRequirements,
+    'infrastructure_age' | 'current_architecture' | 'current_ai_maturity' | 'budget_flexibility'
+> & {
+    infrastructure_age: string;
+    current_architecture: string;
+    current_ai_maturity: string;
+    budget_flexibility: string;
+};
+
+type AssessmentSubmission = Omit<CreateAssessmentRequest, 'business_requirements' | 'technical_requirements'> & {
+    business_requirements: SubmittedBusinessRequirements;
+    technical_requirements: SubmittedTechnicalRequirements;
+};
+
+// Convert response time options such as "sub_200ms" / "sub_1s" to milliseconds.
+const parseResponseTimeMs = (value: string): number | undefined => {
+    const match = value.match(/(\d+)\s*(ms|s)\b/);
+    if (!match) return undefined;
+    const amount = parseInt(match[1], 10);
+    return match[2] === 's' ? amount * 1000 : amount;
+};
+
+// Data classifications that warrant data loss prevention controls.
+const SENSITIVE_DATA_CLASSIFICATIONS = [
+    'Restricted',
+    'PII (Personal Information)',
+    'PHI (Health Information)',
+    'Financial Data',
+    'Trade Secrets',
+];
 
 const steps = [
     'Business Information',
@@ -341,14 +411,14 @@ function AssessmentPageInner() {
             // If there's a draft ID in URL, load that specific draft
             if (draftId) {
                 try {
-                    const assessment = await apiClient.getAssessment(draftId);
+                    const assessment: DraftAssessment = await apiClient.getAssessment(draftId);
                     console.log('🔍 Loaded assessment from URL:', assessment);
                     console.log('🔍 Assessment draft_data:', assessment?.draft_data);
                     console.log('🔍 Assessment current_step:', assessment?.current_step);
 
                     if (assessment) {
                         // Handle both draft_data and direct assessment data structures
-                        let formDataToLoad = null;
+                        let formDataToLoad: Record<string, unknown> | null = null;
                         let stepToLoad = 0;
 
                         console.log('🔍 Processing assessment data structure...');
@@ -365,8 +435,10 @@ function AssessmentPageInner() {
                             stepToLoad = assessment.current_step || 0;
                         } else if (assessment.business_requirements || assessment.technical_requirements) {
                             // Full assessment format: convert to form data
-                            const businessReq = assessment.business_requirements || {};
-                            const techReq = assessment.technical_requirements || {};
+                            // Backend payloads may use either snake_case or camelCase keys, so read them
+                            // as untyped JSON and probe both spellings below.
+                            const businessReq: Record<string, any> = assessment.business_requirements || {};
+                            const techReq: Record<string, any> = assessment.technical_requirements || {};
 
                             // Enhanced data extraction with multiple fallback strategies
                             formDataToLoad = {
@@ -737,7 +809,7 @@ function AssessmentPageInner() {
                 console.log('Submitting form data:', formData);
 
                 // Transform form data to match backend API schema with all enhanced fields
-                const assessmentData = {
+                const assessmentData: AssessmentSubmission = {
                     title: `${formData.companyName} Infrastructure Assessment`,
                     description: `AI infrastructure assessment for ${formData.companyName} in the ${formData.industry} industry`,
                     business_goal: formData.businessGoal,
@@ -750,7 +822,7 @@ function AssessmentPageInner() {
                         // Enhanced business fields from Step 1
                         company_name: formData.companyName,
                         geographic_regions: formData.geographicRegions?.length > 0 ? formData.geographicRegions : ["North America"],
-                        customer_base_size: formData.customerBaseSize || "medium",
+                        customer_base_size: formData.customerBase || "medium",
                         revenue_model: formData.revenueModel || "subscription",
                         growth_stage: formData.growthStage || "growing",
                         key_competitors: formData.keyCompetitors || "",
@@ -808,7 +880,7 @@ function AssessmentPageInner() {
                                 return complianceMap[req] || 'none';
                             })
                             : ["none"],
-                        project_timeline_months: parseInt(formData.implementationTimeline?.replace(' months', '')) || parseInt(formData.scalingTimeline?.replace(' months', '')) || 6,
+                        project_timeline_months: parseInt(formData.scalingTimeline.replace(' months', '')) || 6,
                         urgency_level: "medium",
                         current_pain_points: ["Scalability challenges"],
                         success_criteria: ["Improved performance", "Cost reduction"],
@@ -817,13 +889,13 @@ function AssessmentPageInner() {
                     technical_requirements: {
                         // Enhanced technical fields from Steps 2-6
                         workload_types: formData.applicationTypes?.length > 0 ? formData.applicationTypes : ["web_application"],
-                        current_cloud_providers: formData.currentCloudProviders?.length > 0 ? formData.currentCloudProviders : [],
+                        current_cloud_providers: formData.currentCloudProvider.length > 0 ? formData.currentCloudProvider : [],
                         current_services: formData.currentServices?.length > 0 ? formData.currentServices : [],
                         technical_team_size: parseInt(formData.technicalTeamSize) || 5,
                         infrastructure_age: formData.infrastructureAge || "recent",
                         current_architecture: formData.currentArchitecture || "microservices",
                         ai_use_cases: formData.aiUseCases?.length > 0 ? formData.aiUseCases : [],
-                        current_ai_maturity: formData.currentAiMaturity || "intermediate",
+                        current_ai_maturity: formData.currentAIMaturity || "intermediate",
                         expected_data_volume: formData.expectedDataVolume || "100GB",
                         data_types: formData.dataTypes?.length > 0 ? formData.dataTypes : ["Text"],
                         current_user_load: formData.currentUserLoad || "1000_concurrent",
@@ -832,34 +904,34 @@ function AssessmentPageInner() {
                         total_budget_range: formData.totalBudgetRange || formData.monthlyBudget || "50k_100k",
                         
                         performance_requirements: {
-                            api_response_time_ms: parseInt(formData.responseTimeRequirement?.replace(/[^0-9]/g, '')) || 200,
-                            requests_per_second: parseInt(formData.requestsPerSecond?.replace(/[^0-9]/g, '')) || 1000,
+                            api_response_time_ms: parseResponseTimeMs(formData.responseTimeRequirements) || 200,
+                            requests_per_second: 1000,
                             concurrent_users: parseInt(formData.currentUserLoad?.replace(/[^0-9]/g, '')) || 500,
-                            uptime_percentage: parseFloat(formData.uptimeRequirement?.replace('%', '')) || 99.9
+                            uptime_percentage: parseFloat(formData.availabilityRequirements.replace('%', '')) || 99.9
                         },
                         scalability_requirements: {
                             current_data_size_gb: parseInt(formData.expectedDataVolume?.replace(/[^0-9]/g, '')) || 100,
                             current_daily_transactions: 10000,
                             expected_data_growth_rate: formData.expectedGrowthRate || "50% annually",
-                            peak_load_multiplier: parseFloat(formData.peakLoadMultiplier) || 3.0,
-                            auto_scaling_required: formData.autoScalingRequired || true,
-                            global_distribution_required: formData.globalDistribution || false,
+                            peak_load_multiplier: 3.0,
+                            auto_scaling_required: true,
+                            global_distribution_required: formData.globalDistribution !== '' && formData.globalDistribution !== 'single_region',
                             cdn_required: true,
                             planned_regions: formData.geographicRegions?.length > 0 ? formData.geographicRegions : ["us-east-1"]
                         },
                         security_requirements: {
                             encryption_at_rest_required: formData.encryptionRequirements?.includes('Data at Rest') || true,
                             encryption_in_transit_required: formData.encryptionRequirements?.includes('Data in Transit') || true,
-                            multi_factor_auth_required: formData.accessControlMethods?.includes('Multi-Factor Authentication') || formData.securityLevel === "high",
-                            single_sign_on_required: formData.accessControlMethods?.includes('Single Sign-On (SSO)') || false,
-                            role_based_access_control: formData.accessControlMethods?.includes('Role-Based Access Control') || true,
-                            vpc_isolation_required: formData.networkSecurity?.includes('VPC Isolation') || true,
-                            firewall_required: formData.networkSecurity?.includes('Firewall') || true,
-                            ddos_protection_required: formData.networkSecurity?.includes('DDoS Protection') || formData.securityLevel === "high",
+                            multi_factor_auth_required: formData.accessControlRequirements.includes('Multi-Factor Authentication (MFA)') || formData.securityLevel === "high",
+                            single_sign_on_required: formData.accessControlRequirements.includes('Single Sign-On (SSO)'),
+                            role_based_access_control: true,
+                            vpc_isolation_required: true,
+                            firewall_required: true,
+                            ddos_protection_required: formData.securityLevel === "high",
                             security_monitoring_required: formData.monitoringTools?.includes('Security Monitoring') || true,
                             audit_logging_required: formData.complianceRequirements?.length > 0,
                             vulnerability_scanning_required: formData.securityLevel === "high",
-                            data_loss_prevention_required: formData.dataClassification === "highly_sensitive",
+                            data_loss_prevention_required: formData.dataClassification.some(c => SENSITIVE_DATA_CLASSIFICATIONS.includes(c)),
                             backup_encryption_required: true
                         },
                         integration_requirements: {
@@ -877,14 +949,15 @@ function AssessmentPageInner() {
                         },
                         preferred_programming_languages: formData.programmingLanguages?.length > 0 ? formData.programmingLanguages : ["Python", "JavaScript"],
                         monitoring_requirements: formData.monitoringTools?.length > 0 ? formData.monitoringTools : ["Performance monitoring", "Error tracking"],
-                        backup_requirements: formData.backupRequirements?.length > 0 ? formData.backupRequirements : ["Daily backups", "Point-in-time recovery"],
-                        ci_cd_requirements: formData.deploymentPreferences?.length > 0 ? formData.deploymentPreferences : ["Automated deployment", "Testing pipeline"]
+                        backup_requirements: ["Daily backups", "Point-in-time recovery"],
+                        ci_cd_requirements: formData.cicdTools.length > 0 ? formData.cicdTools : ["Automated deployment", "Testing pipeline"]
                     },
                     source: "web_form"
                 };
 
                 // Make API call to create assessment using apiClient
-                const createdAssessment = await apiClient.createAssessment(assessmentData);
+                // The frontend request types lag the backend schema (see AssessmentSubmission above).
+                const createdAssessment = await apiClient.createAssessment(assessmentData as unknown as CreateAssessmentRequest);
                 console.log('Assessment created successfully:', createdAssessment);
 
                 // Check if response indicates a duplicate was found
@@ -962,7 +1035,11 @@ function AssessmentPageInner() {
 
     const getSuggestions = async (fieldName: string, query: string) => {
         try {
-            return await apiClient.getFieldSuggestions(fieldName, query, formData);
+            const suggestions = await apiClient.getFieldSuggestions(fieldName, query, formData);
+            return suggestions.map(suggestion => ({
+                ...suggestion,
+                description: suggestion.description ?? '',
+            }));
         } catch (error) {
             console.error('Failed to get field suggestions:', error);
             return [];
@@ -971,7 +1048,13 @@ function AssessmentPageInner() {
 
     const getContextualHelp = async (fieldName: string) => {
         try {
-            return await apiClient.getContextualHelp(fieldName, formData);
+            const help = await apiClient.getContextualHelp(fieldName, formData);
+            return help && {
+                ...help,
+                examples: help.examples ?? [],
+                tips: help.tips ?? [],
+                related_fields: help.related_fields ?? [],
+            };
         } catch (error) {
             console.error('Failed to get contextual help:', error);
             return null;
@@ -1013,7 +1096,7 @@ function AssessmentPageInner() {
         try {
             // Try to load from backend first, fallback to localStorage
             try {
-                const data = await apiClient.request(`/forms/load-progress/${formId}`);
+                const data = await apiClient.request<{ form_data?: AssessmentFormData; current_step?: number }>(`/forms/load-progress/${formId}`);
                 if (data && data.form_data) {
                     setFormData(data.form_data);
                     setActiveStep(data.current_step || 0);
@@ -1207,7 +1290,7 @@ function AssessmentPageInner() {
                         <IntelligentFormField
                             name="businessGoal"
                             label="Primary Business Goal"
-                            type="textarea"
+                            type="text"
                             value={formData.businessGoal}
                             onChange={(value) => handleInputChange('businessGoal', value as string)}
                             error={errors.businessGoal}

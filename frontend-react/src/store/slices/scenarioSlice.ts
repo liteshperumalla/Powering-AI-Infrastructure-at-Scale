@@ -61,10 +61,38 @@ const initialState: ScenarioState = {
     simulationProgress: 0,
 };
 
+/**
+ * Inputs for the offline (fallback) simulation, derived from a scenario's parameters.
+ */
+interface SimulationProfile {
+    companySize: 'small' | 'medium' | 'large' | 'enterprise';
+    requirements: string[];
+    preferredProviders: CloudService['provider'][];
+}
+
+const deriveSimulationProfile = (parameters?: ScenarioParameters): SimulationProfile => {
+    const scalingFactor = parameters?.scalingFactor ?? 1;
+    const companySize: SimulationProfile['companySize'] =
+        scalingFactor >= 5 ? 'enterprise'
+            : scalingFactor >= 3 ? 'large'
+                : scalingFactor >= 1.5 ? 'medium'
+                    : 'small';
+
+    const requirements: string[] = [];
+    if (parameters?.performanceTarget === 'performance-optimized') {
+        requirements.push('high-performance');
+    }
+    if (parameters?.complianceLevel === 'strict') {
+        requirements.push('compliance');
+    }
+
+    return { companySize, requirements, preferredProviders: [] };
+};
+
 // Async thunks
 export const createScenario = createAsyncThunk(
     'scenario/create',
-    async (scenarioData: Omit<Scenario, 'id' | 'result' | 'status' | 'createdAt' | 'updatedAt'>) => {
+    async (scenarioData: Omit<Scenario, 'id' | 'result' | 'status' | 'createdAt' | 'updatedAt'>): Promise<Scenario> => {
         try {
             const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
             const token = localStorage.getItem('auth_token');
@@ -82,7 +110,7 @@ export const createScenario = createAsyncThunk(
                 throw new Error('Failed to create scenario');
             }
             
-            const scenario = await response.json();
+            const scenario: Scenario = await response.json();
             return scenario;
         } catch (error) {
             // Fallback to simulation if API is not available - scenarios feature not implemented
@@ -100,7 +128,10 @@ export const createScenario = createAsyncThunk(
 
 export const runScenarioSimulation = createAsyncThunk(
     'scenario/simulate',
-    async (scenarioId: string, { dispatch }) => {
+    async (
+        scenarioId: string,
+        { dispatch, getState }
+    ): Promise<{ scenarioId: string; result: ScenarioResult | null }> => {
         try {
             const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
             const token = localStorage.getItem('auth_token');
@@ -145,7 +176,7 @@ export const runScenarioSimulation = createAsyncThunk(
                 throw new Error('Failed to get simulation results');
             }
             
-            const scenarioData = await resultResponse.json();
+            const scenarioData: Scenario = await resultResponse.json();
             return { scenarioId, result: scenarioData.result };
             
         } catch (error) {
@@ -155,7 +186,12 @@ export const runScenarioSimulation = createAsyncThunk(
                 await new Promise(resolve => setTimeout(resolve, 200));
             }
 
-            // Generate realistic data based on current assessments and cloud services
+            // Generate realistic data based on the scenario's parameters
+            const state = getState() as { scenario: ScenarioState };
+            const sourceScenario =
+                state.scenario.scenarios.find(s => s.id === scenarioId) ??
+                (state.scenario.currentScenario?.id === scenarioId ? state.scenario.currentScenario : null);
+            const scenarioData = deriveSimulationProfile(sourceScenario?.parameters);
             const response = await new Promise<ScenarioResult>((resolve) => {
                 setTimeout(() => {
                     resolve({
@@ -240,7 +276,7 @@ export const duplicateScenario = createAsyncThunk(
 
 export const fetchScenarios = createAsyncThunk(
     'scenario/fetchAll',
-    async () => {
+    async (): Promise<Scenario[]> => {
         try {
             const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
             const token = localStorage.getItem('auth_token');
@@ -255,7 +291,7 @@ export const fetchScenarios = createAsyncThunk(
                 throw new Error('Failed to fetch scenarios');
             }
             
-            const scenarios = await response.json();
+            const scenarios: Scenario[] = await response.json();
             return scenarios;
         } catch (error) {
             // Silently return empty array if API is not available - scenarios feature is not implemented

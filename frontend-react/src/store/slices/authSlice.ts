@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { apiClient } from '../../services/api';
+import { apiClient, LoginResponse, MFARequiredResponse } from '../../services/api';
 
 export interface User {
     id: string;
@@ -19,6 +19,30 @@ interface AuthState {
     loading: boolean;
     error: string | null;
 }
+
+
+/**
+ * The backend's token responses may also carry profile fields that are not part
+ * of the declared LoginResponse type; read them as optional.
+ */
+type LoginResponseWithProfile = LoginResponse &
+    Partial<Pick<User, 'role' | 'job_title' | 'company_name' | 'created_at'>>;
+
+const userFromLoginResponse = (payload: LoginResponseWithProfile): User => ({
+    id: payload.user_id,
+    email: payload.email,
+    full_name: payload.full_name,
+    role: payload.role || 'user',
+    job_title: payload.job_title,
+    company_name: payload.company_name,
+    created_at: payload.created_at || new Date().toISOString(),
+    last_login: new Date().toISOString()
+});
+
+const isMFARequired = (
+    payload: LoginResponse | MFARequiredResponse
+): payload is MFARequiredResponse =>
+    'mfa_required' in payload && !!payload.mfa_required;
 
 const initialState: AuthState = {
     user: null,
@@ -194,16 +218,12 @@ const authSlice = createSlice({
             })
             .addCase(login.fulfilled, (state, action) => {
                 state.loading = false;
-                state.user = {
-                    id: action.payload.user_id,
-                    email: action.payload.email,
-                    full_name: action.payload.full_name,
-                    role: action.payload.role || 'user',
-                    job_title: action.payload.job_title,
-                    company_name: action.payload.company_name,
-                    created_at: action.payload.created_at || new Date().toISOString(),
-                    last_login: new Date().toISOString()
-                };
+                if (isMFARequired(action.payload)) {
+                    // MFA step still pending: not authenticated yet
+                    state.error = null;
+                    return;
+                }
+                state.user = userFromLoginResponse(action.payload);
                 state.token = action.payload.access_token;
                 state.isAuthenticated = true;
                 state.error = null;
@@ -220,16 +240,7 @@ const authSlice = createSlice({
             })
             .addCase(register.fulfilled, (state, action) => {
                 state.loading = false;
-                state.user = {
-                    id: action.payload.user_id,
-                    email: action.payload.email,
-                    full_name: action.payload.full_name,
-                    role: action.payload.role || 'user',
-                    job_title: action.payload.job_title,
-                    company_name: action.payload.company_name,
-                    created_at: action.payload.created_at || new Date().toISOString(),
-                    last_login: new Date().toISOString()
-                };
+                state.user = userFromLoginResponse(action.payload);
                 state.token = action.payload.access_token;
                 state.isAuthenticated = true;
                 state.error = null;
@@ -265,16 +276,7 @@ const authSlice = createSlice({
             })
             .addCase(refreshToken.fulfilled, (state, action) => {
                 state.loading = false;
-                state.user = {
-                    id: action.payload.user_id,
-                    email: action.payload.email,
-                    full_name: action.payload.full_name,
-                    role: action.payload.role || 'user',
-                    job_title: action.payload.job_title,
-                    company_name: action.payload.company_name,
-                    created_at: action.payload.created_at || new Date().toISOString(),
-                    last_login: new Date().toISOString()
-                };
+                state.user = userFromLoginResponse(action.payload);
                 state.token = action.payload.access_token;
                 state.isAuthenticated = true;
                 state.error = null;
@@ -340,16 +342,7 @@ const authSlice = createSlice({
             })
             .addCase(googleLogin.fulfilled, (state, action) => {
                 state.loading = false;
-                state.user = {
-                    id: action.payload.user_id,
-                    email: action.payload.email,
-                    full_name: action.payload.full_name,
-                    role: action.payload.role || 'user',
-                    job_title: action.payload.job_title,
-                    company_name: action.payload.company_name,
-                    created_at: action.payload.created_at || new Date().toISOString(),
-                    last_login: new Date().toISOString()
-                };
+                state.user = userFromLoginResponse(action.payload);
                 state.token = action.payload.access_token;
                 state.isAuthenticated = true;
                 state.error = null;

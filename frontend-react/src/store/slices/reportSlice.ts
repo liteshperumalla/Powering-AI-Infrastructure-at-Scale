@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { apiClient } from '../../services/api';
+import { apiClient, Recommendation } from '../../services/api';
+import type { Assessment } from './assessmentSlice';
 
 // Backend report structure matching actual API response
 export interface Report {
@@ -28,6 +29,10 @@ export interface Report {
     created_at: string;
     updated_at: string;
     completed_at: string;
+    // Optional content fields returned by the backend ReportResponse
+    key_findings?: string[];
+    recommendations?: string[];
+    compliance_score?: number;
     // Additional frontend fields for compatibility
     assessmentId?: string;
     generated_at?: string;
@@ -59,6 +64,12 @@ const initialState: ReportState = {
 export const generateReport = createAsyncThunk(
     'report/generate',
     async (assessmentId: string) => {
+        // Load the assessment and its recommendations to score the report
+        const [assessment, recommendations] = await Promise.all([
+            apiClient.getAssessment(assessmentId).catch((): Assessment | null => null),
+            apiClient.getRecommendations(assessmentId).catch((): Recommendation[] => []),
+        ]);
+
         // Simulate API call with correct backend structure
         const response = await new Promise<Report>((resolve) => {
             setTimeout(() => {
@@ -178,8 +189,32 @@ export const shareReport = createAsyncThunk(
             customMessage?: string;
         };
     }) => {
-        const response = await apiClient.shareReport(reportId, settings || {});
-        return response;
+        // The backend shares with one user per request and issues public links
+        // through a separate endpoint.
+        const sharedWith = settings?.sharedWith ?? [];
+        await Promise.all(
+            sharedWith.map(email =>
+                apiClient.shareReport(reportId, { user_email: email, permission: 'view' })
+            )
+        );
+
+        let shareUrl: string | null = null;
+        if (settings?.isPublic) {
+            // Backend responds with { public_link, token }; the client type only
+            // declares public_token, so read all variants.
+            const link = (await apiClient.createPublicLink(reportId)) as {
+                public_token?: string;
+                public_link?: string;
+                token?: string;
+            };
+            const path = link.public_link
+                ?? `/public/reports/${reportId}?token=${link.token ?? link.public_token ?? ''}`;
+            shareUrl = typeof window !== 'undefined' && path.startsWith('/')
+                ? `${window.location.origin}${path}`
+                : path;
+        }
+
+        return { shareUrl, sharedWith };
     }
 );
 
@@ -210,7 +245,7 @@ export const fetchReports = createAsyncThunk(
                     estimated_savings: realSavings,
                     // Extract company name from title or other fields
                     title: (() => {
-                        const companyName = assessment?.companyName || assessment?.business_requirements?.company_name;
+                        const companyName = assessment?.company_name || assessment?.business_requirements?.company_name;
                         if (companyName) {
                             return `Complete Infrastructure Assessment - ${companyName}`;
                         }
@@ -227,7 +262,7 @@ export const fetchReports = createAsyncThunk(
                     })(),
                     // Add assessment context  
                     companyName: (() => {
-                        const companyName = assessment?.companyName || assessment?.business_requirements?.company_name;
+                        const companyName = assessment?.company_name || assessment?.business_requirements?.company_name;
                         if (companyName) return companyName;
                         
                         // Extract from title
@@ -276,7 +311,7 @@ function calculateEstimatedSavings(assessment: any): number {
         }
         
         // Company size multiplier
-        const sizeMultiplier = {
+        const sizeMultiplier: Record<string, number> = {
             '1-10': 0.8,
             '11-50': 1.0,
             '51-100': 1.2,
@@ -287,7 +322,7 @@ function calculateEstimatedSavings(assessment: any): number {
         savings *= (sizeMultiplier[companySize] || 1.0);
         
         // Industry-specific multipliers
-        const industryMultiplier = {
+        const industryMultiplier: Record<string, number> = {
             'Healthcare AI': 1.4,
             'FinTech': 1.3,
             'E-commerce': 1.2,
@@ -298,7 +333,7 @@ function calculateEstimatedSavings(assessment: any): number {
         savings *= (industryMultiplier[industry] || 1.0);
         
         // AI maturity impact
-        const maturityMultiplier = {
+        const maturityMultiplier: Record<string, number> = {
             'Pilot Projects': 1.2,
             'Production': 1.5,
             'Scaled': 1.8,
