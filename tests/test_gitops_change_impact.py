@@ -204,6 +204,11 @@ def api():
         assessments=_Collection(ASSESSMENTS),
         recommendations=_Collection(RECOMMENDATIONS),
         iac_templates=_Collection(),
+        gitops_repositories=_Collection(),
+        gitops_applications=_Collection(),
+        gitops_deployments=_Collection(),
+        gitops_deployment_plans=_Collection(),
+        gitops_drift=_Collection(),
     )
     user = SimpleNamespace(id=ALICE, email="alice@example.com")
     app.dependency_overrides[get_database] = lambda: db
@@ -320,3 +325,135 @@ def test_analyze_endpoint(api):
     api.user.id = ALICE
     assert api.client.post("/api/v2/change-impact/analyze",
                            json={**body, "resources": [{"resource_id": bob_db}]}).status_code == 404
+
+
+# ---------------------------------------------------------------- legacy GitOps endpoints
+
+GITOPS = "/api/v1/gitops"
+
+
+def test_every_gitops_route_requires_login():
+    """Enumerates the router so a newly added route without auth fails this test."""
+    app = create_app()
+    app.dependency_overrides[get_database] = lambda: SimpleNamespace()
+    checked = 0
+    with TestClient(app) as client:
+        # The OpenAPI schema lists every route, however routers are nested
+        for path, operations in app.openapi()["paths"].items():
+            if not (path.startswith("/api/v1/gitops") or path.startswith("/api/v2/gitops")):
+                continue
+            url = path.replace("{", "").replace("}", "")  # concrete placeholder values
+            for method in operations:
+                response = client.request(method.upper(), url, json={})
+                assert response.status_code in (401, 403), f"{method} {path} -> {response.status_code}"
+                checked += 1
+    assert checked >= 40  # 23 routes on v1 and v2
+
+
+def _connect(api, url="https://github.com/acme/infra.git", **extra):
+    return api.client.post(f"{GITOPS}/repositories", json={"provider": "github", "repo_url": url, **extra})
+
+
+def test_repository_connect_list_and_disconnect(api):
+    created = _connect(api, access_token="ghp_secret")
+    assert created.status_code == 201
+    repo = created.json()
+    assert repo["name"] == "infra" and repo["url"] == "https://github.com/acme/infra.git"
+    assert repo["has_credentials"] is True
+    # The token is never stored or returned
+    assert "access_token" not in repo
+    assert "ghp_secret" not in repr(api.db.gitops_repositories.docs)
+
+    assert [r["id"] for r in api.client.get(f"{GITOPS}/repositories").json()] == [repo["id"]]
+    assert _connect(api).status_code == 409  # same URL twice
+    assert api.client.delete(f"{GITOPS}/repositories/{repo['id']}").status_code == 204
+    assert api.client.get(f"{GITOPS}/repositories").json() == []
+
+
+@pytest.mark.parametrize("url", ["not a url", "ftp://example.com/repo", ""])
+def test_repository_url_is_validated(api, url):
+    assert _connect(api, url=url).status_code == 422
+
+
+def test_repositories_are_private_and_in_use_ones_cannot_be_removed(api):
+    repo = _connect(api).json()
+    app = api.client.post(f"{GITOPS}/applications", json={"name": "web", "repository_id": repo["id"]})
+    assert app.status_code == 201
+    assert api.client.get(f"{GITOPS}/repositories").json()[0]["applications"] == ["web"]
+    blocked = api.client.delete(f"{GITOPS}/repositories/{repo['id']}")
+    assert blocked.status_code == 409 and "web" in blocked.json()["detail"]
+
+    api.user.id = BOB
+    assert api.client.get(f"{GITOPS}/repositories").json() == []
+    assert api.client.get(f"{GITOPS}/applications").json() == []
+    assert api.client.get(f"{GITOPS}/repositories/{repo['id']}").status_code == 404
+    assert api.client.delete(f"{GITOPS}/repositories/{repo['id']}").status_code == 404
+    # Can't attach an application to someone else's repository
+    assert api.client.post(f"{GITOPS}/applications",
+                           json={"name": "x", "repository_id": repo["id"]}).status_code == 404
+
+
+def test_sync_and_rollback_are_recorded_not_executed(api):
+    repo = _connect(api).json()
+    app = api.client.post(f"{GITOPS}/applications",
+                          json={"name": "web", "repository_id": repo["id"], "target_revision": "v2"}).json()
+
+    sync = api.client.post(f"{GITOPS}/applications/{app['id']}/sync", json={"prune": True})
+    assert sync.status_code == 200 and sync.json()["status"] == "pending"
+    assert "not executed" in sync.json()["message"]
+    rollback = api.client.post(f"{GITOPS}/applications/{app['id']}/rollback", json={"target_revision": "v1"})
+    assert rollback.status_code == 200
+    assert api.client.post(f"{GITOPS}/applications/{app['id']}/rollback", json={}).status_code == 422
+
+    history = api.client.get(f"{GITOPS}/deployments?application_id={app['id']}").json()
+    assert {(d["kind"], d["revision"], d["status"]) for d in history} == {
+        ("sync", "v2", "pending"), ("rollback", "v1", "pending")}
+    assert api.client.get(f"{GITOPS}/applications/{app['id']}").json()["deployment_status"] == "pending"
+    status_resp = api.client.get(f"{GITOPS}/deployments/{sync.json()['deployment_id']}/status")
+    assert status_resp.json()["status"] == "pending"
+    assert api.client.post(f"{GITOPS}/applications/missing/sync", json={}).status_code == 404
+
+
+def test_deployment_plan_create_list_and_deploy(api):
+    repo = _connect(api).json()
+    template = api.client.post(f"{GITOPS}/templates", json=TEMPLATE).json()
+    plan = api.client.post(f"{GITOPS}/deployment-plans", json={
+        "name": "vpc-dev", "repository": repo, "template": template, "environment": "dev",
+        "variables": {"region": "eu-west-1"},
+    })
+    assert plan.status_code == 201
+    body = plan.json()
+    assert body["repository"]["id"] == repo["id"] and body["template"]["id"] == template["id"]
+
+    assert [p["id"] for p in api.client.get(f"{GITOPS}/deployment-plans").json()] == [body["id"]]
+    deployed = api.client.post(f"{GITOPS}/deployment-plans/{body['id']}/deploy", json={"environment": "staging"})
+    assert deployed.status_code == 200 and deployed.json()["status"] == "pending"
+    recorded = api.client.get(f"{GITOPS}/deployments").json()
+    assert [(d["kind"], d["plan_id"], d["environment"]) for d in recorded] == [("plan", body["id"], "staging")]
+
+    # References must belong to the user
+    api.user.id = BOB
+    assert api.client.post(f"{GITOPS}/deployment-plans", json={
+        "name": "steal", "repository": repo, "template": template}).status_code == 404
+    assert api.client.post(f"{GITOPS}/deployment-plans/{body['id']}/deploy", json={}).status_code == 404
+
+
+def test_drift_analytics_and_health_reflect_stored_data(api):
+    assert api.client.get(f"{GITOPS}/drift").json() == []
+    assert api.client.post(f"{GITOPS}/drift/missing/fix").status_code == 404
+
+    repo = _connect(api).json()
+    app = api.client.post(f"{GITOPS}/applications", json={"name": "web", "repository_id": repo["id"]}).json()
+    api.client.post(f"{GITOPS}/applications/{app['id']}/sync", json={})
+
+    analytics = api.client.get(f"{GITOPS}/analytics?timeframe=30d").json()
+    assert analytics["summary"]["total_repositories"] == 1
+    assert analytics["summary"]["total_applications"] == 1
+    assert analytics["summary"]["deployment_requests"] == 1
+    assert analytics["summary"]["success_rate"] is None  # nothing has completed
+    assert analytics["deployments_by_status"] == {"pending": 1}
+    assert api.client.get(f"{GITOPS}/analytics?timeframe=forever").status_code == 422
+
+    health = api.client.get(f"{GITOPS}/health").json()
+    assert health["status"] == "not_connected" and health["pending_requests"] == 1
+
