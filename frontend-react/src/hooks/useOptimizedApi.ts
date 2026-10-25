@@ -267,7 +267,7 @@ export function useDebouncedSearch<T>(
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const timeoutRef = useRef<NodeJS.Timeout>();
+  const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const isMounted = useRef(true);
 
   useEffect(() => {

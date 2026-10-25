@@ -130,7 +130,7 @@ export default function CloudServicesPage() {
             } catch (error) {
                 console.error('Failed to load services:', error);
                 // Check if it's a timeout error
-                if (error.message === 'Request timeout') {
+                if (error instanceof Error && error.message === 'Request timeout') {
                     console.log('⏱️ Request timed out, using fallback data');
                     // Provide fallback data for common services
                     setServices([
@@ -490,7 +490,7 @@ export default function CloudServicesPage() {
                                                 Pricing
                                             </Typography>
                                             <Typography variant="body2">
-                                                <strong>Model:</strong> {selectedService.pricing?.model || selectedService.pricing_model}
+                                                <strong>Model:</strong> {selectedService.pricing?.model}
                                             </Typography>
                                             {selectedService.pricing && (
                                                 <Typography variant="body2">

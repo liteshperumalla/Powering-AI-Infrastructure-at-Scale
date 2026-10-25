@@ -60,14 +60,14 @@ import CostComparisonChart from '@/components/charts/CostComparisonChart';
 import RecommendationScoreChart from '@/components/charts/RecommendationScoreChart';
 import AssessmentResultsChart from '@/components/charts/AssessmentResultsChart';
 import RecommendationTable from '@/components/RecommendationTable';
-import ReportPreview from '@/components/ReportPreview';
+import ReportPreview, { type ReportData } from '@/components/ReportPreview';
 // import D3InteractiveChart from '@/components/charts/D3InteractiveChart';
 import AdvancedReportExport from '@/components/AdvancedReportExport';
 import ScenarioComparison from '@/components/ScenarioComparison';
 import ProgressIndicator, { useProgressSteps } from '@/components/ProgressIndicator';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
-import { fetchAssessments, updateAssessment } from '@/store/slices/assessmentSlice';
-import { fetchReports } from '@/store/slices/reportSlice';
+import { fetchAssessments, updateAssessment, type Assessment as StoreAssessment } from '@/store/slices/assessmentSlice';
+import { fetchReports, type Report } from '@/store/slices/reportSlice';
 import { fetchScenarios } from '@/store/slices/scenarioSlice';
 import { openModal, closeModal, addNotification } from '@/store/slices/uiSlice';
 import RealTimeProgress from '@/components/RealTimeProgress';
@@ -77,10 +77,28 @@ import { useSystemWebSocket } from '@/hooks/useWebSocket';
 import { apiClient } from '@/services/api';
 import { useAssessmentPersistence } from '@/hooks/useAssessmentPersistence';
 import { cacheBuster, forceRefresh, clearAssessmentCache } from '@/utils/cache-buster';
+import logger from '@/utils/logger';
 
-interface SystemHealth {
-    status: 'healthy' | 'degraded' | 'unhealthy';
-}
+// Health payload from apiClient.checkHealth(), or the 'disconnected' fallback below
+type SystemHealth = Awaited<ReturnType<typeof apiClient.checkHealth>>;
+
+// The list endpoint (GET /assessments/, AssessmentSummary) returns a top-level
+// company_name that defaults to "Unknown Company" when none was provided.
+const getAssessmentCompanyName = (assessment: StoreAssessment): string | undefined => {
+    const topLevel = assessment.company_name && assessment.company_name !== 'Unknown Company'
+        ? assessment.company_name
+        : undefined;
+    return topLevel || assessment.business_requirements?.company_name;
+};
+
+const toReportPreviewStatus = (status: Report['status'] | undefined): ReportData['status'] => {
+    switch (status) {
+        case 'completed': return 'completed';
+        case 'generating':
+        case 'pending': return 'in-progress';
+        default: return 'draft';
+    }
+};
 
 interface SystemMetrics {
     active_workflows: number;
@@ -254,34 +272,19 @@ export default function DashboardPage() {
 
             setFilteredAssessmentData([selectedAssessment]);
 
-            // Update cost data based on selected assessment
-            if (selectedAssessment.cost_data) {
-                setCostData(selectedAssessment.cost_data);
-            }
-
-            // Update recommendation scores - only use real data
-            if (selectedAssessment.recommendations && selectedAssessment.recommendations.length > 0) {
-                const scores = selectedAssessment.recommendations
-                    .filter((rec: any) => rec.confidence_score != null) // Only include real scores
-                    .map((rec: any, index: number) => ({
-                        category: rec.category || `Category ${index + 1}`,
-                        score: rec.confidence_score,
-                        provider: rec.provider || 'Unknown'
-                    }));
-                setRecommendationScores(scores);
-            } else {
-                setRecommendationScores([]); // No mock data
-            }
+            // The assessment list payload carries no per-assessment cost data or
+            // recommendations, so there are no real recommendation scores to show.
+            setRecommendationScores([]); // No mock data
 
             // Generate assessment results with calculated scores based on completion and assessment data
-            const completionPercent = selectedAssessment.completion_percentage || 100;
+            const completionPercent = selectedAssessment.progress_percentage || 100;
             const assessmentResult = {
                 assessment_id: selectedAssessment.id,
                 title: selectedAssessment.title,
-                overall_score: selectedAssessment.score || Math.round(65 + (completionPercent * 0.25)),
-                performance_score: selectedAssessment.performance_score || Math.round(70 + (completionPercent * 0.2)),
-                cost_score: selectedAssessment.cost_score || Math.round(68 + (completionPercent * 0.22)),
-                security_score: selectedAssessment.security_score || Math.round(72 + (completionPercent * 0.18)),
+                overall_score: Math.round(65 + (completionPercent * 0.25)),
+                performance_score: Math.round(70 + (completionPercent * 0.2)),
+                cost_score: Math.round(68 + (completionPercent * 0.22)),
+                security_score: Math.round(72 + (completionPercent * 0.18)),
                 created_at: selectedAssessment.created_at
             };
             setAssessmentResults([assessmentResult]);
@@ -340,7 +343,7 @@ export default function DashboardPage() {
                     title: assessment?.title,
                     status: assessment?.status,
                     created_at: assessment?.created_at,
-                    completion_percentage: assessment?.completion_percentage,
+                    completion_percentage: assessment?.progress_percentage,
                     industry: assessment?.industry,
                     business_requirements: assessment?.business_requirements,
                     technical_requirements: assessment?.technical_requirements
@@ -434,8 +437,8 @@ export default function DashboardPage() {
             setSelectedAssessments([]);
 
             // Clear selectedAssessment if it was deleted
-            if (selectedAssessment && selectedAssessments.includes(selectedAssessment.id)) {
-                setSelectedAssessment(null);
+            if (selectedAssessmentForViz !== 'all' && selectedAssessments.includes(selectedAssessmentForViz)) {
+                setSelectedAssessmentForViz('all');
             }
 
             // Clear any cached data for deleted assessments
@@ -530,15 +533,15 @@ export default function DashboardPage() {
                 if (window.fetch) {
                     const originalFetch = window.fetch;
                     window.fetch = (input, init = {}) => {
-                        const enhancedInit = {
+                        // Headers may be a Headers instance, tuple array or record
+                        const headers = new Headers(init.headers);
+                        headers.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+                        headers.set('Pragma', 'no-cache');
+                        headers.set('Expires', '0');
+                        const enhancedInit: RequestInit = {
                             ...init,
                             cache: 'no-store',
-                            headers: {
-                                ...init.headers,
-                                'Cache-Control': 'no-cache, no-store, must-revalidate',
-                                'Pragma': 'no-cache',
-                                'Expires': '0'
-                            }
+                            headers,
                         };
                         return originalFetch(input, enhancedInit);
                     };
@@ -610,7 +613,7 @@ export default function DashboardPage() {
                                         id: message.assessment_id,
                                         updates: {
                                             status: 'completed',
-                                            completion_percentage: 100,
+                                            progress_percentage: 100,
                                             completed_at: new Date().toISOString(),
                                             updated_at: new Date().toISOString()
                                         }
@@ -1136,7 +1139,7 @@ export default function DashboardPage() {
                     });
 
                     // Only show results for completed assessments
-                    if (latestAssessment.status === 'completed' || latestAssessment.status === 'processing') {
+                    if (latestAssessment.status === 'completed') {
                         try {
                             const visualizationResponse = await apiClient.getAssessmentVisualizationData(latestAssessment.id);
 
@@ -1850,7 +1853,7 @@ export default function DashboardPage() {
                                                         <Box>
                                                             <Typography variant="h6" color="text.primary" gutterBottom>
                                                                 {(() => {
-                                                                    const companyName = assessment.companyName || assessment.business_requirements?.company_name;
+                                                                    const companyName = getAssessmentCompanyName(assessment);
                                                                     if (companyName) return companyName;
                                                                     
                                                                     // Extract from title
@@ -1884,7 +1887,7 @@ export default function DashboardPage() {
                                                 <Box sx={{ mb: 2 }}>
                                                     <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                                                         <Typography variant="caption" color="text.secondary">
-                                                            Progress: {Math.round(assessment.completion_percentage || assessment.progress_percentage || 0)}%
+                                                            Progress: {Math.round(assessment.progress_percentage || 0)}%
                                                         </Typography>
                                                         <Typography variant="caption" color="text.secondary">
                                                             {assessment.industry || 'Unknown Industry'}
@@ -1892,7 +1895,7 @@ export default function DashboardPage() {
                                                     </Box>
                                                     <LinearProgress
                                                         variant="determinate"
-                                                        value={assessment.completion_percentage || assessment.progress_percentage || 0}
+                                                        value={assessment.progress_percentage || 0}
                                                         sx={{ height: 6, borderRadius: 1 }}
                                                     />
                                                 </Box>
@@ -2105,7 +2108,7 @@ export default function DashboardPage() {
                                             </Box>
                                             <Box sx={{ mt: 2 }}>
                                                 <Typography variant="caption" color="success.main">
-                                                    Assessment Score: {Math.round(assessment.completion_percentage || 100)}%
+                                                    Assessment Score: {Math.round(assessment.progress_percentage || 100)}%
                                                 </Typography>
                                                 <Box sx={{
                                                     width: '100%',
@@ -2158,7 +2161,7 @@ export default function DashboardPage() {
                                                         <Box>
                                                             <Typography variant="body2" noWrap sx={{ maxWidth: 150 }}>
                                                                 {(() => {
-                                                                    const companyName = assessment.companyName || assessment.business_requirements?.company_name;
+                                                                    const companyName = getAssessmentCompanyName(assessment);
                                                                     if (companyName) return companyName;
                                                                     
                                                                     // Extract from title
@@ -2195,7 +2198,7 @@ export default function DashboardPage() {
                                                     const assessment = assessments?.find(a => a.id === selectedAssessmentForViz);
                                                     if (!assessment) return 'Unknown';
                                                     
-                                                    const companyName = assessment.companyName || assessment.business_requirements?.company_name;
+                                                    const companyName = getAssessmentCompanyName(assessment);
                                                     if (companyName) return companyName;
                                                     
                                                     // Extract from title
@@ -2237,7 +2240,7 @@ export default function DashboardPage() {
                                             const assessment = assessments?.find(a => a.id === selectedAssessmentForViz);
                                             if (!assessment) return 'Selected Assessment';
                                             
-                                            const companyName = assessment.companyName || assessment.business_requirements?.company_name;
+                                            const companyName = getAssessmentCompanyName(assessment);
                                             if (companyName) return companyName;
                                             
                                             // Extract from title
@@ -2267,7 +2270,7 @@ export default function DashboardPage() {
                                             const assessment = assessments?.find(a => a.id === selectedAssessmentForViz);
                                             if (!assessment) return 'Selected Assessment';
                                             
-                                            const companyName = assessment.companyName || assessment.business_requirements?.company_name;
+                                            const companyName = getAssessmentCompanyName(assessment);
                                             if (companyName) return companyName;
                                             
                                             // Extract from title
@@ -2339,19 +2342,15 @@ export default function DashboardPage() {
                                             }
                                             return reportTitle || 'Infrastructure Assessment Report';
                                         })(),
-                                        status: reports[0]?.status || 'draft',
+                                        status: toReportPreviewStatus(reports[0]?.status),
                                         generatedDate: reports[0]?.generated_at || reports[0]?.completed_at || reports[0]?.created_at,
                                         sections: Array.isArray(reports[0]?.sections) ? reports[0].sections : [],
                                         keyFindings: Array.isArray(reports[0]?.key_findings) ? reports[0].key_findings : [],
                                         recommendations: Array.isArray(reports[0]?.recommendations) ? reports[0].recommendations : [],
-                                        estimatedSavings: typeof reports[0]?.estimated_savings === 'number' ? reports[0].estimated_savings : null, // Show null only when no data, preserve 0 as valid
+                                        estimatedSavings: typeof reports[0]?.estimated_savings === 'number' ? reports[0].estimated_savings : undefined, // Undefined only when no data, preserve 0 as valid
                                         complianceScore: reports[0]?.compliance_score || undefined,
-                                        versions: Array.isArray(reports[0]?.versions) ? reports[0].versions : [],
-                                        sharedWith: Array.isArray(reports[0]?.shared_with) ? reports[0].shared_with : [],
-                                        isPublic: reports[0]?.is_public || false,
-                                        canEdit: reports[0]?.can_edit !== false,
-                                        canShare: reports[0]?.can_share !== false,
-                                        hasInteractiveContent: reports[0]?.has_interactive_content || false
+                                        // ReportResponse has no versioning/sharing fields; ReportPreview
+                                        // supplies defaults (no versions, not shared, editable, shareable).
                                     }}
                                     onDownload={(reportId) => {
                                         apiClient.downloadReport(reportId)
@@ -2507,7 +2506,7 @@ export default function DashboardPage() {
                                                 <Box>
                                                     <Typography variant="body2">Report generated</Typography>
                                                     <Typography variant="caption" color="text.secondary">
-                                                        {new Date(report.generated_at).toLocaleDateString()}
+                                                        {new Date(report.generated_at || report.completed_at || report.created_at).toLocaleDateString()}
                                                     </Typography>
                                                 </Box>
                                             </Box>

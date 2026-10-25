@@ -32,6 +32,7 @@ import { clearError } from '@/store/slices/authSlice';
 import ResponsiveLayout from '@/components/ResponsiveLayout';
 
 function MFAVerifyPageComponent() {
+    const theme = useTheme();
     const router = useRouter();
     const dispatch = useAppDispatch();
     const searchParams = useSearchParams();
@@ -462,7 +463,6 @@ function MFAVerifyPageComponent() {
 }
 
 export default function MFAVerifyPage() {
-    const theme = useTheme();
     return (
         <Suspense fallback={<div>Loading...</div>}>
             <MFAVerifyPageComponent />

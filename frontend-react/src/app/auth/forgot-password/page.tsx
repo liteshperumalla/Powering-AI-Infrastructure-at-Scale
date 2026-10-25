@@ -25,7 +25,7 @@ export default function ForgotPasswordPage() {
     const [validationError, setValidationError] = useState('');
 
     // ✅ Use optimized mutation hook
-    const { mutate, loading, error: apiError } = useApiMutation<any, { email: string }>(
+    const { mutate, loading, error: apiError, reset: resetMutation } = useApiMutation<any, { email: string }>(
         `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/auth/forgot-password`,
         'POST'
     );
@@ -53,9 +53,13 @@ export default function ForgotPasswordPage() {
         setValidationError('');
 
         // ✅ Use mutation hook
-        const result = await mutate({ email });
-        if (result) {
-            setSuccess(true);
+        try {
+            const result = await mutate({ email });
+            if (result) {
+                setSuccess(true);
+            }
+        } catch {
+            // mutate rethrows after storing the error, which the form already displays
         }
     };
 
@@ -65,7 +69,7 @@ export default function ForgotPasswordPage() {
             setValidationError('');
         }
         if (error) {
-            setError('');
+            resetMutation();
         }
     };
 

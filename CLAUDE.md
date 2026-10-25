@@ -35,7 +35,7 @@ npm run dev
 npm run build
 npm test            # Jest
 npm run lint
-npm run type-check  # currently fails: ~430 pre-existing TS errors (build sets ignoreBuildErrors)
+npm run type-check  # must stay at 0 errors; next build also enforces types and lint
 ```
 
 `make help` lists Makefile targets (dev-up, test, lint, deploy-*, db-*).

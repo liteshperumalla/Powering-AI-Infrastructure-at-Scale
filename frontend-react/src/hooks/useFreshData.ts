@@ -25,7 +25,7 @@ export const useFreshData = (key: string, options: FreshDataOptions = {}) => {
 
     const [refreshTrigger, setRefreshTrigger] = useState(0);
     const [isStale, setIsStale] = useState(false);
-    const intervalRef = useRef<NodeJS.Timeout>();
+    const intervalRef = useRef<NodeJS.Timeout | undefined>(undefined);
     const lastRefreshRef = useRef<number>(Date.now());
 
     // Force refresh function

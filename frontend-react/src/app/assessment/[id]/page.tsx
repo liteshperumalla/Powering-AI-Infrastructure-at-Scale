@@ -31,11 +31,11 @@ import ProtectedRoute from '@/components/ProtectedRoute';
 import { apiClient } from '../../../services/api';
 
 interface AssessmentData {
-  _id: string;
+  _id?: string; // legacy Mongo id; API responses use `id`
   title: string;
   description?: string;
   status: string;
-  completion_percentage: number;
+  completion_percentage?: number; // legacy alias of progress_percentage
   progress_percentage: number;
   company_name?: string;
   industry?: string;

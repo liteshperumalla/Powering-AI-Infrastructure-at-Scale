@@ -9,7 +9,14 @@ const createMockHeaders = (overrides: Record<string, string> = {}) => ({
     }),
 });
 
-const createMockResponse = (overrides: Partial<Response> & { body?: any } = {}) => {
+// `body` is the parsed JSON payload returned by `json()`, not a ReadableStream,
+// and `headers` may be the lightweight mock above rather than a real Headers.
+type MockResponseOverrides = Omit<Partial<Response>, 'body' | 'headers'> & {
+    body?: unknown;
+    headers?: Headers | ReturnType<typeof createMockHeaders>;
+};
+
+const createMockResponse = (overrides: MockResponseOverrides = {}) => {
     const { body, headers, ...rest } = overrides;
     return {
         ok: true,
