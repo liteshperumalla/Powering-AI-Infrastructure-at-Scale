@@ -71,6 +71,13 @@ class _Collection:
 
     async def delete_one(self, query):
         before = len(self.docs)
+        index = next((i for i, d in enumerate(self.docs) if _matches(d, query)), None)
+        if index is not None:
+            del self.docs[index]
+        return SimpleNamespace(deleted_count=before - len(self.docs))
+
+    async def delete_many(self, query):
+        before = len(self.docs)
         self.docs = [d for d in self.docs if not _matches(d, query)]
         return SimpleNamespace(deleted_count=before - len(self.docs))
 
@@ -209,6 +216,7 @@ def api():
         gitops_deployments=_Collection(),
         gitops_deployment_plans=_Collection(),
         gitops_drift=_Collection(),
+        gitops_pull_requests=_Collection(),
     )
     user = SimpleNamespace(id=ALICE, email="alice@example.com")
     app.dependency_overrides[get_database] = lambda: db
@@ -340,14 +348,14 @@ def test_every_gitops_route_requires_login():
     with TestClient(app) as client:
         # The OpenAPI schema lists every route, however routers are nested
         for path, operations in app.openapi()["paths"].items():
-            if not (path.startswith("/api/v1/gitops") or path.startswith("/api/v2/gitops")):
+            if "/gitops/" not in path:  # mounted under /api, /api/v1 and /api/v2
                 continue
             url = path.replace("{", "").replace("}", "")  # concrete placeholder values
             for method in operations:
                 response = client.request(method.upper(), url, json={})
                 assert response.status_code in (401, 403), f"{method} {path} -> {response.status_code}"
                 checked += 1
-    assert checked >= 40  # 23 routes on v1 and v2
+    assert checked >= 80  # guards against enumerating nothing (29 operations x 3 prefixes today)
 
 
 def _connect(api, url="https://github.com/acme/infra.git", **extra):
@@ -456,4 +464,85 @@ def test_drift_analytics_and_health_reflect_stored_data(api):
 
     health = api.client.get(f"{GITOPS}/health").json()
     assert health["status"] == "not_connected" and health["pending_requests"] == 1
+
+
+# ---------------------------------------------------------------- pull requests
+
+def _open_pr(api, repo_id, source="feature/vpc", target="main", title="Add VPC"):
+    return api.client.post(f"{GITOPS}/repositories/{repo_id}/pull-requests",
+                           json={"title": title, "description": "d", "source_branch": source, "target_branch": target})
+
+
+def test_pull_request_create_list_and_get(api):
+    repo = _connect(api).json()
+    created = _open_pr(api, repo["id"])
+    assert created.status_code == 201
+    pr = created.json()
+    assert pr["id"] == 1 and pr["state"] == "open" and pr["author"] == "alice@example.com"
+    assert pr["url"] == "https://github.com/acme/infra/compare/main...feature/vpc"
+    assert pr["checks_status"] == "pending" and "not a pull request on the Git host" in pr["note"]
+    assert _open_pr(api, repo["id"], source="feature/dns").json()["id"] == 2  # numbered per repository
+
+    listed = api.client.get(f"{GITOPS}/repositories/{repo['id']}/pull-requests").json()
+    assert [p["id"] for p in listed] == [2, 1]
+    assert api.client.get(f"{GITOPS}/repositories/{repo['id']}/pull-requests/1").json()["title"] == "Add VPC"
+    assert api.client.get(f"{GITOPS}/repositories/{repo['id']}/pull-requests/99").status_code == 404
+
+
+@pytest.mark.parametrize("source,target,code", [
+    ("feature/vpc", "feature/vpc", 400),   # same branch
+    ("a..b", "main", 422),                 # invalid branch names
+    ("feature/", "main", 422),
+    ("ok", "bad name", 422),
+])
+def test_pull_request_branch_validation(api, source, target, code):
+    repo = _connect(api).json()
+    assert _open_pr(api, repo["id"], source=source, target=target).status_code == code
+
+
+def test_duplicate_open_pull_request_is_rejected(api):
+    repo = _connect(api).json()
+    assert _open_pr(api, repo["id"]).status_code == 201
+    assert _open_pr(api, repo["id"]).status_code == 409
+    assert _open_pr(api, repo["id"], target="develop").status_code == 201  # different target is fine
+
+
+def test_review_and_merge_rules(api):
+    repo = _connect(api).json()
+    base = f"{GITOPS}/repositories/{repo['id']}/pull-requests/1"
+    _open_pr(api, repo["id"])
+
+    assert api.client.post(f"{base}/reject", json={}).status_code == 422  # a reason is required
+    rejected = api.client.post(f"{base}/reject", json={"comment": "Needs tags"}).json()
+    assert [(a["user"], a["status"]) for a in rejected["approvals"]] == [("alice@example.com", "rejected")]
+    blocked = api.client.post(f"{base}/merge", json={})
+    assert blocked.status_code == 409 and "Changes requested" in blocked.json()["detail"]
+
+    # A new review from the same reviewer replaces the earlier one
+    approved = api.client.post(f"{base}/approve", json={"comment": "Fixed"}).json()
+    assert [(a["user"], a["status"]) for a in approved["approvals"]] == [("alice@example.com", "approved")]
+
+    merged = api.client.post(f"{base}/merge", json={"merge_method": "squash"})
+    assert merged.status_code == 200
+    assert merged.json()["state"] == "merged" and merged.json()["merge_method"] == "squash"
+    assert api.client.post(f"{base}/merge", json={}).status_code == 409
+    assert api.client.post(f"{base}/approve", json={}).status_code == 409
+    assert api.client.post(f"{base}/merge", json={"merge_method": "fast-forward"}).status_code in (409, 422)
+
+    states = {s: [p["id"] for p in api.client.get(
+        f"{GITOPS}/repositories/{repo['id']}/pull-requests?state={s}").json()] for s in ("open", "merged", "all")}
+    assert states == {"open": [], "merged": [1], "all": [1]}
+
+
+def test_pull_requests_are_private_and_removed_with_their_repository(api):
+    repo = _connect(api).json()
+    _open_pr(api, repo["id"])
+    api.user.id = BOB
+    assert api.client.get(f"{GITOPS}/repositories/{repo['id']}/pull-requests").status_code == 404
+    assert _open_pr(api, repo["id"]).status_code == 404
+    assert api.client.post(f"{GITOPS}/repositories/{repo['id']}/pull-requests/1/approve", json={}).status_code == 404
+
+    api.user.id = ALICE
+    assert api.client.delete(f"{GITOPS}/repositories/{repo['id']}").status_code == 204
+    assert api.db.gitops_pull_requests.docs == []
 
