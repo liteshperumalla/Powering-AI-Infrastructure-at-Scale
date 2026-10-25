@@ -18,9 +18,10 @@ import { Card, CardContent, Typography, Box, ToggleButton, ToggleButtonGroup } f
 
 interface CostData {
     provider: string;
-    compute: number;
-    storage: number;
-    networking: number;
+    // Optional: when only `total` is provided a proportional breakdown is derived
+    compute?: number;
+    storage?: number;
+    networking?: number;
     total: number;
     color: string;
 }

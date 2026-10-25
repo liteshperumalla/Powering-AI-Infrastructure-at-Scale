@@ -220,6 +220,9 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
         force_rollback: false,
         skip_health_checks: false,
         notification_channels: ['email'],
+        deployment_id: selectedRollbackPlan.deployment_id,
+        target_version: selectedRollbackPlan.target_version,
+        rollback_strategy: selectedRollbackPlan.rollback_strategy,
       });
       
       setExecutions(prev => [...prev, execution]);
@@ -252,7 +255,7 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
                 <Typography variant="h6" color="text.primary" noWrap>{deployment.name}</Typography>
                 <Chip 
                   label={deployment.status} 
-                  color={deployment.status === 'success' ? 'success' : deployment.status === 'failed' ? 'error' : 'default'}
+                  color={deployment.status === 'completed' || deployment.status === 'active' ? 'success' : deployment.status === 'failed' ? 'error' : 'default'}
                   size="small"
                 />
               </Box>
@@ -419,7 +422,7 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
               </AccordionSummary>
               <AccordionDetails>
                 <Stepper orientation="vertical" activeStep={-1}>
-                  {Array.isArray(execution.execution_steps) ? execution.execution_steps.map((step, index) => (
+                  {Array.isArray(execution.execution_steps) ? execution.execution_steps.map((step, index: number) => (
                     <Step key={index} completed={step.status === 'completed'}>
                       <StepLabel 
                         error={step.status === 'failed'}
@@ -656,7 +659,7 @@ const RollbackAutomation: React.FC<RollbackAutomationProps> = ({ assessmentId })
                         fill="#8884d8"
                         dataKey="count"
                       >
-                        {Array.isArray(metrics?.strategy_distribution) ? metrics.strategy_distribution.map((entry, index) => (
+                        {Array.isArray(metrics?.strategy_distribution) ? metrics.strategy_distribution.map((_entry, index: number) => (
                           <Cell key={`cell-${index}`} fill={`hsl(${index * 45}, 70%, 50%)`} />
                         )) : null}
                       </Pie>

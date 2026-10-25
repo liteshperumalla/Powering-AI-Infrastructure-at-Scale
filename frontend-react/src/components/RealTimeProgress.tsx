@@ -231,7 +231,7 @@ export default function RealTimeProgress({
                         const assessment = await response.json();
                         
                         if (assessment.progress) {
-                            const progressData = {
+                            const progressData: WorkflowProgress = {
                                 id: assessmentId,
                                 status: assessment.status === 'completed' ? 'completed' : 
                                        assessment.status === 'failed' ? 'failed' : 'running',

@@ -109,7 +109,7 @@ const ReportTemplateManager: React.FC<ReportTemplateManagerProps> = ({
     const [formData, setFormData] = useState({
         name: '',
         description: '',
-        reportType: 'full_assessment' as const,
+        reportType: 'full_assessment' as ReportTemplate['reportType'],
         isPublic: false,
         sectionsConfig: [] as SectionConfig[],
         brandingConfig: {} as BrandingConfig,

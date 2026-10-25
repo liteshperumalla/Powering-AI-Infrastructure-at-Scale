@@ -66,8 +66,9 @@ export default function AdditionalFeatures({ assessmentId }: AdditionalFeaturesP
     const fetchFeatures = async () => {
       try {
         setLoading(true);
-        const response = await apiClient.get(`/features/assessment/${assessmentId}/all-features`);
-        setFeatures(response.data);
+        // apiClient.get resolves to the parsed JSON body itself (not an axios-style { data })
+        const response = await apiClient.get<any>(`/features/assessment/${assessmentId}/all-features`);
+        setFeatures(response);
         setError(null);
       } catch (err: any) {
         setError(err.response?.data?.detail || 'Failed to load additional features');

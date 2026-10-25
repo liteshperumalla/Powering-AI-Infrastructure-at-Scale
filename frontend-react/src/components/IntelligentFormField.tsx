@@ -317,7 +317,7 @@ export default function IntelligentFormField({
                     }
                 >
                     <Typography variant="body2" gutterBottom>
-                        AI suggestions for "{inputValue || value}":
+                        AI suggestions for "{inputValue || String(value ?? '')}":
                     </Typography>
                     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
                         {suggestions.slice(0, 4).map((suggestion, index) => (

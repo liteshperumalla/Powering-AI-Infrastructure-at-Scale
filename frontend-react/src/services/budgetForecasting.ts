@@ -115,6 +115,10 @@ export interface OptimizationOpportunity {
     risk_level: 'low' | 'medium' | 'high';
     timeline: string;
     prerequisites: string[];
+    // Simplified fields returned by the assessment features endpoint
+    description?: string;
+    impact?: 'low' | 'medium' | 'high' | string;
+    effort?: 'low' | 'medium' | 'high' | string;
     impact_analysis: {
         performance_impact: string;
         availability_impact: string;
@@ -165,11 +169,17 @@ export interface CostModel {
         mean_absolute_percentage_error: number;
         r_squared: number;
         accuracy_score: number;
+        // Short-form metrics returned by the assessment features endpoint
+        mae?: number;
+        rmse?: number;
     };
     feature_importance: Array<{
-        feature_name: string;
-        importance_score: number;
-        correlation: number;
+        feature_name?: string;
+        importance_score?: number;
+        correlation?: number;
+        // Short-form keys returned by the assessment features endpoint
+        feature?: string;
+        importance?: number;
     }>;
     training_data: {
         start_date: string;
@@ -232,6 +242,11 @@ class BudgetForecastingService {
     // Get token dynamically for each request to handle login/logout properly
     private getToken(): string | null {
         return AuthStorage.getTokenFromAnySource();
+    }
+
+    private authHeader(): Record<string, string> {
+        const token = this.getToken();
+        return token ? { Authorization: `Bearer ${token}` } : {};
     }
 
     private async makeRequest(endpoint: string, options: RequestInit = {}, assessmentId?: string): Promise<any> {
@@ -547,7 +562,7 @@ class BudgetForecastingService {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.token}`,
+                ...this.authHeader(),
             },
             body: JSON.stringify({ report_type: reportType, period, format }),
         });
@@ -660,7 +675,8 @@ class BudgetForecastingService {
                     variance_percentage: Math.round((Math.random() - 0.5) * 20),
                     variance_reason: 'Normal operational variance',
                     spending_pattern: this.generateSpendingPattern(),
-                    optimization_opportunities: []
+                    optimization_opportunities: [],
+                    approval_status: 'pending'
                 });
             });
 
@@ -675,7 +691,8 @@ class BudgetForecastingService {
                     variance_percentage: -15,
                     variance_reason: 'Cost optimization initiatives',
                     spending_pattern: this.generateSpendingPattern(),
-                    optimization_opportunities: []
+                    optimization_opportunities: [],
+                    approval_status: 'pending'
                 });
             }
         } catch (error) {

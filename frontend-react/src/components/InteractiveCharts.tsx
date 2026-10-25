@@ -360,6 +360,9 @@ const InteractiveCharts: React.FC<InteractiveChartsProps> = ({
         }
     };
 
+    // ResponsiveContainer requires a single chart element child; unsupported types render nothing
+    const chartElement = renderChart();
+
     return (
         <Card sx={{ height: fullscreen ? '100vh' : 'auto' }}>
             <CardContent sx={{ p: 2 }}>
@@ -458,9 +461,11 @@ const InteractiveCharts: React.FC<InteractiveChartsProps> = ({
 
                 {/* Chart Container */}
                 <Box sx={{ height: fullscreen ? 'calc(100vh - 200px)' : height, width: '100%' }}>
-                    <ResponsiveContainer>
-                        {renderChart()}
-                    </ResponsiveContainer>
+                    {chartElement && (
+                        <ResponsiveContainer>
+                            {chartElement}
+                        </ResponsiveContainer>
+                    )}
                 </Box>
 
                 {/* Data Summary */}
@@ -629,9 +634,11 @@ const InteractiveCharts: React.FC<InteractiveChartsProps> = ({
                 </DialogTitle>
                 <DialogContent sx={{ p: 3 }}>
                     <Box sx={{ height: 'calc(100vh - 150px)', width: '100%' }}>
-                        <ResponsiveContainer>
-                            {renderChart()}
-                        </ResponsiveContainer>
+                        {chartElement && (
+                            <ResponsiveContainer>
+                                {chartElement}
+                            </ResponsiveContainer>
+                        )}
                     </Box>
                 </DialogContent>
             </Dialog>

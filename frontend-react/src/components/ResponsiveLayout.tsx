@@ -281,7 +281,7 @@ export default function ResponsiveLayout({
                     <ModernNavbar
                         onThemeToggle={handleThemeToggle}
                         isDarkMode={darkMode}
-                        userName={user?.full_name || user?.first_name || "User"}
+                        userName={user?.full_name || "User"}
                         isAuthenticated={isAuthenticated}
                         syncStatus={{ isOnline, isSyncing, queueLength }}
                     />

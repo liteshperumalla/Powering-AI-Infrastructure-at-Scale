@@ -15,6 +15,7 @@ import {
     Badge,
     List,
     ListItem,
+    ListItemButton,
     ListItemText,
     ListItemIcon,
     Divider,
@@ -82,7 +83,9 @@ interface WorkflowStatus {
 
 export default function RealTimeDashboard() {
     const { user } = useAppSelector(state => state.auth);
-    const [metrics, setMetrics] = useState<SystemMetrics | null>(null);
+    // Metrics come from either the WebSocket feed or /admin/metrics, which may
+    // only provide a subset of these fields.
+    const [metrics, setMetrics] = useState<Partial<SystemMetrics> | null>(null);
     const [alerts, setAlerts] = useState<PerformanceAlert[]>([]);
     const [workflows, setWorkflows] = useState<WorkflowStatus[]>([]);
     const [connectionStatus, setConnectionStatus] = useState<'connected' | 'disconnected' | 'reconnecting'>('disconnected');
@@ -226,7 +229,10 @@ export default function RealTimeDashboard() {
         }
     };
 
-    const getMetricColor = (value: number, thresholds: { warning: number; critical: number }): ChipColor => {
+    type MetricColor = Extract<ChipColor, 'success' | 'warning' | 'error'>;
+
+    const getMetricColor = (value: number | undefined, thresholds: { warning: number; critical: number }): MetricColor => {
+        if (value === undefined) return 'success';
         if (value >= thresholds.critical) return 'error';
         if (value >= thresholds.warning) return 'warning';
         return 'success';
@@ -239,7 +245,7 @@ export default function RealTimeDashboard() {
         return Math.round(bytes / Math.pow(1024, i) * 100) / 100 + ' ' + sizes[i];
     };
 
-    const formatDuration = (ms: number) => {
+    const formatDuration = (ms: number | undefined) => {
         if (!ms || isNaN(ms)) return '0ms';
         if (ms < 1000) return `${ms}ms`;
         if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
@@ -293,7 +299,7 @@ export default function RealTimeDashboard() {
                                     <Speed color="primary" />
                                     <Typography variant="h6" color="text.primary">CPU</Typography>
                                 </Stack>
-                                <Typography variant="h4" color="text.primary" color={getMetricColor(metrics.cpu_usage_percent, { warning: 70, critical: 90 })}>
+                                <Typography variant="h4" color={getMetricColor(metrics.cpu_usage_percent, { warning: 70, critical: 90 })}>
                                     {safeToFixed(metrics.cpu_usage_percent, 1)}%
                                 </Typography>
                                 <LinearProgress
@@ -314,7 +320,7 @@ export default function RealTimeDashboard() {
                                     <Memory color="primary" />
                                     <Typography variant="h6" color="text.primary">Memory</Typography>
                                 </Stack>
-                                <Typography variant="h4" color="text.primary" color={getMetricColor(metrics.memory_usage_percent, { warning: 80, critical: 95 })}>
+                                <Typography variant="h4" color={getMetricColor(metrics.memory_usage_percent, { warning: 80, critical: 95 })}>
                                     {safeToFixed(metrics.memory_usage_percent, 1)}%
                                 </Typography>
                                 <LinearProgress
@@ -335,7 +341,7 @@ export default function RealTimeDashboard() {
                                     <Storage color="primary" />
                                     <Typography variant="h6" color="text.primary">Disk</Typography>
                                 </Stack>
-                                <Typography variant="h4" color="text.primary" color={getMetricColor(metrics.disk_usage_percent, { warning: 85, critical: 95 })}>
+                                <Typography variant="h4" color={getMetricColor(metrics.disk_usage_percent, { warning: 85, critical: 95 })}>
                                     {safeToFixed(metrics.disk_usage_percent, 1)}%
                                 </Typography>
                                 <LinearProgress
@@ -388,7 +394,7 @@ export default function RealTimeDashboard() {
                                         </Stack>
                                         <LinearProgress
                                             variant="determinate"
-                                            value={Math.min(metrics.response_time_avg_ms / 10, 100) || 0} // Scale to 1s max
+                                            value={Math.min((metrics.response_time_avg_ms ?? 0) / 10, 100) || 0} // Scale to 1s max
                                             color={getMetricColor(metrics.response_time_avg_ms, { warning: 500, critical: 1000 })}
                                         />
                                     </Box>
@@ -417,8 +423,8 @@ export default function RealTimeDashboard() {
                                         <LinearProgress
                                             variant="determinate"
                                             value={metrics.cache_hit_rate_percent || 0}
-                                            color={metrics.cache_hit_rate_percent > 90 ? 'success' :
-                                                metrics.cache_hit_rate_percent > 70 ? 'warning' : 'error'}
+                                            color={(metrics.cache_hit_rate_percent ?? 0) > 90 ? 'success' :
+                                                (metrics.cache_hit_rate_percent ?? 0) > 70 ? 'warning' : 'error'}
                                         />
                                     </Box>
                                 </Stack>
@@ -528,8 +534,7 @@ export default function RealTimeDashboard() {
                         <List>
                             {safeSlice(alerts, 0, 5).map((alert, index) => (
                                 <React.Fragment key={alert.id}>
-                                    <ListItem
-                                        button
+                                    <ListItemButton
                                         onClick={() => {
                                             setSelectedAlert(alert);
                                             setAlertDialogOpen(true);
@@ -556,7 +561,7 @@ export default function RealTimeDashboard() {
                                                 </Stack>
                                             }
                                         />
-                                    </ListItem>
+                                    </ListItemButton>
                                     {index < Math.min(alerts.length, 5) - 1 && <Divider />}
                                 </React.Fragment>
                             ))}

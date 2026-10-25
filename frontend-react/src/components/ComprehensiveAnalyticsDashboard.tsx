@@ -71,6 +71,8 @@ interface AnalyticsData {
         aws: number;
         azure: number;
         gcp: number;
+        alibaba?: number;
+        ibm?: number;
     };
     performance_by_service: {
         service: string;
@@ -527,7 +529,7 @@ export default function ComprehensiveAnalyticsDashboard() {
                                     variant="outlined"
                                     sx={{ p: 2, textAlign: 'center' }}
                                 >
-                                    <Typography variant="h5" color="text.primary" color={
+                                    <Typography variant="h5" color={
                                         severity === 'critical' ? 'error' :
                                             severity === 'high' ? 'error' :
                                                 severity === 'medium' ? 'warning' : 'info'

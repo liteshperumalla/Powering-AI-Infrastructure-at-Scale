@@ -128,7 +128,13 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
   const [selectedOpportunity, setSelectedOpportunity] = useState<OptimizationOpportunity | null>(null);
   
   // Form states
-  const [newForecastData, setNewForecastData] = useState({
+  const [newForecastData, setNewForecastData] = useState<{
+    forecast_name: string;
+    period: 'monthly' | 'quarterly' | 'annual';
+    forecast_horizon_months: number;
+    include_scenarios: boolean;
+    model_type: string;
+  }>({
     forecast_name: '',
     period: 'monthly',
     forecast_horizon_months: 12,
@@ -828,7 +834,7 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
                 <InputLabel>Period</InputLabel>
                 <Select
                   value={newForecastData.period}
-                  onChange={(e) => setNewForecastData({ ...newForecastData, period: e.target.value as any })}
+                  onChange={(e) => setNewForecastData({ ...newForecastData, period: e.target.value as 'monthly' | 'quarterly' | 'annual' })}
                 >
                   <MenuItem value="monthly">Monthly</MenuItem>
                   <MenuItem value="quarterly">Quarterly</MenuItem>
@@ -927,11 +933,10 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
               <TextField
                 fullWidth
                 type="number"
-                step="0.1"
                 label="Validation Split"
                 value={newModelData.validation_split}
                 onChange={(e) => setNewModelData({ ...newModelData, validation_split: parseFloat(e.target.value) })}
-                inputProps={{ min: 0.1, max: 0.5 }}
+                inputProps={{ min: 0.1, max: 0.5, step: 0.1 }}
               />
             </Grid>
           </Grid>
@@ -976,7 +981,7 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
                     <Card>
                       <CardContent>
                         <Typography color="textSecondary" variant="body2">MAE</Typography>
-                        <Typography variant="h5">${selectedModel.accuracy_metrics.mae.toLocaleString()}</Typography>
+                        <Typography variant="h5">${(selectedModel.accuracy_metrics.mae ?? selectedModel.accuracy_metrics.mean_absolute_error ?? 0).toLocaleString()}</Typography>
                       </CardContent>
                     </Card>
                   </Grid>
@@ -984,7 +989,7 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
                     <Card>
                       <CardContent>
                         <Typography color="textSecondary" variant="body2">RMSE</Typography>
-                        <Typography variant="h5">${selectedModel.accuracy_metrics.rmse.toLocaleString()}</Typography>
+                        <Typography variant="h5">${(selectedModel.accuracy_metrics.rmse ?? (selectedModel.accuracy_metrics.mean_squared_error != null ? Math.sqrt(selectedModel.accuracy_metrics.mean_squared_error) : 0)).toLocaleString()}</Typography>
                       </CardContent>
                     </Card>
                   </Grid>
@@ -1001,15 +1006,19 @@ const BudgetForecasting: React.FC<BudgetForecastingProps> = ({ assessmentId }) =
 
               <Grid item xs={12}>
                 <Typography variant="h6" gutterBottom>Feature Importance</Typography>
-                {selectedModel.feature_importance.map((feature, idx) => (
-                  <Box key={idx} mb={2}>
-                    <Box display="flex" justifyContent="space-between" mb={0.5}>
-                      <Typography variant="body2">{feature.feature}</Typography>
-                      <Typography variant="body2">{(feature.importance * 100).toFixed(0)}%</Typography>
+                {selectedModel.feature_importance.map((feature, idx) => {
+                  const featureName = feature.feature ?? feature.feature_name;
+                  const importance = feature.importance ?? feature.importance_score ?? 0;
+                  return (
+                    <Box key={idx} mb={2}>
+                      <Box display="flex" justifyContent="space-between" mb={0.5}>
+                        <Typography variant="body2">{featureName}</Typography>
+                        <Typography variant="body2">{(importance * 100).toFixed(0)}%</Typography>
+                      </Box>
+                      <LinearProgress variant="determinate" value={importance * 100} />
                     </Box>
-                    <LinearProgress variant="determinate" value={feature.importance * 100} />
-                  </Box>
-                ))}
+                  );
+                })}
               </Grid>
 
               <Grid item xs={12}>

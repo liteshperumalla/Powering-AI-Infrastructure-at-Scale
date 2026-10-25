@@ -211,7 +211,7 @@ export default function ResponsiveCard({
                     </Box>
 
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexShrink: 0 }}>
-                        {status && statusConfig && (
+                        {status && statusConfig && StatusIcon && (
                             <Tooltip title={statusConfig.label}>
                                 <Chip
                                     icon={<StatusIcon />}

@@ -379,7 +379,7 @@ export default function RecommendationInsightsPanel({
                       <Typography variant="caption" color="text.secondary" display="block">
                         ROI
                       </Typography>
-                      <Typography variant="h6" color="text.primary" fontWeight="bold" color={insight.color}>
+                      <Typography variant="h6" fontWeight="bold" color={insight.color}>
                         {insight.metrics.roi.toFixed(1)}x
                       </Typography>
                     </Box>

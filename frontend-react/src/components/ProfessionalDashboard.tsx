@@ -28,7 +28,7 @@ import {
     Speed,
     CheckCircle,
     Warning,
-    Error,
+    Error as ErrorIcon,
     Info,
     Download,
     Refresh,

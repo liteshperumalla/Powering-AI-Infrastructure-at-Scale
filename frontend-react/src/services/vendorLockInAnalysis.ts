@@ -14,6 +14,8 @@ export interface VendorLockInAssessment {
     mitigation_strategies: MitigationStrategy[];
     business_impact: BusinessImpactAnalysis;
     recommendations: LockInRecommendation[];
+    // Per-provider service counts returned by the assessment features endpoint
+    provider_distribution?: Record<string, { count: number; percentage: number }>;
 }
 
 export interface ServiceLockInAnalysis {
@@ -314,6 +316,11 @@ class VendorLockInAnalysisService {
         return AuthStorage.getTokenFromAnySource();
     }
 
+    private authHeader(): Record<string, string> {
+        const token = this.getToken();
+        return token ? { Authorization: `Bearer ${token}` } : {};
+    }
+
     private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
         // Map vendor lock-in endpoints to available ones
         let mappedEndpoint = endpoint;
@@ -554,7 +561,7 @@ class VendorLockInAnalysisService {
         const response = await fetch(`${this.baseUrl}/api/vendor-lockin/contracts/analyze`, {
             method: 'POST',
             headers: {
-                'Authorization': `Bearer ${this.token}`,
+                ...this.authHeader(),
             },
             body: formData,
         });
@@ -653,7 +660,7 @@ class VendorLockInAnalysisService {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.token}`,
+                ...this.authHeader(),
             },
             body: JSON.stringify(reportConfig),
         });

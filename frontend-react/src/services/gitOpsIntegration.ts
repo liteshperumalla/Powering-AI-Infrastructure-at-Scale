@@ -198,13 +198,6 @@ class GitOpsIntegrationService {
 
     // Branch Management moved below
 
-    async executeDeployment(planId: string, environment: string): Promise<{ deployment_id: string }> {
-        return this.makeRequest(`/api/gitops/deployment-plans/${planId}/deploy`, {
-            method: 'POST',
-            body: JSON.stringify({ environment }),
-        });
-    }
-
     // Branch Management
     async getBranches(repoId: string): Promise<GitBranch[]> {
         return this.makeRequest(`/api/gitops/repositories/${repoId}/branches`);

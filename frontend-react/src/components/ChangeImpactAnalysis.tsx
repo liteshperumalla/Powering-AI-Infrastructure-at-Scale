@@ -38,8 +38,6 @@ import {
     Tooltip,
     IconButton,
     Badge,
-    TreeView,
-    TreeItem,
     Tabs,
     Tab,
 } from '@mui/material';
@@ -345,7 +343,7 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
                                             <Select
                                                 value={changeForm.change_type}
                                                 label="Change Type"
-                                                onChange={(e) => setChangeForm(prev => ({ ...prev, change_type: e.target.value }))}
+                                                onChange={(e) => setChangeForm(prev => ({ ...prev, change_type: e.target.value as typeof prev.change_type }))}
                                             >
                                                 <MenuItem value="create">Create</MenuItem>
                                                 <MenuItem value="update">Update</MenuItem>
@@ -372,7 +370,7 @@ const ChangeImpactAnalysis: React.FC<ChangeImpactAnalysisProps> = ({
                                             <Select
                                                 value={changeForm.urgency}
                                                 label="Urgency"
-                                                onChange={(e) => setChangeForm(prev => ({ ...prev, urgency: e.target.value }))}
+                                                onChange={(e) => setChangeForm(prev => ({ ...prev, urgency: e.target.value as typeof prev.urgency }))}
                                             >
                                                 <MenuItem value="low">Low</MenuItem>
                                                 <MenuItem value="medium">Medium</MenuItem>

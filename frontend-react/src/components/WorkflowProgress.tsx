@@ -107,8 +107,9 @@ const WorkflowProgress: React.FC<WorkflowProgressProps> = ({
         setWorkflowState(prev => ({ ...prev, loading: true, error: null }));
 
         try {
-            // Use the existing start workflow endpoint
-            await apiClient.startAssessmentAnalysis(assessmentId, {
+            // Use the existing start workflow endpoint (POST /assessments/{id}/start).
+            // ApiClient has no dedicated wrapper for it, so call it via the generic post().
+            await apiClient.post<unknown>(`/assessments/${assessmentId}/start`, {
                 assessment_id: assessmentId,
                 priority: 'high',
                 use_advanced_analysis: true
@@ -219,11 +220,8 @@ const WorkflowProgress: React.FC<WorkflowProgressProps> = ({
                     {WORKFLOW_STEPS.map((step, index) => {
                         const stepStatus = getStepStatus(step.key);
                         return (
-                            <Step key={step.key}>
-                                <StepLabel 
-                                    error={stepStatus === 'failed'}
-                                    completed={stepStatus === 'completed'}
-                                >
+                            <Step key={step.key} completed={stepStatus === 'completed'}>
+                                <StepLabel error={stepStatus === 'failed'}>
                                     <Box>
                                         <Typography variant="body2">
                                             {step.label}
