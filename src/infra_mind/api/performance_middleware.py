@@ -128,7 +128,7 @@ class PerformanceMiddleware(BaseHTTPMiddleware):
             key_data["user_id"] = request.state.user_id
         
         key_string = json.dumps(key_data, sort_keys=True)
-        return f"api_response:{hashlib.md5(key_string.encode()).hexdigest()}"
+        return f"api_response:{hashlib.md5(key_string.encode(), usedforsecurity=False).hexdigest()}"
     
     async def _get_cached_response(self, request: Request) -> Optional[Response]:
         """Get cached response if available."""

@@ -71,7 +71,7 @@ def cache_key_generator(func_name: str, args: tuple, kwargs: dict) -> str:
     }
 
     key_string = json.dumps(key_data, sort_keys=True)
-    key_hash = hashlib.md5(key_string.encode()).hexdigest()
+    key_hash = hashlib.md5(key_string.encode(), usedforsecurity=False).hexdigest()
 
     return f"cache:{func_name}:{key_hash}"
 

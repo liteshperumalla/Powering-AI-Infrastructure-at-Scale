@@ -113,7 +113,7 @@ class ABTest:
             PromptVersion to use
         """
         # Use hash for deterministic assignment
-        hash_val = int(hashlib.md5(key.encode()).hexdigest(), 16)
+        hash_val = int(hashlib.md5(key.encode(), usedforsecurity=False).hexdigest(), 16)
         normalized = (hash_val % 10000) / 10000.0
 
         return self.variant_b if normalized < self.traffic_split else self.variant_a

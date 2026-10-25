@@ -164,7 +164,7 @@ class APICache:
         # Add query parameters
         if request.query_params:
             query_string = str(sorted(request.query_params.items()))
-            query_hash = hashlib.md5(query_string.encode()).hexdigest()[:8]
+            query_hash = hashlib.md5(query_string.encode(), usedforsecurity=False).hexdigest()[:8]
             key_parts.append(f"q:{query_hash}")
 
         # Add user ID if requested
@@ -176,7 +176,7 @@ class APICache:
         # Add custom parameters
         if kwargs:
             params_string = str(sorted(kwargs.items()))
-            params_hash = hashlib.md5(params_string.encode()).hexdigest()[:8]
+            params_hash = hashlib.md5(params_string.encode(), usedforsecurity=False).hexdigest()[:8]
             key_parts.append(f"p:{params_hash}")
 
         return ":".join(key_parts)

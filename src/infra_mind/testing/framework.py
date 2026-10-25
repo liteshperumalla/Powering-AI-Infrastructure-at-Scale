@@ -162,7 +162,7 @@ class Experiment:
     def _generate_id(self) -> str:
         """Generate unique experiment ID."""
         content = f"{self.config.name}_{self.config.feature_flag}_{datetime.now().isoformat()}"
-        return hashlib.md5(content.encode()).hexdigest()[:12]
+        return hashlib.md5(content.encode(), usedforsecurity=False).hexdigest()[:12]
     
     def start(self) -> None:
         """Start the experiment."""
@@ -255,7 +255,7 @@ class Experiment:
         """Assign variant using consistent hashing."""
         # Create deterministic hash for user
         hash_input = f"{self.id}:{user_id}"
-        user_hash = int(hashlib.md5(hash_input.encode()).hexdigest(), 16)
+        user_hash = int(hashlib.md5(hash_input.encode(), usedforsecurity=False).hexdigest(), 16)
         bucket = (user_hash % 10000) / 100.0  # 0-99.99%
         
         # Find variant based on traffic allocation

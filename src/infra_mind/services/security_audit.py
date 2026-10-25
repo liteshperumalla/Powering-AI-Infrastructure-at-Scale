@@ -634,7 +634,7 @@ class SecurityAuditService:
         """Generate unique audit ID."""
         content = json.dumps(infrastructure_data, sort_keys=True)
         timestamp = datetime.now(timezone.utc).isoformat()
-        return f"AUDIT-{hashlib.md5(f'{content}{timestamp}'.encode()).hexdigest()[:8]}"
+        return f"AUDIT-{hashlib.md5(f'{content}{timestamp}'.encode(), usedforsecurity=False).hexdigest()[:8]}"
     
     def _calculate_cvss_score(self, severity: SecurityLevel) -> float:
         """Calculate CVSS score based on severity."""

@@ -741,7 +741,7 @@ spec:
         import hashlib
         content = json.dumps(requirements, sort_keys=True)
         timestamp = datetime.utcnow().isoformat()
-        return f"IAC-{hashlib.md5(f'{content}{timestamp}'.encode()).hexdigest()[:8]}"
+        return f"IAC-{hashlib.md5(f'{content}{timestamp}'.encode(), usedforsecurity=False).hexdigest()[:8]}"
     
     def _load_best_practices(self) -> Dict[str, List[str]]:
         """Load infrastructure best practices."""

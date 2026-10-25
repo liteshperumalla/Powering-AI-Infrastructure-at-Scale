@@ -445,7 +445,7 @@ class AdvancedRateLimiter:
         elif scope == RateLimitScope.PER_USER and identifier:
             key_parts.extend(["user", identifier])
         elif scope == RateLimitScope.PER_IP and identifier:
-            key_parts.extend(["ip", hashlib.md5(identifier.encode()).hexdigest()[:8]])
+            key_parts.extend(["ip", hashlib.md5(identifier.encode(), usedforsecurity=False).hexdigest()[:8]])
         else:
             key_parts.append("default")
         

@@ -343,7 +343,7 @@ class ProductionCacheManager:
         if params:
             # Sort params for consistent key generation
             param_str = json.dumps(params, sort_keys=True)
-            param_hash = hashlib.md5(param_str.encode()).hexdigest()[:8]
+            param_hash = hashlib.md5(param_str.encode(), usedforsecurity=False).hexdigest()[:8]
             key_parts.append(param_hash)
         
         return f"cloud_api:{':'.join(key_parts)}"

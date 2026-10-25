@@ -352,7 +352,7 @@ class RealWebScrapingService:
         """Scrape content from a single URL."""
         try:
             # Check cache first
-            cache_key = f"scraped_content:{hashlib.md5(url.encode()).hexdigest()}"
+            cache_key = f"scraped_content:{hashlib.md5(url.encode(), usedforsecurity=False).hexdigest()}"
             cached_content = await cache_manager.get(cache_key)
             if cached_content:
                 logger.debug(f"Using cached content for {url}")
@@ -374,7 +374,7 @@ class RealWebScrapingService:
                     extracted_data = await self._extract_structured_data(soup, content_type)
                     
                     # Create content hash
-                    content_hash = hashlib.md5(html_content.encode()).hexdigest()
+                    content_hash = hashlib.md5(html_content.encode(), usedforsecurity=False).hexdigest()
                     
                     scraped_content = ScrapedContent(
                         url=url,
