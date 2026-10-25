@@ -21,7 +21,7 @@ forecasts, compliance findings and reports.
 ```bash
 # Full stack (MongoDB, Redis, API on :8000, frontend on :3000)
 cp .env.example .env            # then fill in LLM keys
-docker-compose up -d
+docker compose up -d
 
 # Backend
 pip install -e ".[dev]"
@@ -39,6 +39,21 @@ npm run type-check  # must stay at 0 errors; next build also enforces types and 
 ```
 
 `make help` lists Makefile targets (dev-up, test, lint, deploy-*, db-*).
+
+### Running locally without Docker
+
+Needs MongoDB 7 on `localhost:27017` and Redis on `localhost:6379`. Set at least
+`INFRA_MIND_MONGODB_URL`, `INFRA_MIND_REDIS_URL`, `INFRA_MIND_SECRET_KEY` and `JWT_SECRET_KEY`.
+Assessment analysis runs in one of two ways:
+
+- **With a worker (as in compose):**
+  `PYTHONPATH=src celery -A infra_mind.tasks.celery_app worker --loglevel=info`
+- **Without a worker:** set `INFRA_MIND_USE_CELERY_FOR_ASSESSMENTS=false` and the API runs the
+  workflow in-process.
+
+Without LLM keys the pipeline still completes; agents return fallback recommendations
+titled "[LLM Analysis Unavailable]". If you `source` an env file in bash, single-quote JSON
+values such as `INFRA_MIND_CORS_ORIGINS='["http://localhost:3000"]'`.
 
 ## Backend architecture
 

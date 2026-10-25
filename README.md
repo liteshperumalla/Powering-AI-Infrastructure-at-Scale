@@ -166,9 +166,7 @@ npm run test:coverage
 
 ### Backend Development
 ```bash
-cd src
-
-# Create virtual environment
+# From the repository root (pyproject.toml lives here)
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
@@ -176,14 +174,27 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -e ".[dev]"
 
 # Run FastAPI development server
-uvicorn infra_mind.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn src.infra_mind.main:app --reload --host 0.0.0.0 --port 8000
 
 # Run tests
-python -m pytest
+python -m pytest tests/
 
 # Type checking
-mypy .
+mypy src/infra_mind
 ```
+
+### Running Locally Without Docker
+You need MongoDB 7 on `localhost:27017` and Redis on `localhost:6379`. Set
+`INFRA_MIND_MONGODB_URL`, `INFRA_MIND_REDIS_URL`, `INFRA_MIND_SECRET_KEY` and `JWT_SECRET_KEY`
+(see `.env.example`). Then start the API as above and the frontend with `npm run dev`.
+
+Assessment analysis runs either:
+- **with a Celery worker** (as in Docker Compose):
+  `PYTHONPATH=src celery -A infra_mind.tasks.celery_app worker --loglevel=info`
+- **or in the API process**: set `INFRA_MIND_USE_CELERY_FOR_ASSESSMENTS=false` and skip the worker.
+
+LLM keys are optional for trying it out. Without them the analysis still completes, and the
+agents return fallback recommendations marked "[LLM Analysis Unavailable]".
 
 ### Database Operations
 ```bash
