@@ -1,5 +1,7 @@
 'use client';
 
+import AuthStorage from '../utils/authStorage';
+
 export interface GitRepository {
     id: string;
     name: string;
@@ -89,22 +91,22 @@ export interface DeploymentPlan {
 
 class GitOpsIntegrationService {
     private baseUrl: string;
-    private token: string | null = null;
 
     constructor() {
         this.baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-        this.token = typeof window !== 'undefined' ? typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null : null;
     }
 
     private async makeRequest(endpoint: string, options: RequestInit = {}): Promise<any> {
         // Map to real backend endpoints
         const mappedEndpoint = this.mapEndpoint(endpoint);
+        const token = AuthStorage.getTokenFromAnySource();
 
         const response = await fetch(`${this.baseUrl}${mappedEndpoint}`, {
             ...options,
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.token}`,
+                // Read per request: the service is created at import time, often before login
+                ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
                 ...options.headers,
             },
         });

@@ -12,6 +12,11 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel, Field
 import uuid
 from enum import Enum
+from typing import Literal
+
+from .auth import get_current_user
+from ...core.dependencies import DatabaseDep
+from ...models.user import User
 
 router = APIRouter()
 security = HTTPBearer()
@@ -655,3 +660,116 @@ async def get_gitops_health() -> Dict[str, Any]:
             "storage_usage": 45.2
         }
     }
+
+
+# ==================== IaC TEMPLATES (persisted per user) ====================
+
+IaCProvider = Literal["terraform", "cloudformation", "pulumi", "arm", "cdk"]
+MAX_TEMPLATE_BYTES = 256 * 1024
+
+
+class IaCTemplateCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str = Field(default="", max_length=2000)
+    provider: IaCProvider
+    language: str = Field(default="hcl", max_length=50)
+    template: str = Field(min_length=1, max_length=MAX_TEMPLATE_BYTES)
+    variables: Dict[str, Any] = {}
+    outputs: Dict[str, Any] = {}
+    tags: List[str] = []
+    version: str = Field(default="1.0.0", max_length=50)
+
+
+class IaCTemplateUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=2000)
+    provider: Optional[IaCProvider] = None
+    language: Optional[str] = Field(default=None, max_length=50)
+    template: Optional[str] = Field(default=None, min_length=1, max_length=MAX_TEMPLATE_BYTES)
+    variables: Optional[Dict[str, Any]] = None
+    outputs: Optional[Dict[str, Any]] = None
+    tags: Optional[List[str]] = None
+    version: Optional[str] = Field(default=None, max_length=50)
+
+
+def _template_out(doc: Dict[str, Any]) -> Dict[str, Any]:
+    doc = dict(doc)
+    doc["id"] = doc.pop("_id")
+    doc.pop("user_id", None)
+    return doc
+
+
+@router.get("/templates")
+async def list_iac_templates(
+    db: DatabaseDep,
+    provider: Optional[IaCProvider] = None,
+    current_user: User = Depends(get_current_user),
+) -> List[Dict[str, Any]]:
+    """The current user's IaC templates, most recently updated first."""
+    query: Dict[str, Any] = {"user_id": str(current_user.id)}
+    if provider:
+        query["provider"] = provider
+    docs = await db.iac_templates.find(query).sort("updated_at", -1).to_list(length=None)
+    return [_template_out(d) for d in docs]
+
+
+@router.post("/templates", status_code=status.HTTP_201_CREATED)
+async def create_iac_template(
+    template: IaCTemplateCreate,
+    db: DatabaseDep,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    now = datetime.utcnow().isoformat()
+    doc = {
+        "_id": str(uuid.uuid4()),
+        "user_id": str(current_user.id),
+        **template.model_dump(),
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db.iac_templates.insert_one(doc)
+    logger.info(f"Created IaC template {doc['_id']} for user {current_user.id}")
+    return _template_out(doc)
+
+
+@router.get("/templates/{template_id}")
+async def get_iac_template(
+    template_id: str,
+    db: DatabaseDep,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    doc = await db.iac_templates.find_one({"_id": template_id, "user_id": str(current_user.id)})
+    if not doc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    return _template_out(doc)
+
+
+@router.put("/templates/{template_id}")
+async def update_iac_template(
+    template_id: str,
+    changes: IaCTemplateUpdate,
+    db: DatabaseDep,
+    current_user: User = Depends(get_current_user),
+) -> Dict[str, Any]:
+    updates = changes.model_dump(exclude_unset=True, exclude_none=True)
+    updates["updated_at"] = datetime.utcnow().isoformat()
+    result = await db.iac_templates.find_one_and_update(
+        {"_id": template_id, "user_id": str(current_user.id)},
+        {"$set": updates},
+        return_document=True,
+    )
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+    return _template_out(result)
+
+
+@router.delete("/templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_iac_template(
+    template_id: str,
+    db: DatabaseDep,
+    current_user: User = Depends(get_current_user),
+) -> None:
+    result = await db.iac_templates.delete_one({"_id": template_id, "user_id": str(current_user.id)})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Template not found")
+
