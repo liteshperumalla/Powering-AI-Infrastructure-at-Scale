@@ -307,41 +307,41 @@ Ensure all insights are directly supported by the web search data provided. Cite
 
 CRITICAL: You must respond with ONLY a valid JSON object following this exact schema:
 {{
-  "market_findings": {
+  "market_findings": {{
     "trends": ["trend1", "trend2", "trend3"],
     "key_players": ["player1", "player2"],
     "innovations": ["innovation1", "innovation2"],
     "market_size": "size_info"
-  },
-  "technical_insights": {
+  }},
+  "technical_insights": {{
     "capabilities": ["capability1", "capability2"],
     "limitations": ["limitation1", "limitation2"],
     "benchmarks": {{"metric1": "value1", "metric2": "value2"}},
     "best_practices": ["practice1", "practice2"]
-  },
-  "adoption_patterns": {
+  }},
+  "adoption_patterns": {{
     "examples": ["example1", "example2"],
     "success_stories": ["story1", "story2"],
     "challenges": ["challenge1", "challenge2"],
     "trends": ["trend1", "trend2"]
-  },
-  "pricing_analysis": {
+  }},
+  "pricing_analysis": {{
     "models": ["model1", "model2"],
     "trends": ["trend1", "trend2"],
     "comparisons": {{"provider1": "price1", "provider2": "price2"}},
     "considerations": ["consideration1", "consideration2"]
-  },
-  "recommendations": {
+  }},
+  "recommendations": {{
     "strategic": ["rec1", "rec2", "rec3"],
     "risks": ["risk1", "risk2"],
     "roadmap": ["step1", "step2", "step3"],
     "outlook": ["prediction1", "prediction2"]
-  },
-  "data_quality": {
+  }},
+  "data_quality": {{
     "reliability_score": 0.8,
     "research_gaps": ["gap1", "gap2"],
     "confidence_levels": {{"market": "high", "technical": "medium"}}
-  }
+  }}
 }}
 
 CRITICAL: Respond with ONLY the JSON object. No additional text."""
