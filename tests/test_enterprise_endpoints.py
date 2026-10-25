@@ -266,10 +266,9 @@ class TestEnterpriseIntegration:
 
     def test_openapi_schema_includes_enterprise(self, client):
         """Test that OpenAPI schema includes enterprise endpoints."""
-        response = client.get("/openapi.json")
-        assert response.status_code == 200
-        schema = response.json()
-        
+        # /openapi.json is only served when debug is on, so build the schema directly
+        schema = client.app.openapi()
+
         # Check that enterprise endpoints are in the schema
         paths = schema.get("paths", {})
         experiment_paths = [path for path in paths.keys() if "/experiments" in path]

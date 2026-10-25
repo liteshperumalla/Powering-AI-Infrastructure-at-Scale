@@ -1,4 +1,5 @@
-# Main dependencies for CI/CD
+# Partial dependency list kept for pip-audit / Makefile; pyproject.toml is the source of truth
+# (install with: pip install -e ".[dev]")
 fastapi>=0.104.0
 uvicorn[standard]>=0.24.0
 beanie>=1.23.0
