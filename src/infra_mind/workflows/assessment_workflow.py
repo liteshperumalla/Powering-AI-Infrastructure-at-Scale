@@ -698,6 +698,7 @@ class AssessmentWorkflow(BaseWorkflow):
         """
         all_recommendations = []
         confidence_scores = []
+        fallback_agents = []
         
         # Collect all recommendations
         for agent_id, result in agent_results.items():
@@ -706,6 +707,14 @@ class AssessmentWorkflow(BaseWorkflow):
             
             all_recommendations.extend(recommendations)
             confidence_scores.append(confidence)
+            if result.get("data", {}).get("fallback_mode"):
+                fallback_agents.append(result.get("agent_role", agent_id))
+        
+        if fallback_agents:
+            logger.warning(
+                f"Synthesis includes placeholder results from {len(fallback_agents)} "
+                f"agent(s) that did not run: {', '.join(fallback_agents)}"
+            )
         
         # Calculate overall confidence
         overall_confidence = sum(confidence_scores) / len(confidence_scores) if confidence_scores else 0.0
@@ -726,6 +735,7 @@ class AssessmentWorkflow(BaseWorkflow):
             "overall_confidence": overall_confidence,
             "synthesis_metadata": {
                 "agents_consulted": len(agent_results),
+                "fallback_agents": fallback_agents,
                 "synthesis_method": "weighted_aggregation",
                 "timestamp": datetime.now(timezone.utc).isoformat()
             }
@@ -842,10 +852,17 @@ class AssessmentWorkflow(BaseWorkflow):
         """
         Get fallback result when real agent execution fails.
         
-        Returns basic recommendations based on agent role.
+        Returns generic placeholder recommendations, each tagged ``fallback: True``
+        so they can't be mistaken for real agent output.
         """
-        logger.info(f"Using fallback result for {agent_role.value} agent")
-        
+        logger.warning(f"Agent {agent_role.value} did not run; using placeholder fallback recommendations")
+        result = self._fallback_result_for_role(agent_role)
+        for rec in result["recommendations"]:
+            rec["fallback"] = True
+        return result
+    
+    def _fallback_result_for_role(self, agent_role: AgentRole) -> Dict[str, Any]:
+        """Generic placeholder result for an agent role."""
         if agent_role == AgentRole.CTO:
             return {
                 "recommendations": [
