@@ -108,6 +108,7 @@ class ProductionCacheManager:
         self._connected = False
         self._metrics = CacheMetrics()
         self._health_check_task: Optional[asyncio.Task] = None
+        self._invalidation_task: Optional[asyncio.Task] = None
         self._invalidation_queue: asyncio.Queue = asyncio.Queue()
         self._monitoring_enabled = config.enable_monitoring
     
@@ -129,8 +130,8 @@ class ProductionCacheManager:
             if self.config.enable_monitoring:
                 self._health_check_task = asyncio.create_task(self._health_monitor())
             
-            # Start cache invalidation processor
-            asyncio.create_task(self._process_invalidation_queue())
+            # Start cache invalidation processor (kept so disconnect() can stop it)
+            self._invalidation_task = asyncio.create_task(self._process_invalidation_queue())
             
             logger.info(f"Connected to Redis {'cluster' if self.config.use_cluster else 'instance'}")
             
@@ -194,18 +195,20 @@ class ProductionCacheManager:
     
     async def disconnect(self) -> None:
         """Disconnect from Redis server or cluster."""
-        # Stop health monitoring
-        if self._health_check_task:
-            self._health_check_task.cancel()
-            try:
-                await self._health_check_task
-            except asyncio.CancelledError:
-                pass
+        self._connected = False
+
+        # Stop background tasks; bounded so a stuck task can't hang shutdown
+        tasks = [t for t in (self._health_check_task, self._invalidation_task) if t and not t.done()]
+        for task in tasks:
+            task.cancel()
+        if tasks:
+            await asyncio.wait(tasks, timeout=5)
+        self._health_check_task = None
+        self._invalidation_task = None
         
         # Close Redis connection
         if self.redis_client:
-            await self.redis_client.close()
-            self._connected = False
+            await self.redis_client.aclose()
             logger.info("Disconnected from Redis cache")
         
         # Close connection pool
