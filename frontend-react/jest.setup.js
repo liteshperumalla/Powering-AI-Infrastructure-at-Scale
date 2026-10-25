@@ -3,6 +3,15 @@ import '@testing-library/jest-dom';
 // Ensure public API URL is set during tests to avoid warnings and unintended network calls
 process.env.NEXT_PUBLIC_API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
+// jsdom does not implement AbortSignal.timeout, which the API client uses
+if (typeof AbortSignal.timeout !== 'function') {
+  AbortSignal.timeout = (ms) => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new DOMException('The operation timed out.', 'TimeoutError')), ms);
+    return controller.signal;
+  };
+}
+
 // Mock Next.js router
 jest.mock('next/navigation', () => ({
   useRouter() {

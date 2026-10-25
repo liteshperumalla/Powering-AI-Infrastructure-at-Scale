@@ -170,6 +170,10 @@ temp/
 
 # Cloud provider credentials
 *.json
+# ...but not project config files
+!package.json
+!package-lock.json
+!tsconfig.json
 *.pem
 *.key
 credentials/

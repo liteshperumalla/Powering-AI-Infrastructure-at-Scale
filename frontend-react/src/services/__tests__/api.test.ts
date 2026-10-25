@@ -88,7 +88,7 @@ describe('API Client', () => {
             const result = await apiClient.getAssessments();
             
             expect(global.fetch).toHaveBeenCalledWith(
-                expect.stringContaining('http://localhost:8000/api/v1/assessments'),
+                expect.stringContaining('http://localhost:8000/api/v2/assessments'),
                 expect.objectContaining({
                     headers: expect.objectContaining({
                         'Content-Type': 'application/json'

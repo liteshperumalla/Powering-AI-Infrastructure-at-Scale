@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { Roboto } from "next/font/google";
 import "./globals.css";
 import ThemeProvider from "@/components/ThemeProvider";
@@ -39,7 +40,8 @@ export default function RootLayout({
             <ThemeProvider>
               <ErrorBoundary>
                 <AuthInitializer />
-                {children}
+                {/* Pages read useSearchParams(); Next 15 requires a Suspense boundary to prerender them */}
+                <Suspense fallback={null}>{children}</Suspense>
               </ErrorBoundary>
             </ThemeProvider>
           </GoogleOAuthProvider>
